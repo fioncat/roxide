@@ -290,14 +290,15 @@ impl From<RepoIndex> for Vec<Rc<Repo>> {
 
 impl From<Vec<Rc<Repo>>> for RepoIndex {
     fn from(repos: Vec<Rc<Repo>>) -> Self {
-        let mut index: HashMap<String, _> = HashMap::new();
-        for repo in repos {
-            let mut owners = match index.remove(repo.remote.as_str()) {
+        let mut index_rc: HashMap<Rc<String>, HashMap<Rc<String>, HashMap<Rc<String>, RepoInfo>>> =
+            HashMap::new();
+        for repo in repos.into_iter() {
+            let mut owners = match index_rc.remove(&repo.remote) {
                 Some(owners) => owners,
                 None => HashMap::new(),
             };
 
-            let mut repo_map = match owners.remove(repo.owner.as_str()) {
+            let mut repo_map = match owners.remove(&repo.owner) {
                 Some(repo_map) => repo_map,
                 None => HashMap::new(),
             };
@@ -316,13 +317,31 @@ impl From<Vec<Rc<Repo>>> for RepoIndex {
                 last_accessed,
                 accessed,
             };
-            let name = Rc::try_unwrap(name).expect("Unwrap repo name Rc failed");
             repo_map.insert(name, info);
-
-            let owner = Rc::try_unwrap(owner).expect("Unwrap repo owner Rc failed");
             owners.insert(owner, repo_map);
+            index_rc.insert(remote, owners);
+        }
 
-            let remote = Rc::try_unwrap(remote).expect("Unwrap repo remote Rc failed");
+        let mut index: HashMap<String, HashMap<String, HashMap<String, RepoInfo>>> =
+            HashMap::with_capacity(index_rc.len());
+        for (remote, owners_rc) in index_rc.into_iter() {
+            let remote = Rc::try_unwrap(remote).expect("Failed to unwrap remote");
+            let mut owners: HashMap<String, HashMap<String, RepoInfo>> =
+                HashMap::with_capacity(owners_rc.len());
+
+            for (owner, repo_map_rc) in owners_rc {
+                let owner = Rc::try_unwrap(owner).expect("Failed to unwrap owner");
+                let mut repo_map: HashMap<String, RepoInfo> =
+                    HashMap::with_capacity(repo_map_rc.len());
+
+                for (repo_name, repo_info) in repo_map_rc {
+                    let name = Rc::try_unwrap(repo_name).expect("Failed to unwrap repo name");
+                    repo_map.insert(name, repo_info);
+                }
+
+                owners.insert(owner, repo_map);
+            }
+
             index.insert(remote, owners);
         }
 
