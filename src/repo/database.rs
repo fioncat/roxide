@@ -75,7 +75,7 @@ impl Database {
         S: AsRef<str>,
     {
         let dir = config::current_dir();
-        let max_time = 0;
+        let mut max_time = 0;
         let mut pos = None;
         for (idx, repo) in self.repos.iter().enumerate() {
             if repo.get_path().eq(dir) {
@@ -86,6 +86,7 @@ impl Database {
             }
             if repo.last_accessed > max_time {
                 pos = Some(idx);
+                max_time = repo.last_accessed;
             }
         }
         match pos {
@@ -119,6 +120,14 @@ impl Database {
             Some(repo) => Ok(repo),
             None => bail!("You are not in a roxide repository"),
         }
+    }
+
+    pub fn list_all(&self) -> Vec<Rc<Repo>> {
+        let mut list = Vec::with_capacity(self.repos.len());
+        for repo in self.repos.iter() {
+            list.push(Rc::clone(repo));
+        }
+        list
     }
 
     pub fn list_by_remote<S>(&self, remote: S) -> Vec<Rc<Repo>>

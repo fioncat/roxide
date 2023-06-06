@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::{config, utils};
+use crate::api::ApiUpstream;
+use crate::config;
+use crate::config::types::Remote;
+use crate::utils;
 
 #[derive(Debug)]
 pub struct Repo {
@@ -49,6 +52,13 @@ impl Repo {
         })
     }
 
+    pub fn from_upstream<S>(remote: S, upstream: ApiUpstream) -> Rc<Repo>
+    where
+        S: AsRef<str>,
+    {
+        Self::new(remote.as_ref(), &upstream.owner, &upstream.name, None)
+    }
+
     pub fn update(&self) -> Rc<Repo> {
         Rc::new(Repo {
             remote: Rc::clone(&self.remote),
@@ -90,5 +100,25 @@ impl Repo {
 
     pub fn full_name(&self) -> String {
         format!("{}:{}/{}", self.remote, self.owner, self.name)
+    }
+
+    pub fn clone_url(&self, remote: &Remote) -> String {
+        let mut ssh = remote.ssh;
+        if let Some(owner_cfg) = remote.owners.get(self.owner.as_str()) {
+            if let Some(use_ssh) = owner_cfg.ssh {
+                ssh = use_ssh;
+            }
+        }
+
+        let domain = match &remote.clone {
+            Some(domain) => domain.as_str(),
+            None => "github.com",
+        };
+
+        if ssh {
+            format!("git@{}:{}.git", domain, self.long_name())
+        } else {
+            format!("https://{}/{}.git", domain, self.long_name())
+        }
     }
 }

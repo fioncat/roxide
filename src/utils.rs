@@ -1,8 +1,9 @@
+use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
+use std::process;
 use std::time::{Duration, SystemTime};
-use std::{env, process};
 
 use anyhow::{Context, Error, Result};
 use console::{self, style};
