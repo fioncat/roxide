@@ -1,3 +1,11 @@
+mod cmd;
+
+use clap::Parser;
+use roxide::utils;
+
+use crate::cmd::{App, Run};
+
 fn main() {
-    println!("Hello, world!");
+    console::set_colors_enabled(true);
+    utils::handle_result(App::parse().run());
 }

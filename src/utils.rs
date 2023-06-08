@@ -41,7 +41,7 @@ macro_rules! show_exec {
             let msg = format!($fmt, $($arg)*);
             let msg = format!("{} {}", console::style("==>").cyan(),
                 console::style(msg).bold());
-            _ = writeln!(std::io::stderr(), "{}", msg);
+            $crate::utils::write_stderr(msg)
         }
     };
 }
@@ -52,9 +52,13 @@ macro_rules! info {
         {
             let msg = format!($fmt, $($arg)*);
             let msg = format!("{} {}", console::style("==>").green(), msg);
-            _ = writeln!(std::io::stderr(), "{}", msg);
+            $crate::utils::write_stderr(msg)
         }
     };
+}
+
+pub fn write_stderr(msg: String) {
+    _ = writeln!(std::io::stderr(), "{}", msg);
 }
 
 pub fn ensure_dir(path: &PathBuf) -> Result<()> {

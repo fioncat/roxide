@@ -18,6 +18,12 @@ pub struct Repo {
     pub accessed: f64,
 }
 
+pub enum NameLevel {
+    Full,
+    Owner,
+    Name,
+}
+
 impl PartialEq for Repo {
     fn eq(&self, other: &Self) -> bool {
         if self.remote.ne(&other.remote) {
@@ -92,6 +98,14 @@ impl Repo {
             .join(self.remote.as_str())
             .join(self.owner.as_str())
             .join(self.name.as_str())
+    }
+
+    pub fn as_string(&self, level: &NameLevel) -> String {
+        match level {
+            NameLevel::Full => self.full_name(),
+            NameLevel::Owner => self.long_name(),
+            NameLevel::Name => format!("{}", self.name),
+        }
     }
 
     pub fn long_name(&self) -> String {

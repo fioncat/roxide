@@ -18,7 +18,7 @@ use crate::{confirm, info, show_exec};
 
 pub struct Shell {
     cmd: Command,
-    desc: Option<&'static str>,
+    desc: Option<String>,
     input: Option<String>,
 
     mute: bool,
@@ -103,8 +103,8 @@ impl Shell {
         Self::with_args("sh", &["-c", script.as_str()])
     }
 
-    pub fn with_desc(&mut self, desc: &'static str) -> &mut Self {
-        self.desc = Some(desc);
+    pub fn with_desc(&mut self, desc: impl AsRef<str>) -> &mut Self {
+        self.desc = Some(desc.as_ref().to_string());
         self
     }
 
@@ -115,6 +115,11 @@ impl Shell {
 
     pub fn set_mute(&mut self, mute: bool) -> &mut Self {
         self.mute = mute;
+        self
+    }
+
+    pub fn with_git_path(&mut self, path: impl AsRef<str>) -> &mut Self {
+        self.cmd.args(&["-C", path.as_ref()]);
         self
     }
 
@@ -161,7 +166,7 @@ impl Shell {
         if self.mute {
             return;
         }
-        match self.desc {
+        match &self.desc {
             Some(desc) => show_exec!("{}", desc),
             None => {
                 let mut desc_args = Vec::with_capacity(1);

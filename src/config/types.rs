@@ -168,6 +168,21 @@ pub struct Owner {
 }
 
 impl Remote {
+    pub fn replace_owner(&self, owner: String) -> String {
+        if self.owners.is_empty() {
+            return owner;
+        }
+
+        for (raw_owner, cfg) in self.owners.iter() {
+            if let Some(alias) = &cfg.alias {
+                if alias.eq(&owner) {
+                    return raw_owner.clone();
+                }
+            }
+        }
+        owner
+    }
+
     fn validate(&mut self) -> Result<()> {
         if let Some(token) = &self.token {
             self.token = Some(expandenv(token).context("Expand token")?);
