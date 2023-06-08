@@ -2,18 +2,21 @@
 
 use std::io::{ErrorKind, Read, Write};
 use std::mem;
+use std::path::PathBuf;
 use std::process::{ChildStdout, Command, Stdio};
+use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
 use chrono::offset::Local;
 use console::{style, StyledObject};
 use regex::{Captures, Regex};
 
-use crate::api;
 use crate::config;
+use crate::config::types::WorkflowStep;
 use crate::errors::SilentExit;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
+use crate::{api, utils};
 use crate::{confirm, info, show_exec};
 
 pub struct Shell {
@@ -111,6 +114,20 @@ impl Shell {
     pub fn with_input(&mut self, input: String) -> &mut Self {
         self.input = Some(input);
         self.cmd.stdin(Stdio::piped());
+        self
+    }
+
+    pub fn with_path(&mut self, path: &PathBuf) -> &mut Self {
+        self.cmd.current_dir(path);
+        self
+    }
+
+    pub fn with_env<K, V>(&mut self, key: K, val: V) -> &mut Self
+    where
+        K: AsRef<str>,
+        V: AsRef<str>,
+    {
+        self.cmd.env(key.as_ref(), val.as_ref());
         self
     }
 
@@ -536,4 +553,37 @@ impl GitTag {
 
         Ok(GitTag(result))
     }
+}
+
+pub fn execute_workflow(steps: &Vec<WorkflowStep>, repo: &Rc<Repo>) -> Result<()> {
+    let dir = repo.get_path();
+    for step in steps.iter() {
+        if let Some(run) = &step.run {
+            let script = run.replace("\n", ";");
+            let mut cmd = Shell::sh(&script);
+            cmd.with_path(&dir);
+
+            cmd.with_env("REPO_NAME", repo.name.as_str());
+            cmd.with_env("REPO_OWNER", repo.owner.as_str());
+            cmd.with_env("REMOTE", repo.remote.as_str());
+            cmd.with_env("REPO_LONG", repo.long_name());
+            cmd.with_env("REPO_FULL", repo.full_name());
+
+            cmd.with_desc(format!("Run {}", step.name));
+
+            cmd.execute()?;
+            continue;
+        }
+        if let None = step.file {
+            continue;
+        }
+
+        let content = step.file.as_ref().unwrap();
+        let content = content.replace("\\t", "\t");
+
+        show_exec!("Create file {}", step.name);
+        let path = dir.join(&step.name);
+        utils::write_file(&path, content.as_bytes())?;
+    }
+    Ok(())
 }
