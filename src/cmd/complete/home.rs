@@ -1,7 +1,9 @@
 use anyhow::Result;
 use roxide::{config, repo::database::Database};
 
-pub fn complete(args: &[String]) -> Result<Vec<String>> {
+use super::Complete;
+
+pub fn complete(args: &[String]) -> Result<Complete> {
     match args.len() {
         0 | 1 => {
             let remotes = config::get().list_remotes();
@@ -9,7 +11,7 @@ pub fn complete(args: &[String]) -> Result<Vec<String>> {
                 .into_iter()
                 .map(|remote| remote.to_string())
                 .collect();
-            Ok(items)
+            Ok(Complete::from(items))
         }
         2 => {
             let remote_name = &args[0];
@@ -22,7 +24,7 @@ pub fn complete(args: &[String]) -> Result<Vec<String>> {
                     .into_iter()
                     .map(|owner| format!("{}/", owner))
                     .collect();
-                return Ok(items);
+                return Ok(Complete::from(items).no_space());
             }
 
             let repos = db.list_by_remote(remote_name);
@@ -31,8 +33,8 @@ pub fn complete(args: &[String]) -> Result<Vec<String>> {
                 .filter(|repo| repo.long_name().starts_with(query))
                 .map(|repo| format!("{}", repo.long_name()))
                 .collect();
-            Ok(items)
+            Ok(Complete::from(items))
         }
-        _ => Ok(vec![]),
+        _ => Ok(Complete::empty()),
     }
 }

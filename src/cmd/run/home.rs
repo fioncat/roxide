@@ -29,14 +29,12 @@ impl Run for HomeArgs {
                     .execute()?;
 
                 if let Some(user) = &remote.user {
-                    Shell::git(&["config", "user.name", user.as_str()])
-                        .with_git_path(&path)
+                    Shell::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
                         .with_desc(format!("Set user to {}", user))
                         .execute()?;
                 }
                 if let Some(email) = &remote.email {
-                    Shell::git(&["config", "user.email", email.as_str()])
-                        .with_git_path(&path)
+                    Shell::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
                         .with_desc(format!("Set email to {}", email))
                         .execute()?;
                 }

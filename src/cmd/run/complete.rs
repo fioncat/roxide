@@ -5,12 +5,13 @@ use anyhow::Result;
 
 use crate::cmd::app::CompleteArgs;
 use crate::cmd::complete::home;
+use crate::cmd::complete::Complete;
 use crate::cmd::Run;
 
 macro_rules! get_cmds {
     ($($key:expr => $value:expr), + $(,)?) => {
         {
-            let mut map: HashMap<&'static str, fn(&[String]) -> Result<Vec<String>>> =
+            let mut map: HashMap<&'static str, fn(&[String]) -> Result<Complete>> =
                 HashMap::new();
             $(
                 map.insert($key, $value);
@@ -21,19 +22,9 @@ macro_rules! get_cmds {
 }
 
 impl CompleteArgs {
-    fn get_cmds() -> HashMap<&'static str, fn(&[String]) -> Result<Vec<String>>> {
+    fn get_cmds() -> HashMap<&'static str, fn(&[String]) -> Result<Complete>> {
         get_cmds! {
             "home" => home::complete,
-        }
-    }
-
-    fn print_items<I, S>(items: I)
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        for item in items {
-            println!("{}", item.as_ref());
         }
     }
 
@@ -47,11 +38,12 @@ impl Run for CompleteArgs {
         if self.args.is_empty() {
             return Ok(());
         }
+        // TODO: Handle stash("-x")
         let cmds = Self::get_cmds();
         if self.args.len() == 1 {
-            let mut keys: Vec<_> = cmds.into_keys().collect();
+            let mut keys: Vec<_> = cmds.into_keys().map(|key| key.to_string()).collect();
             keys.sort();
-            Self::print_items(keys);
+            Complete::from(keys).show();
             return Ok(());
         }
 
@@ -59,7 +51,7 @@ impl Run for CompleteArgs {
             let args = &self.args[1..];
             let result = complete(args);
             match result {
-                Ok(items) => Self::print_items(items),
+                Ok(cmp) => cmp.show(),
                 Err(err) => Self::handle_err(err),
             }
         }

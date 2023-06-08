@@ -110,16 +110,12 @@ impl Shell {
 
     pub fn with_input(&mut self, input: String) -> &mut Self {
         self.input = Some(input);
+        self.cmd.stdin(Stdio::piped());
         self
     }
 
     pub fn set_mute(&mut self, mute: bool) -> &mut Self {
         self.mute = mute;
-        self
-    }
-
-    pub fn with_git_path(&mut self, path: impl AsRef<str>) -> &mut Self {
-        self.cmd.args(&["-C", path.as_ref()]);
         self
     }
 

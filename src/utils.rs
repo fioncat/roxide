@@ -51,7 +51,8 @@ macro_rules! info {
     ($fmt:expr, $($arg:tt)*) => {
         {
             let msg = format!($fmt, $($arg)*);
-            let msg = format!("{} {}", console::style("==>").green(), msg);
+            let msg = format!("{} {}", console::style("==>").green(),
+                console::style(msg).bold());
             $crate::utils::write_stderr(msg)
         }
     };

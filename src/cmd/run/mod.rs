@@ -1,3 +1,3 @@
-mod app;
 mod complete;
 mod home;
+mod init;
