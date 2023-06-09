@@ -18,6 +18,19 @@ pub const WEEK: u64 = 7 * DAY;
 
 #[macro_export]
 macro_rules! confirm {
+    ($dst:expr $(,)?) => {
+        let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt($dst)
+            .interact_on(&console::Term::stderr());
+        match result {
+            Ok(ok) => {
+                if !ok {
+                    anyhow::bail!($crate::errors::SilentExit{ code: 60 });
+                }
+            }
+            Err(err) => anyhow::bail!("Confirm error: {err:#}"),
+        };
+    };
     ($fmt:expr, $($arg:tt)*) => {
         let msg = format!($fmt, $($arg)*);
         let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())

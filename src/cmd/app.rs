@@ -1,6 +1,11 @@
 use anyhow::Result;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 
+use crate::cmd::run::attach::AttachArgs;
+use crate::cmd::run::branch::BranchArgs;
+use crate::cmd::run::complete::CompleteArgs;
+use crate::cmd::run::home::HomeArgs;
+use crate::cmd::run::init::InitArgs;
 use crate::cmd::Run;
 
 #[derive(Parser)]
@@ -16,41 +21,7 @@ pub enum Commands {
     Home(HomeArgs),
     Complete(CompleteArgs),
     Attach(AttachArgs),
-}
-
-#[derive(Args)]
-pub struct HomeArgs {
-    pub query: Vec<String>,
-
-    #[clap(long, short)]
-    pub search: bool,
-
-    #[clap(long, short)]
-    pub force: bool,
-}
-
-#[derive(Args)]
-pub struct CompleteArgs {
-    pub args: Vec<String>,
-}
-
-#[derive(Args)]
-pub struct InitArgs {
-    pub shell: Shell,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum Shell {
-    Zsh,
-}
-
-#[derive(Args)]
-pub struct AttachArgs {
-    pub remote: String,
-    pub query: String,
-
-    #[clap(long, short)]
-    pub force: bool,
+    Branch(BranchArgs),
 }
 
 impl Run for App {
@@ -60,6 +31,7 @@ impl Run for App {
             Commands::Home(args) => args.run(),
             Commands::Complete(args) => args.run(),
             Commands::Attach(args) => args.run(),
+            Commands::Branch(args) => args.run(),
         }
     }
 }

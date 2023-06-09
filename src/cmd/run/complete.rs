@@ -3,16 +3,23 @@ use std::collections::HashMap;
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::cmd::app::CompleteArgs;
 use crate::cmd::complete::attach;
+use crate::cmd::complete::branch;
 use crate::cmd::complete::home;
 use crate::cmd::complete::Complete;
 use crate::cmd::Run;
+use clap::Args;
+
+#[derive(Args)]
+pub struct CompleteArgs {
+    #[clap(allow_hyphen_values = true)]
+    pub args: Vec<String>,
+}
 
 macro_rules! get_cmds {
     ($($key:expr => $value:expr), + $(,)?) => {
         {
-            let mut map: HashMap<&'static str, fn(&[String]) -> Result<Complete>> =
+            let mut map: HashMap<&'static str, fn(&[&str]) -> Result<Complete>> =
                 HashMap::new();
             $(
                 map.insert($key, $value);
@@ -23,10 +30,11 @@ macro_rules! get_cmds {
 }
 
 impl CompleteArgs {
-    fn get_cmds() -> HashMap<&'static str, fn(&[String]) -> Result<Complete>> {
+    fn get_cmds() -> HashMap<&'static str, fn(&[&str]) -> Result<Complete>> {
         get_cmds! {
             "home" => home::complete,
             "attach" => attach::complete,
+            "branch" => branch::complete,
         }
     }
 
@@ -50,7 +58,13 @@ impl Run for CompleteArgs {
         }
 
         if let Some(complete) = cmds.get(self.args[0].as_str()) {
-            let args = &self.args[1..];
+            let args: Vec<&str> = self
+                .args
+                .iter()
+                .filter(|arg| !arg.starts_with("-"))
+                .map(|arg| arg.as_str())
+                .collect();
+            let args = &args[1..];
             let result = complete(args);
             match result {
                 Ok(cmp) => cmp.show(),

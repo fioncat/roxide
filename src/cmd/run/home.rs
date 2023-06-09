@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
+use clap::Args;
 use roxide::config::types::Remote;
 use roxide::repo::database::Database;
 use roxide::repo::types::{NameLevel, Repo};
@@ -11,8 +12,18 @@ use roxide::shell::Shell;
 use roxide::{api, info, shell};
 use roxide::{config, confirm, utils};
 
-use crate::cmd::app::HomeArgs;
 use crate::cmd::Run;
+
+#[derive(Args)]
+pub struct HomeArgs {
+    pub query: Vec<String>,
+
+    #[clap(long, short)]
+    pub search: bool,
+
+    #[clap(long, short)]
+    pub force: bool,
+}
 
 impl Run for HomeArgs {
     fn run(&self) -> Result<()> {

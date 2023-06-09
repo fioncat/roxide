@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use anyhow::{bail, Result};
+use clap::Args;
 use roxide::config::types::Remote;
 use roxide::repo::database::Database;
 use roxide::repo::types::Repo;
@@ -9,7 +10,16 @@ use roxide::shell::Shell;
 use roxide::{api, confirm, info, shell};
 use roxide::{config, utils};
 
-use crate::cmd::{app::AttachArgs, Run};
+use crate::cmd::Run;
+
+#[derive(Args)]
+pub struct AttachArgs {
+    pub remote: String,
+    pub query: String,
+
+    #[clap(long, short)]
+    pub force: bool,
+}
 
 impl Run for AttachArgs {
     fn run(&self) -> Result<()> {

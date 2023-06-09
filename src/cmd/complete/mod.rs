@@ -1,4 +1,5 @@
 pub mod attach;
+pub mod branch;
 pub mod home;
 
 pub struct Complete {
