@@ -1,10 +1,18 @@
 use anyhow::Result;
+use clap::{Args, ValueEnum};
 use roxide::config;
 
-use crate::cmd::{
-    app::{InitArgs, Shell},
-    Run,
-};
+use crate::cmd::Run;
+
+#[derive(Args)]
+pub struct InitArgs {
+    pub shell: Shell,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Shell {
+    Zsh,
+}
 
 impl Run for InitArgs {
     fn run(&self) -> Result<()> {

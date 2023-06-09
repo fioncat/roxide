@@ -1,4 +1,5 @@
-mod attach;
-mod complete;
-mod home;
-mod init;
+pub mod attach;
+pub mod branch;
+pub mod complete;
+pub mod home;
+pub mod init;

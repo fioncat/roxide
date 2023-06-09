@@ -1,7 +1,7 @@
 _roxide() {
 	local cmd=${words[1]}
 	local cmp_args=("${words[@]:1}")
-	local items=($(roxide complete "${cmp_args[@]}"))
+	local items=($($cmd complete "${cmp_args[@]}" 2>/dev/null))
 
 	local flags=${items[1]}
 	local items=("${items[@]:1}")

@@ -3,11 +3,16 @@ use std::collections::HashMap;
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::cmd::app::CompleteArgs;
 use crate::cmd::complete::attach;
 use crate::cmd::complete::home;
 use crate::cmd::complete::Complete;
 use crate::cmd::Run;
+use clap::Args;
+
+#[derive(Args)]
+pub struct CompleteArgs {
+    pub args: Vec<String>,
+}
 
 macro_rules! get_cmds {
     ($($key:expr => $value:expr), + $(,)?) => {
