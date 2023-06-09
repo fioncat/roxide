@@ -53,7 +53,7 @@ pub fn build_common_client(remote: &Remote) -> Client {
         .unwrap()
 }
 
-pub fn init_provider(remote: &Remote) -> Result<Box<dyn Provider>> {
+pub fn init_provider(remote: &Remote, force: bool) -> Result<Box<dyn Provider>> {
     if let None = remote.provider {
         bail!("Missing provider config for remote {}", remote.name);
     }
@@ -61,7 +61,7 @@ pub fn init_provider(remote: &Remote) -> Result<Box<dyn Provider>> {
         ProviderType::Github => Github::new(remote),
         ProviderType::Gitlab => Gitlab::new(remote),
     };
-    if remote.cache_hours > 0 {
+    if !force && remote.cache_hours > 0 {
         let cache_dir = PathBuf::from(&config::base().metadir)
             .join("cache")
             .join(&remote.name);

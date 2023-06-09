@@ -1,3 +1,4 @@
+pub mod attach;
 pub mod home;
 
 pub struct Complete {

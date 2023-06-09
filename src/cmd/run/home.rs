@@ -115,8 +115,7 @@ impl HomeArgs {
     fn search_api(&self, db: &Database, remote: &Remote, owner: &str) -> Result<Rc<Repo>> {
         match remote.provider {
             Some(_) => {
-                let provider = api::init_provider(remote)?;
-                info!("Search for owner {}", owner);
+                let provider = api::init_provider(remote, self.force)?;
                 let api_repos = provider.list_repos(owner)?;
                 let idx = shell::search(&api_repos)?;
                 let name = &api_repos[idx];

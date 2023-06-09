@@ -15,6 +15,7 @@ pub enum Commands {
     Init(InitArgs),
     Home(HomeArgs),
     Complete(CompleteArgs),
+    Attach(AttachArgs),
 }
 
 #[derive(Args)]
@@ -23,6 +24,9 @@ pub struct HomeArgs {
 
     #[clap(long, short)]
     pub search: bool,
+
+    #[clap(long, short)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -40,12 +44,22 @@ pub enum Shell {
     Zsh,
 }
 
+#[derive(Args)]
+pub struct AttachArgs {
+    pub remote: String,
+    pub query: String,
+
+    #[clap(long, short)]
+    pub force: bool,
+}
+
 impl Run for App {
     fn run(&self) -> Result<()> {
         match &self.command {
             Commands::Init(args) => args.run(),
             Commands::Home(args) => args.run(),
             Commands::Complete(args) => args.run(),
+            Commands::Attach(args) => args.run(),
         }
     }
 }

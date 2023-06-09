@@ -407,7 +407,7 @@ impl GitRemote {
         Ok(lines.iter().map(|s| GitRemote(s.to_string())).collect())
     }
 
-    pub fn select(upstream: bool) -> Result<GitRemote> {
+    pub fn select(upstream: bool, force: bool) -> Result<GitRemote> {
         if !upstream {
             return Ok(GitRemote(String::from("origin")));
         }
@@ -423,7 +423,7 @@ impl GitRemote {
         let db = Database::read()?;
         let repo = db.must_current()?;
         let remote = config::must_get_remote(repo.remote.as_str())?;
-        let provider = api::init_provider(&remote)?;
+        let provider = api::init_provider(&remote, force)?;
 
         info!("Get upstream for {}", repo.full_name());
         let api_repo = provider.get_repo(&repo.owner, &repo.name)?;

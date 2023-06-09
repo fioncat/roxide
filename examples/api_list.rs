@@ -17,7 +17,7 @@ fn run() -> Result<()> {
     let owner = args.get(2).unwrap();
     let remote = config::must_get_remote(remote_name)?;
 
-    let provider = api::init_provider(&remote)?;
+    let provider = api::init_provider(&remote, false)?;
 
     let repos = provider.list_repos(&owner)?;
     for repo in repos {
