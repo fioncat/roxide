@@ -3,7 +3,7 @@ use roxide::{config, repo::database::Database};
 
 use super::Complete;
 
-pub fn complete(args: &[String]) -> Result<Complete> {
+pub fn complete(args: &[&str]) -> Result<Complete> {
     match args.len() {
         0 | 1 => {
             let remotes = config::get().list_remotes();
