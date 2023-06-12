@@ -1,15 +1,11 @@
-#![allow(dead_code)]
-
 use anyhow::{bail, Context, Result};
 use reqwest::blocking::{Client, Request};
 use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
+use crate::api::types::{ApiRepo, Merge, Provider};
 use crate::config::types::Remote;
-
-use super::ApiRepo;
-use super::Provider;
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
@@ -57,6 +53,14 @@ impl Provider for Gitlab {
         let id_encode = urlencoding::encode(&id);
         let path = format!("projects/{id_encode}");
         Ok(self.execute::<GitlabRepo>(&path)?.to_api())
+    }
+
+    fn get_merge(&self, merge: Merge) -> Result<Option<String>> {
+        todo!()
+    }
+
+    fn create_merge(&self, merge: Merge) -> Result<String> {
+        todo!()
     }
 }
 

@@ -8,9 +8,8 @@ use bincode::Options;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use crate::api::types::{ApiRepo, Merge, Provider};
 use crate::utils;
-
-use super::{ApiRepo, Provider};
 
 pub struct Cache {
     dir: PathBuf,
@@ -40,6 +39,14 @@ impl Provider for Cache {
         let repos = self.upstream.list_repos(owner)?;
         self.write(&repos, &path)?;
         Ok(repos)
+    }
+
+    fn get_merge(&self, merge: Merge) -> Result<Option<String>> {
+        self.upstream.get_merge(merge)
+    }
+
+    fn create_merge(&self, merge: Merge) -> Result<String> {
+        self.upstream.create_merge(merge)
     }
 }
 

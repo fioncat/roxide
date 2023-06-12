@@ -1,50 +1,21 @@
 mod cache;
 mod github;
 mod gitlab;
-
-#[cfg(test)]
-mod github_test;
-
-#[cfg(test)]
-mod gitlab_test;
+pub mod types;
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
 
 use crate::api::cache::Cache;
 use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
+use crate::api::types::Provider;
 use crate::config;
 use crate::config::types::Provider as ProviderType;
 use crate::config::types::Remote;
-
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
-pub struct ApiRepo {
-    pub name: String,
-
-    pub default_branch: String,
-
-    pub upstream: Option<ApiUpstream>,
-
-    pub web_url: String,
-}
-
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
-pub struct ApiUpstream {
-    pub owner: String,
-    pub name: String,
-    pub default_branch: String,
-}
-
-pub trait Provider {
-    fn list_repos(&self, owner: &str) -> Result<Vec<String>>;
-
-    fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo>;
-}
 
 pub fn build_common_client(remote: &Remote) -> Client {
     Client::builder()

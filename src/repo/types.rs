@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::api::ApiUpstream;
+use crate::api::types::ApiUpstream;
 use crate::config;
 use crate::config::types::Remote;
 use crate::utils;
