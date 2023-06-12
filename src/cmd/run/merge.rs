@@ -2,9 +2,13 @@ use anyhow::bail;
 use anyhow::Result;
 use clap::Args;
 use roxide::api;
+use roxide::api::types::MergeOptions;
 use roxide::config;
+use roxide::confirm;
 use roxide::repo::database::Database;
 use roxide::shell;
+use roxide::shell::GitBranch;
+use roxide::utils;
 
 use crate::cmd::Run;
 
@@ -44,8 +48,48 @@ impl Run for MergeArgs {
             }
         }
 
+        let target = match &self.target {
+            Some(t) => t.clone(),
+            None => match &api_repo.upstream {
+                Some(upstream) => {
+                    if upstream.default_branch.is_empty() {
+                        bail!("Upstream default branch is empty in api info");
+                    }
+                    upstream.default_branch.clone()
+                }
+                None => GitBranch::default()?,
+            },
+        };
+
+        let source = match &self.source {
+            Some(s) => s.clone(),
+            None => GitBranch::current()?,
+        };
+
+        let merge = MergeOptions {
+            owner: format!("{}", repo.owner),
+            name: api_repo.name,
+            upstream: api_repo.upstream,
+            source,
+            target,
+        };
+
+        if let Some(url) = provider.get_merge(merge.clone())? {
+            utils::open_url(&url)?;
+            return Ok(());
+        }
+
+        println!();
+        println!("About to create merge: {}", merge.pretty_display());
+        confirm!("Continue");
+        println!();
+
         todo!()
     }
 }
 
-impl MergeArgs {}
+impl MergeArgs {
+    fn create(&self, opts: &mut MergeOptions) -> Result<()> {
+        Ok(())
+    }
+}

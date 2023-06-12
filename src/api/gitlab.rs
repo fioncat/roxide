@@ -4,7 +4,7 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use crate::api::types::{ApiRepo, Merge, Provider};
+use crate::api::types::{ApiRepo, MergeOptions, Provider};
 use crate::config::types::Remote;
 
 #[derive(Debug, Deserialize)]
@@ -55,11 +55,11 @@ impl Provider for Gitlab {
         Ok(self.execute::<GitlabRepo>(&path)?.to_api())
     }
 
-    fn get_merge(&self, merge: Merge) -> Result<Option<String>> {
+    fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
         todo!()
     }
 
-    fn create_merge(&self, merge: Merge) -> Result<String> {
+    fn create_merge(&self, merge: MergeOptions) -> Result<String> {
         todo!()
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use console::style;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -12,7 +13,7 @@ pub struct ApiRepo {
     pub web_url: String,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 pub struct ApiUpstream {
     pub owner: String,
     pub name: String,
@@ -25,19 +26,36 @@ impl ToString for ApiUpstream {
     }
 }
 
-pub struct Merge {
+#[derive(Debug, Clone)]
+pub struct MergeOptions {
     pub owner: String,
     pub name: String,
     pub upstream: Option<ApiUpstream>,
-
-    pub title: String,
-    pub body: String,
 
     pub source: String,
     pub target: String,
 }
 
-impl ToString for Merge {
+impl MergeOptions {
+    pub fn pretty_display(&self) -> String {
+        match &self.upstream {
+            Some(upstream) => format!(
+                "{}:{} => {}:{}",
+                style(self.to_string()).yellow(),
+                style(&self.source).magenta(),
+                style(upstream.to_string()).yellow(),
+                style(&self.target).magenta()
+            ),
+            None => format!(
+                "{} => {}",
+                style(&self.source).magenta(),
+                style(&self.target).magenta()
+            ),
+        }
+    }
+}
+
+impl ToString for MergeOptions {
     fn to_string(&self) -> String {
         format!("{}/{}", self.owner, self.name)
     }
@@ -52,8 +70,8 @@ pub trait Provider {
 
     // Try to get URL for merge request (or PR for Github). If merge request
     // not exists, return Ok(None).
-    fn get_merge(&self, merge: Merge) -> Result<Option<String>>;
+    fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>>;
 
     // Create merge request (or PR for Github), and return its URL.
-    fn create_merge(&self, merge: Merge) -> Result<String>;
+    fn create_merge(&self, merge: MergeOptions) -> Result<String>;
 }

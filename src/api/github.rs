@@ -4,7 +4,7 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::types::{ApiRepo, ApiUpstream, Merge, Provider};
+use crate::api::types::{ApiRepo, ApiUpstream, MergeOptions, Provider};
 use crate::config::types::Remote;
 
 #[derive(Debug, Deserialize)]
@@ -69,19 +69,14 @@ struct PullRequestOptions {
 
     head: String,
     base: String,
-
-    title: String,
-    body: String,
 }
 
-impl From<Merge> for PullRequestOptions {
-    fn from(merge: Merge) -> Self {
-        let Merge {
+impl From<MergeOptions> for PullRequestOptions {
+    fn from(merge: MergeOptions) -> Self {
+        let MergeOptions {
             mut owner,
             mut name,
             upstream,
-            title,
-            body,
             source,
             target,
         } = merge;
@@ -98,8 +93,6 @@ impl From<Merge> for PullRequestOptions {
             name,
             head,
             base: target,
-            title,
-            body,
         }
     }
 }
@@ -130,7 +123,7 @@ impl Provider for Github {
         Ok(self.execute_get::<Repo>(&path)?.to_api())
     }
 
-    fn get_merge(&self, merge: Merge) -> Result<Option<String>> {
+    fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
         let opts: PullRequestOptions = merge.into();
         let path = format!(
             "repos/{}/{}/pulls?state=open&head={}&base={}",
@@ -143,7 +136,7 @@ impl Provider for Github {
         Ok(Some(prs.remove(0).url))
     }
 
-    fn create_merge(&self, merge: Merge) -> Result<String> {
+    fn create_merge(&self, merge: MergeOptions) -> Result<String> {
         let opts: PullRequestOptions = merge.into();
         let path = format!("repos/{}/{}/pulls", opts.owner, opts.name);
         let pr = self.execute_post::<PullRequestOptions, PullRequest>(&path, opts)?;

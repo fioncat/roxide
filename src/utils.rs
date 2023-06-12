@@ -146,3 +146,7 @@ pub fn parse_query(query: impl AsRef<str>) -> (String, String) {
     }
     (group_buffer.join("/"), base.to_string())
 }
+
+pub fn open_url(url: impl AsRef<str>) -> Result<()> {
+    todo!()
+}
