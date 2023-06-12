@@ -10,8 +10,10 @@ use crate::cmd::complete::Complete;
 use crate::cmd::Run;
 use clap::Args;
 
+/// Complete support command, please donot use directly.
 #[derive(Args)]
 pub struct CompleteArgs {
+    /// The complete args.
     #[clap(allow_hyphen_values = true)]
     pub args: Vec<String>,
 }

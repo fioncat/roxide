@@ -6,6 +6,7 @@ use roxide::shell::{self, BranchStatus, GitBranch, Shell};
 
 use crate::cmd::Run;
 
+/// Git branch operations
 #[derive(Args)]
 pub struct BranchArgs {
     /// Branch name, optional

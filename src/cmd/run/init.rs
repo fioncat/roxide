@@ -4,8 +4,10 @@ use roxide::config;
 
 use crate::cmd::Run;
 
+/// Print the init script.
 #[derive(Args)]
 pub struct InitArgs {
+    /// The shell type.
     pub shell: Shell,
 }
 

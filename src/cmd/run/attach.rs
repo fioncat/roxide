@@ -12,11 +12,15 @@ use roxide::{config, utils};
 
 use crate::cmd::Run;
 
+/// Attach current directory to a repo.
 #[derive(Args)]
 pub struct AttachArgs {
+    /// The remote name.
     pub remote: String,
+    /// The repo query, format is `owner[/[name]]`
     pub query: String,
 
+    /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
 }

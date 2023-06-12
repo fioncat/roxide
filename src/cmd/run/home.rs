@@ -14,13 +14,17 @@ use roxide::{config, confirm, utils};
 
 use crate::cmd::Run;
 
+/// Print the home path of a repo, recommand to use `zz` command instead.
 #[derive(Args)]
 pub struct HomeArgs {
+    /// The repo query, format is `[remote] [owner[/[name]]]`
     pub query: Vec<String>,
 
+    /// If true, use search instead of fuzzy matching.
     #[clap(long, short)]
     pub search: bool,
 
+    /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
 }
