@@ -37,6 +37,7 @@ impl CompleteArgs {
             "home" => home::complete,
             "attach" => attach::complete,
             "branch" => branch::complete,
+            "merge" => branch::complete,
         }
     }
 

@@ -45,8 +45,8 @@ impl Provider for Cache {
         self.upstream.get_merge(merge)
     }
 
-    fn create_merge(&self, merge: MergeOptions) -> Result<String> {
-        self.upstream.create_merge(merge)
+    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
+        self.upstream.create_merge(merge, title, body)
     }
 }
 

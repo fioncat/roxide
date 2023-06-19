@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use std::process;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use console::{self, style};
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::{Editor, Input};
 
 use crate::errors::SilentExit;
 
@@ -19,56 +21,52 @@ pub const WEEK: u64 = 7 * DAY;
 #[macro_export]
 macro_rules! confirm {
     ($dst:expr $(,)?) => {
-        let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt($dst)
-            .interact_on(&console::Term::stderr());
-        match result {
-            Ok(ok) => {
-                if !ok {
-                    anyhow::bail!($crate::errors::SilentExit{ code: 60 });
-                }
-            }
-            Err(err) => anyhow::bail!("Confirm error: {err:#}"),
-        };
+        $crate::utils::must_confirm($dst)?;
     };
     ($fmt:expr, $($arg:tt)*) => {
         let msg = format!($fmt, $($arg)*);
-        let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt(msg)
-            .interact_on(&console::Term::stderr());
-        match result {
-            Ok(ok) => {
-                if !ok {
-                    anyhow::bail!($crate::errors::SilentExit{ code: 60 });
-                }
-            }
-            Err(err) => anyhow::bail!("Confirm error: {err:#}"),
-        };
+        $crate::utils::must_confirm(msg.as_str())?;
     };
 }
 
 #[macro_export]
-macro_rules! show_exec {
+macro_rules! exec {
+    ($dst:expr $(,)?) => {
+        {
+            $crate::utils::show_exec($dst);
+        }
+    };
     ($fmt:expr, $($arg:tt)*) => {
         {
             let msg = format!($fmt, $($arg)*);
-            let msg = format!("{} {}", console::style("==>").cyan(),
-                console::style(msg).bold());
-            $crate::utils::write_stderr(msg)
+            $crate::utils::show_exec(msg.as_str());
         }
     };
 }
 
 #[macro_export]
 macro_rules! info {
+    ($dst:expr $(,)?) => {
+        {
+            $crate::utils::show_info($dst);
+        }
+    };
     ($fmt:expr, $($arg:tt)*) => {
         {
             let msg = format!($fmt, $($arg)*);
-            let msg = format!("{} {}", console::style("==>").green(),
-                console::style(msg).bold());
-            $crate::utils::write_stderr(msg)
+            $crate::utils::show_info(msg.as_str());
         }
     };
+}
+
+pub fn show_exec(msg: impl AsRef<str>) {
+    let msg = format!("{} {}", style("==>").cyan(), msg.as_ref());
+    write_stderr(msg);
+}
+
+pub fn show_info(msg: impl AsRef<str>) {
+    let msg = format!("{} {}", style("==>").green(), msg.as_ref());
+    write_stderr(msg);
 }
 
 pub fn write_stderr(msg: String) {
@@ -148,5 +146,61 @@ pub fn parse_query(query: impl AsRef<str>) -> (String, String) {
 }
 
 pub fn open_url(url: impl AsRef<str>) -> Result<()> {
-    todo!()
+    open::that(url.as_ref()).with_context(|| {
+        format!(
+            "unable to open url {} in default browser",
+            style(url.as_ref()).yellow()
+        )
+    })
+}
+
+pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
+    let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt(msg.as_ref())
+        .interact_on(&console::Term::stderr());
+    match result {
+        Ok(ok) => Ok(ok),
+        Err(err) => Err(err).context("Terminal confirm"),
+    }
+}
+
+pub fn must_confirm(msg: impl AsRef<str>) -> Result<()> {
+    let ok = confirm(msg)?;
+    if !ok {
+        bail!(SilentExit { code: 60 });
+    }
+    Ok(())
+}
+
+pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Result<String> {
+    let theme = ColorfulTheme::default();
+    let mut input: Input<String> = Input::with_theme(&theme);
+    input.with_prompt(msg.as_ref());
+    if let Some(default) = default {
+        input.with_initial_text(default.to_string());
+    }
+    let text = input.interact_text().context("Terminal input")?;
+    if require && text.is_empty() {
+        bail!("Input cannot be empty");
+    }
+    Ok(text)
+}
+
+pub fn edit<S>(default: S, ext: S, require: bool) -> Result<String>
+where
+    S: AsRef<str>,
+{
+    let text = Editor::new()
+        .executable(ext.as_ref())
+        .edit(default.as_ref())
+        .context("Terminal edit")?;
+    match text {
+        Some(text) => Ok(text),
+        None => {
+            if require {
+                bail!("Edit cannot be empty");
+            }
+            Ok(String::new())
+        }
+    }
 }

@@ -5,9 +5,11 @@ use roxide::api;
 use roxide::api::types::MergeOptions;
 use roxide::config;
 use roxide::confirm;
+use roxide::info;
 use roxide::repo::database::Database;
 use roxide::shell;
 use roxide::shell::GitBranch;
+use roxide::shell::GitRemote;
 use roxide::utils;
 
 use crate::cmd::Run;
@@ -15,17 +17,16 @@ use crate::cmd::Run;
 /// Create or open PullRequest (MeregeRequest for Gitlab)
 #[derive(Args)]
 pub struct MergeArgs {
+    /// Target branch, default will use HEAD branch
+    pub target: Option<String>,
+
     /// Upstream mode, only used for forked repo
     #[clap(long, short)]
     pub upstream: bool,
 
-    /// Source branch, default will use current branch
+    /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
-    pub source: Option<String>,
-
-    /// Target branch, default will use HEAD branch
-    #[clap(long, short)]
-    pub target: Option<String>,
+    pub force: bool,
 }
 
 impl Run for MergeArgs {
@@ -35,8 +36,9 @@ impl Run for MergeArgs {
         let repo = db.must_current()?;
 
         let remote = config::must_get_remote(repo.remote.as_str())?;
-        let provider = api::init_provider(&remote, false)?;
+        let provider = api::init_provider(&remote, self.force)?;
 
+        info!("Get repo info from remote API");
         let mut api_repo = provider.get_repo(repo.owner.as_str(), repo.name.as_str())?;
         if self.upstream {
             if let None = &api_repo.upstream {
@@ -61,10 +63,11 @@ impl Run for MergeArgs {
             },
         };
 
-        let source = match &self.source {
-            Some(s) => s.clone(),
-            None => GitBranch::current()?,
-        };
+        let source = GitBranch::current()?;
+
+        if !self.upstream && target == source {
+            bail!("Could not merge myself");
+        }
 
         let merge = MergeOptions {
             owner: format!("{}", repo.owner),
@@ -74,22 +77,32 @@ impl Run for MergeArgs {
             target,
         };
 
+        info!("Get merge info from remote API");
         if let Some(url) = provider.get_merge(merge.clone())? {
             utils::open_url(&url)?;
             return Ok(());
         }
 
+        let git_remote = if self.upstream {
+            GitRemote::from_upstream(&remote, &repo, &provider)?
+        } else {
+            GitRemote::new()
+        };
+
         println!();
         println!("About to create merge: {}", merge.pretty_display());
         confirm!("Continue");
-        println!();
+        let title = utils::input("Please input title", true, None)?;
+        let body = if utils::confirm("Do you need body")? {
+            utils::edit("", ".md", true)?
+        } else {
+            String::new()
+        };
 
-        todo!()
-    }
-}
+        info!("Call remote API to create merge");
+        let url = provider.create_merge(merge, title, body)?;
+        utils::open_url(&url)?;
 
-impl MergeArgs {
-    fn create(&self, opts: &mut MergeOptions) -> Result<()> {
         Ok(())
     }
 }

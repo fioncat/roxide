@@ -59,7 +59,7 @@ impl Provider for Gitlab {
         todo!()
     }
 
-    fn create_merge(&self, merge: MergeOptions) -> Result<String> {
+    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         todo!()
     }
 }

@@ -73,5 +73,5 @@ pub trait Provider {
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>>;
 
     // Create merge request (or PR for Github), and return its URL.
-    fn create_merge(&self, merge: MergeOptions) -> Result<String>;
+    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String>;
 }

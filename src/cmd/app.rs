@@ -6,6 +6,7 @@ use crate::cmd::run::branch::BranchArgs;
 use crate::cmd::run::complete::CompleteArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::init::InitArgs;
+use crate::cmd::run::merge::MergeArgs;
 use crate::cmd::Run;
 
 #[derive(Parser)]
@@ -22,6 +23,7 @@ pub enum Commands {
     Complete(CompleteArgs),
     Attach(AttachArgs),
     Branch(BranchArgs),
+    Merge(MergeArgs),
 }
 
 impl Run for App {
@@ -32,6 +34,7 @@ impl Run for App {
             Commands::Complete(args) => args.run(),
             Commands::Attach(args) => args.run(),
             Commands::Branch(args) => args.run(),
+            Commands::Merge(args) => args.run(),
         }
     }
 }

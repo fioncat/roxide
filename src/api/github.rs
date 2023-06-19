@@ -59,16 +59,21 @@ impl Repo {
     }
 }
 
-#[derive(Debug, Serialize)]
 struct PullRequestOptions {
-    #[serde(skip)]
     owner: String,
-
-    #[serde(skip)]
     name: String,
 
     head: String,
     base: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PullRequestBody {
+    head: String,
+    base: String,
+
+    title: String,
+    body: String,
 }
 
 impl From<MergeOptions> for PullRequestOptions {
@@ -99,7 +104,7 @@ impl From<MergeOptions> for PullRequestOptions {
 
 #[derive(Debug, Deserialize)]
 struct PullRequest {
-    url: String,
+    html_url: String,
 }
 
 pub struct Github {
@@ -133,14 +138,20 @@ impl Provider for Github {
         if prs.is_empty() {
             return Ok(None);
         }
-        Ok(Some(prs.remove(0).url))
+        Ok(Some(prs.remove(0).html_url))
     }
 
-    fn create_merge(&self, merge: MergeOptions) -> Result<String> {
+    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         let opts: PullRequestOptions = merge.into();
         let path = format!("repos/{}/{}/pulls", opts.owner, opts.name);
-        let pr = self.execute_post::<PullRequestOptions, PullRequest>(&path, opts)?;
-        Ok(pr.url)
+        let body = PullRequestBody {
+            head: opts.head,
+            base: opts.base,
+            title,
+            body,
+        };
+        let pr = self.execute_post::<PullRequestBody, PullRequest>(&path, body)?;
+        Ok(pr.html_url)
     }
 }
 
