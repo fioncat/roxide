@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use roxide::config;
 
 use crate::cmd::Run;
+use crate::config;
 
 /// Print the init script.
 #[derive(Args)]

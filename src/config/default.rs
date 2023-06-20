@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::types::{Base, Command, Owner, WorkflowStep};
+use crate::config::types::{Base, Command, Owner, WorkflowStep};
 
 pub fn workspace() -> String {
     String::from("~/src")

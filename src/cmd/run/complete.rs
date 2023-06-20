@@ -1,14 +1,10 @@
 use std::collections::HashMap;
 
-use anyhow::Error;
-use anyhow::Result;
-
-use crate::cmd::complete::attach;
-use crate::cmd::complete::branch;
-use crate::cmd::complete::home;
-use crate::cmd::complete::Complete;
-use crate::cmd::Run;
+use anyhow::{Error, Result};
 use clap::Args;
+
+use crate::cmd::complete::{attach, branch, home, Complete};
+use crate::cmd::Run;
 
 /// Complete support command, please donot use directly.
 #[derive(Args)]

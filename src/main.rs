@@ -1,7 +1,12 @@
+mod api;
 mod cmd;
+mod config;
+mod errors;
+mod repo;
+mod shell;
+mod utils;
 
 use clap::Parser;
-use roxide::utils;
 
 use crate::cmd::{App, Run};
 

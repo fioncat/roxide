@@ -5,14 +5,14 @@ use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
 use clap::Args;
-use roxide::config::types::Remote;
-use roxide::repo::database::Database;
-use roxide::repo::types::{NameLevel, Repo};
-use roxide::shell::Shell;
-use roxide::{api, info, shell};
-use roxide::{config, confirm, utils};
 
 use crate::cmd::Run;
+use crate::config::types::Remote;
+use crate::repo::database::Database;
+use crate::repo::types::{NameLevel, Repo};
+use crate::shell::Shell;
+use crate::{api, info, shell};
+use crate::{config, confirm, utils};
 
 /// Print the home path of a repo, recommand to use `zz` command instead.
 #[derive(Args)]

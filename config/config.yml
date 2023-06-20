@@ -1,0 +1,27 @@
+workspace: "~/dev"
+metadir: "~/.local/share/roxide"
+
+command:
+  base: "z"
+  home: "zz"
+  remotes:
+    ucloud: "zu"
+    github: "zh"
+
+workflows:
+  init-gomod:
+    - name: main.go
+      file: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        \tfmt.Println("hello, world!")
+        }
+    - name: Init go module
+      run: go mod init ${REPO_NAME}
+
+  init-cargo:
+    - name: Init cargo
+      run: cargo init

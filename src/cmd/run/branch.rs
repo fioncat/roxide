@@ -1,10 +1,10 @@
 use anyhow::{bail, Context, Result};
 use clap::Args;
 use console::style;
-use roxide::confirm;
-use roxide::shell::{self, BranchStatus, GitBranch, Shell};
 
 use crate::cmd::Run;
+use crate::confirm;
+use crate::shell::{self, BranchStatus, GitBranch, Shell};
 
 /// Git branch operations
 #[derive(Args)]

@@ -1,7 +1,7 @@
 use anyhow::Result;
-use roxide::{config, repo::database::Database};
 
-use super::Complete;
+use crate::cmd::complete::Complete;
+use crate::{config, repo::database::Database};
 
 pub fn complete(args: &[&str]) -> Result<Complete> {
     match args.len() {

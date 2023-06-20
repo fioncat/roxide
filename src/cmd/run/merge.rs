@@ -1,18 +1,15 @@
 use anyhow::bail;
 use anyhow::Result;
 use clap::Args;
-use roxide::api;
-use roxide::api::types::MergeOptions;
-use roxide::config;
-use roxide::confirm;
-use roxide::info;
-use roxide::repo::database::Database;
-use roxide::shell;
-use roxide::shell::GitBranch;
-use roxide::shell::GitRemote;
-use roxide::utils;
 
+use crate::api;
+use crate::api::types::MergeOptions;
 use crate::cmd::Run;
+use crate::config;
+use crate::repo::database::Database;
+use crate::shell::{self, GitBranch, GitRemote};
+use crate::utils;
+use crate::{confirm, info};
 
 /// Create or open PullRequest (MeregeRequest for Gitlab)
 #[derive(Args)]

@@ -107,10 +107,6 @@ pub fn current_time() -> Result<Duration> {
         .context("System clock set to invalid time")
 }
 
-pub fn current_secs() -> Result<u64> {
-    Ok(current_time()?.as_secs())
-}
-
 pub fn current_dir() -> Result<PathBuf> {
     env::current_dir().context("Get current directory")
 }

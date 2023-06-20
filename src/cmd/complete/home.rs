@@ -1,12 +1,12 @@
 use anyhow::Result;
-use roxide::{config, repo::database::Database};
 
-use super::Complete;
+use crate::cmd::complete::Complete;
+use crate::{config, repo::database::Database};
 
 pub fn complete(args: &[&str]) -> Result<Complete> {
     match args.len() {
         0 | 1 => {
-            let remotes = config::get().list_remotes();
+            let remotes = config::list_remotes();
             let items: Vec<_> = remotes
                 .into_iter()
                 .map(|remote| remote.to_string())
