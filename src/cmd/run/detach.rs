@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::{cmd::Run, confirm, repo::database::Database};
+use crate::cmd::Run;
+use crate::confirm;
+use crate::repo::database::Database;
 
 /// Detach current path in database, donot remove directory
 #[derive(Args)]

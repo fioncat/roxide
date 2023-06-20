@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use crate::cmd::run::attach::AttachArgs;
 use crate::cmd::run::branch::BranchArgs;
 use crate::cmd::run::complete::CompleteArgs;
+use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::init::InitArgs;
@@ -28,6 +29,7 @@ pub enum Commands {
     Merge(MergeArgs),
     Remove(RemoveArgs),
     Detach(DetachArgs),
+    Config(ConfigArgs),
 }
 
 impl Run for App {
@@ -41,6 +43,7 @@ impl Run for App {
             Commands::Merge(args) => args.run(),
             Commands::Remove(args) => args.run(),
             Commands::Detach(args) => args.run(),
+            Commands::Config(args) => args.run(),
         }
     }
 }

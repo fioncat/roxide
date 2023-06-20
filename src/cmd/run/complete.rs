@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use anyhow::{Error, Result};
 use clap::Args;
 
-use crate::cmd::complete::{attach, branch, home, Complete};
+use crate::cmd::complete::attach;
+use crate::cmd::complete::branch;
+use crate::cmd::complete::home;
+use crate::cmd::complete::remote;
+use crate::cmd::complete::Complete;
 use crate::cmd::Run;
 
 /// Complete support command, please donot use directly.
@@ -28,10 +32,7 @@ macro_rules! get_cmds {
 }
 
 fn no_complete(_args: &[&str]) -> Result<Complete> {
-    Ok(Complete {
-        items: vec![],
-        no_space: false,
-    })
+    Ok(Complete::empty())
 }
 
 impl CompleteArgs {
@@ -43,6 +44,7 @@ impl CompleteArgs {
             "merge" => branch::complete,
             "remove" => home::complete,
             "detach" => no_complete,
+            "config" => remote::complete,
         }
     }
 

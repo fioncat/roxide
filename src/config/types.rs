@@ -212,20 +212,23 @@ struct RemoteFile {
 }
 
 impl Config {
-    pub fn read() -> Result<Config> {
+    pub fn dir() -> Result<PathBuf> {
         // The config directory, contains base and remote configs. The env's
         // priority is higher.
-        let dir = match env::var_os("ROXIDE_CONFIG_DIR") {
-            Some(dir) => PathBuf::from(dir),
+        match env::var_os("ROXIDE_CONFIG_DIR") {
+            Some(dir) => Ok(PathBuf::from(dir)),
             // Use env "${HOME}" to get home directory, this won't be worked on
             // Windows, since we have no plan to support Windows, so it is okay.
             None => match env::var_os("HOME") {
                 // Use ~/.config/roxide as the default config directory
-                Some(home) => PathBuf::from(home).join(".config").join("roxide"),
+                Some(home) => Ok(PathBuf::from(home).join(".config").join("roxide")),
                 None => bail!("Could not find HOME env"),
             },
-        };
+        }
+    }
 
+    pub fn read() -> Result<Config> {
+        let dir = Self::dir()?;
         let mut cfg = match fs::read_dir(&dir) {
             Ok(read_dir) => {
                 let mut remotes: Vec<RemoteFile> = Vec::new();

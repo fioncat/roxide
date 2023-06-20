@@ -5,7 +5,6 @@ command:
   base: "z"
   home: "zz"
   remotes:
-    ucloud: "zu"
     github: "zh"
 
 workflows:
