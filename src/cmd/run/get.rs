@@ -17,6 +17,11 @@ pub struct GetArgs {
 
     /// The repo query, format is `owner[/[name]]`.
     pub query: Option<String>,
+
+    /// Show size in list info. If your workspace is large, this can cause
+    /// command to take too long to execute.
+    #[clap(long, short)]
+    pub size: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -31,6 +36,8 @@ struct RepoInfo {
 
     path: String,
     workspace: bool,
+
+    size: String,
 }
 
 impl RepoInfo {
@@ -51,6 +58,7 @@ impl RepoInfo {
             score,
             path,
             workspace,
+            size: utils::dir_size(repo.get_path())?,
         })
     }
 }
@@ -78,7 +86,6 @@ impl Run for GetArgs {
 
         let repo = db.must_get(remote, owner.as_str(), name.as_str())?;
         let info = RepoInfo::from_repo(repo)?;
-
         let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
         print!("{yaml}");
         Ok(())
@@ -100,19 +107,29 @@ impl GetArgs {
         }
 
         let mut table = Table::with_capacity(1 + repos.len());
-        table.add(vec![
+        let mut titles = vec![
             String::from("NAME"),
             String::from("ACCESS"),
             String::from("LAST_ACCESS"),
             String::from("SCORE"),
-        ]);
+        ];
+        if self.size {
+            titles.push(String::from("SIZE"));
+        }
+        table.add(titles);
+
         for repo in repos {
             let name = repo.as_string(&level);
             let access = format!("{}", repo.accessed as u64);
             let last_access = utils::format_time(repo.last_accessed)?;
             let score = format!("{:.2}", repo.score());
 
-            table.add(vec![name, access, last_access, score]);
+            let mut row = vec![name, access, last_access, score];
+            if self.size {
+                row.push(utils::dir_size(repo.get_path())?);
+            }
+
+            table.add(row);
         }
 
         table.show();
