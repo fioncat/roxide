@@ -1,6 +1,7 @@
 pub mod attach;
 pub mod branch;
 pub mod complete;
+pub mod config;
 pub mod detach;
 pub mod home;
 pub mod init;

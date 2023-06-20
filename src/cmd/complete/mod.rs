@@ -1,6 +1,7 @@
 pub mod attach;
 pub mod branch;
 pub mod home;
+pub mod remote;
 
 pub struct Complete {
     pub items: Vec<String>,

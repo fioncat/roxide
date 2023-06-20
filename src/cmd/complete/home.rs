@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 use crate::cmd::complete::Complete;
-use crate::{config, repo::database::Database};
+use crate::config;
+use crate::repo::database::Database;
 
 pub fn complete(args: &[&str]) -> Result<Complete> {
     match args.len() {
