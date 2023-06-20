@@ -40,6 +40,16 @@ impl Database {
         })
     }
 
+    pub fn must_get<S>(&self, remote: S, owner: S, name: S) -> Result<Rc<Repo>>
+    where
+        S: AsRef<str>,
+    {
+        match self.get(remote.as_ref(), owner.as_ref(), name.as_ref()) {
+            Some(repo) => Ok(repo),
+            None => bail!("Could not find repo {}/{}", owner.as_ref(), name.as_ref()),
+        }
+    }
+
     pub fn get_fuzzy<S>(&self, remote: S, query: S) -> Option<Rc<Repo>>
     where
         S: AsRef<str>,

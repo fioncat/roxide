@@ -3,7 +3,7 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::cmd::Run;
@@ -51,10 +51,7 @@ impl RemoveArgs {
 
             return Ok(repos.remove(idx));
         }
-        match db.get(&remote.name, &owner, &name) {
-            Some(repo) => Ok(repo),
-            None => bail!("Could not find repo {}", self.query),
-        }
+        db.must_get(&remote.name, &owner, &name)
     }
 
     fn remove_path(&self, path: PathBuf) -> Result<()> {
