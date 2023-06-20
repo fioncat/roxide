@@ -1,45 +1,42 @@
-#![allow(dead_code)]
-
 use anyhow::{bail, Context, Result};
 use reqwest::blocking::{Client, Request};
 use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
+use crate::api::types::{ApiRepo, ApiUpstream, MergeOptions, Provider};
 use crate::config::types::Remote;
 
-use super::{ApiRepo, ApiUpstream, Provider};
-
 #[derive(Debug, Deserialize)]
-struct GithubRepo {
+struct Repo {
     pub name: String,
     pub html_url: String,
 
-    pub source: Option<GithubSource>,
+    pub source: Option<Source>,
 
     pub default_branch: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct GithubSource {
+struct Source {
     pub name: String,
-    pub owner: GithubOwner,
+    pub owner: Owner,
     pub default_branch: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct GithubOwner {
+struct Owner {
     pub login: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct GithubError {
+struct Error {
     pub message: String,
 }
 
-impl GithubRepo {
+impl Repo {
     fn to_api(self) -> ApiRepo {
-        let GithubRepo {
+        let Repo {
             name,
             html_url,
             source,
@@ -62,6 +59,54 @@ impl GithubRepo {
     }
 }
 
+struct PullRequestOptions {
+    owner: String,
+    name: String,
+
+    head: String,
+    base: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PullRequestBody {
+    head: String,
+    base: String,
+
+    title: String,
+    body: String,
+}
+
+impl From<MergeOptions> for PullRequestOptions {
+    fn from(merge: MergeOptions) -> Self {
+        let MergeOptions {
+            mut owner,
+            mut name,
+            upstream,
+            source,
+            target,
+        } = merge;
+
+        let head = match upstream {
+            Some(upstream) => {
+                (owner, name) = (upstream.owner, upstream.name);
+                format!("{}:{}", owner, source)
+            }
+            None => source,
+        };
+        PullRequestOptions {
+            owner,
+            name,
+            head,
+            base: target,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PullRequest {
+    html_url: String,
+}
+
 pub struct Github {
     token: Option<String>,
 
@@ -73,14 +118,40 @@ pub struct Github {
 impl Provider for Github {
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = format!("users/{owner}/repos?per_page={}", self.per_page);
-        let github_repos = self.execute::<Vec<GithubRepo>>(&path)?;
+        let github_repos = self.execute_get::<Vec<Repo>>(&path)?;
         let repos: Vec<String> = github_repos.into_iter().map(|repo| repo.name).collect();
         Ok(repos)
     }
 
     fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
         let path = format!("repos/{}/{}", owner, name);
-        Ok(self.execute::<GithubRepo>(&path)?.to_api())
+        Ok(self.execute_get::<Repo>(&path)?.to_api())
+    }
+
+    fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
+        let opts: PullRequestOptions = merge.into();
+        let path = format!(
+            "repos/{}/{}/pulls?state=open&head={}&base={}",
+            opts.owner, opts.name, opts.head, opts.base
+        );
+        let mut prs = self.execute_get::<Vec<PullRequest>>(&path)?;
+        if prs.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(prs.remove(0).html_url))
+    }
+
+    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
+        let opts: PullRequestOptions = merge.into();
+        let path = format!("repos/{}/{}/pulls", opts.owner, opts.name);
+        let body = PullRequestBody {
+            head: opts.head,
+            base: opts.base,
+            title,
+            body,
+        };
+        let pr = self.execute_post::<PullRequestBody, PullRequest>(&path, body)?;
+        Ok(pr.html_url)
     }
 }
 
@@ -96,11 +167,28 @@ impl Github {
         })
     }
 
-    fn execute<T>(&self, path: &str) -> Result<T>
+    fn execute_get<T>(&self, path: &str) -> Result<T>
     where
         T: DeserializeOwned + ?Sized,
     {
-        let req = self.build_request(path)?;
+        let req = self.build_request(path, Method::GET, None)?;
+        self.execute(req)
+    }
+
+    fn execute_post<B, R>(&self, path: &str, body: B) -> Result<R>
+    where
+        B: Serialize,
+        R: DeserializeOwned + ?Sized,
+    {
+        let body = serde_json::to_vec(&body).context("Encode Github request body")?;
+        let req = self.build_request(path, Method::POST, Some(body))?;
+        self.execute(req)
+    }
+
+    fn execute<T>(&self, req: Request) -> Result<T>
+    where
+        T: DeserializeOwned + ?Sized,
+    {
         let resp = self.client.execute(req).context("Github http request")?;
         let ok = resp.status().is_success();
         let data = resp.bytes().context("Read Github response body")?;
@@ -108,7 +196,7 @@ impl Github {
             return serde_json::from_slice(&data).context("Decode Github response data");
         }
 
-        match serde_json::from_slice::<GithubError>(&data) {
+        match serde_json::from_slice::<Error>(&data) {
             Ok(err) => bail!("Github api error: {}", err.message),
             Err(_err) => bail!(
                 "Unknown Github api error: {}",
@@ -118,10 +206,10 @@ impl Github {
         }
     }
 
-    fn build_request(&self, path: &str) -> Result<Request> {
+    fn build_request(&self, path: &str, method: Method, body: Option<Vec<u8>>) -> Result<Request> {
         let url = format!("https://api.github.com/{path}");
         let url = Url::parse(url.as_str()).with_context(|| format!("Parse url {url}"))?;
-        let mut builder = self.client.request(Method::GET, url);
+        let mut builder = self.client.request(method, url);
         builder = builder
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "roxide-client")
@@ -130,7 +218,9 @@ impl Github {
             let token_value = format!("Bearer {token}");
             builder = builder.header("Authorization", token_value);
         }
-
+        if let Some(body) = body {
+            builder = builder.body(body);
+        }
         builder.build().context("Build Github request")
     }
 }

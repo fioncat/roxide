@@ -3,20 +3,24 @@ use std::rc::Rc;
 
 use anyhow::{bail, Result};
 use clap::Args;
-use roxide::config::types::Remote;
-use roxide::repo::database::Database;
-use roxide::repo::types::Repo;
-use roxide::shell::Shell;
-use roxide::{api, confirm, info, shell};
-use roxide::{config, utils};
 
 use crate::cmd::Run;
+use crate::config::types::Remote;
+use crate::repo::database::Database;
+use crate::repo::types::Repo;
+use crate::shell::Shell;
+use crate::{api, confirm, info, shell};
+use crate::{config, utils};
 
+/// Attach current directory to a repo.
 #[derive(Args)]
 pub struct AttachArgs {
+    /// The remote name.
     pub remote: String,
+    /// The repo query, format is `owner[/[name]]`
     pub query: String,
 
+    /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
 }

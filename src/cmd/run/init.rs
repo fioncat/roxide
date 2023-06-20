@@ -1,11 +1,13 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use roxide::config;
 
 use crate::cmd::Run;
+use crate::config;
 
+/// Print the init script.
 #[derive(Args)]
 pub struct InitArgs {
+    /// The shell type.
     pub shell: Shell,
 }
 

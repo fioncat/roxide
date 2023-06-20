@@ -1,7 +1,7 @@
 use anyhow::Result;
-use roxide::shell::GitBranch;
 
-use super::Complete;
+use crate::cmd::complete::Complete;
+use crate::shell::GitBranch;
 
 pub fn complete(args: &[&str]) -> Result<Complete> {
     match args.len() {

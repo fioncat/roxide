@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use self::types::{Base, Config, Remote};
+use crate::config::types::{Base, Config, Remote};
 use crate::utils;
 
 static mut CONFIG: Option<Config> = None;

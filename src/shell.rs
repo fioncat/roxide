@@ -11,13 +11,12 @@ use chrono::offset::Local;
 use console::{style, StyledObject};
 use regex::{Captures, Regex};
 
-use crate::config;
-use crate::config::types::WorkflowStep;
+use crate::api::types::Provider;
+use crate::config::types::{Remote, WorkflowStep};
 use crate::errors::SilentExit;
-use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::{api, utils};
-use crate::{confirm, info, show_exec};
+use crate::utils;
+use crate::{confirm, exec, info};
 
 pub struct Shell {
     cmd: Command,
@@ -180,7 +179,7 @@ impl Shell {
             return;
         }
         match &self.desc {
-            Some(desc) => show_exec!("{}", desc),
+            Some(desc) => exec!(desc),
             None => {
                 let mut desc_args = Vec::with_capacity(1);
                 desc_args.push(self.cmd.get_program().to_str().unwrap());
@@ -189,7 +188,7 @@ impl Shell {
                     desc_args.push(arg.to_str().unwrap());
                 }
                 let desc = desc_args.join(" ");
-                show_exec!("{}", desc);
+                exec!(desc);
             }
         }
     }
@@ -407,11 +406,15 @@ impl GitRemote {
         Ok(lines.iter().map(|s| GitRemote(s.to_string())).collect())
     }
 
-    pub fn select(upstream: bool, force: bool) -> Result<GitRemote> {
-        if !upstream {
-            return Ok(GitRemote(String::from("origin")));
-        }
+    pub fn new() -> GitRemote {
+        GitRemote(String::from("origin"))
+    }
 
+    pub fn from_upstream(
+        remote: &Remote,
+        repo: &Rc<Repo>,
+        provider: &Box<dyn Provider>,
+    ) -> Result<GitRemote> {
         let remotes = Self::list()?;
         let upstream_remote = remotes
             .into_iter()
@@ -419,11 +422,6 @@ impl GitRemote {
         if let Some(remote) = upstream_remote {
             return Ok(remote);
         }
-
-        let db = Database::read()?;
-        let repo = db.must_current()?;
-        let remote = config::must_get_remote(repo.remote.as_str())?;
-        let provider = api::init_provider(&remote, force)?;
 
         info!("Get upstream for {}", repo.full_name());
         let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
@@ -461,6 +459,42 @@ impl GitRemote {
             .execute()?
             .check()?;
         Ok(target)
+    }
+
+    pub fn commits_between(&self, branch: Option<&str>) -> Result<Vec<String>> {
+        let target = self.target(branch)?;
+        let compare = format!("HEAD...{}", target);
+        let lines = Shell::git(&[
+            "log",
+            "--left-right",
+            "--cherry-pick",
+            "--oneline",
+            compare.as_str(),
+        ])
+        .with_desc(format!("Get commits between {target}"))
+        .execute()?
+        .checked_lines()?;
+        let commits: Vec<_> = lines
+            .iter()
+            .filter(|line| {
+                // If the commit message output by "git log xxx" does not start
+                // with "<", it means that this commit is from the target branch.
+                // Since we only list commits from current branch, ignore such
+                // commits.
+                line.trim().starts_with("<")
+            })
+            .map(|line| line.strip_prefix("<").unwrap().to_string())
+            .map(|line| {
+                let mut fields = line.split_whitespace();
+                fields.next();
+                let commit = fields
+                    .map(|field| field.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                commit
+            })
+            .collect();
+        Ok(commits)
     }
 }
 
@@ -581,7 +615,7 @@ pub fn execute_workflow(steps: &Vec<WorkflowStep>, repo: &Rc<Repo>) -> Result<()
         let content = step.file.as_ref().unwrap();
         let content = content.replace("\\t", "\t");
 
-        show_exec!("Create file {}", step.name);
+        exec!("Create file {}", step.name);
         let path = dir.join(&step.name);
         utils::write_file(&path, content.as_bytes())?;
     }

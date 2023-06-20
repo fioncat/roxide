@@ -1,0 +1,7 @@
+owners:
+  golang:
+    on_create: ["init-gomod"]
+  uk8s:
+    on_create: ["init-gomod"]
+  rust:
+    on_create: ["init-cargo"]

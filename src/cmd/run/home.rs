@@ -5,22 +5,26 @@ use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
 use clap::Args;
-use roxide::config::types::Remote;
-use roxide::repo::database::Database;
-use roxide::repo::types::{NameLevel, Repo};
-use roxide::shell::Shell;
-use roxide::{api, info, shell};
-use roxide::{config, confirm, utils};
 
 use crate::cmd::Run;
+use crate::config::types::Remote;
+use crate::repo::database::Database;
+use crate::repo::types::{NameLevel, Repo};
+use crate::shell::Shell;
+use crate::{api, info, shell};
+use crate::{config, confirm, utils};
 
+/// Print the home path of a repo, recommand to use `zz` command instead.
 #[derive(Args)]
 pub struct HomeArgs {
+    /// The repo query, format is `[remote] [owner[/[name]]]`
     pub query: Vec<String>,
 
+    /// If true, use search instead of fuzzy matching.
     #[clap(long, short)]
     pub search: bool,
 
+    /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
 }

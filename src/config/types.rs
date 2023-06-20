@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
@@ -9,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use super::default;
+use crate::config::default;
 
 /// The basic configuration, defining some global behaviors of roxide.
 #[derive(Debug, Deserialize)]
