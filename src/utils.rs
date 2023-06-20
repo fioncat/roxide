@@ -259,3 +259,58 @@ pub fn format_time(time: u64) -> Result<String> {
         LocalResult::Single(time) => Ok(time.format("%Y-%m-%d %H:%M:%S").to_string()),
     }
 }
+
+const BYTES_UNIT: f64 = 1024.0;
+const BYTES_SUFFIX: [&str; 9] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+
+pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
+    let size = bytes.into();
+    if size <= 0.0 {
+        return String::from("0B");
+    }
+
+    let base = size.log10() / BYTES_UNIT.log10();
+    let result = format!("{:.1}", BYTES_UNIT.powf(base - base.floor()))
+        .trim_end_matches(".0")
+        .to_owned();
+
+    [&result, BYTES_SUFFIX[base.floor() as usize]].join("")
+}
+
+pub fn dir_size(dir: PathBuf) -> Result<String> {
+    let mut stack = vec![dir];
+    let mut total_size: u64 = 0;
+    loop {
+        let maybe_dir = stack.pop();
+        if let None = maybe_dir {
+            return Ok(human_bytes(total_size as f64));
+        }
+        let current_dir = maybe_dir.unwrap();
+
+        let read_dir = match fs::read_dir(&current_dir) {
+            Ok(read_dir) => read_dir,
+            Err(err) if err.kind() == ErrorKind::NotFound => continue,
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("Read directory {}", current_dir.display()))
+            }
+        };
+
+        for item in read_dir {
+            let item =
+                item.with_context(|| format!("Read directory item for {}", current_dir.display()))?;
+            let path = item.path();
+            let meta = item
+                .metadata()
+                .with_context(|| format!("Get metadata for {}", path.display()))?;
+            if meta.is_file() {
+                let size = meta.len();
+                total_size += size;
+                continue;
+            }
+            if meta.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+}
