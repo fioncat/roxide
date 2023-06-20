@@ -27,6 +27,13 @@ macro_rules! get_cmds {
     };
 }
 
+fn no_complete(_args: &[&str]) -> Result<Complete> {
+    Ok(Complete {
+        items: vec![],
+        no_space: false,
+    })
+}
+
 impl CompleteArgs {
     fn get_cmds() -> HashMap<&'static str, fn(&[&str]) -> Result<Complete>> {
         get_cmds! {
@@ -34,6 +41,8 @@ impl CompleteArgs {
             "attach" => attach::complete,
             "branch" => branch::complete,
             "merge" => branch::complete,
+            "remove" => home::complete,
+            "detach" => no_complete,
         }
     }
 
