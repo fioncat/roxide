@@ -6,6 +6,7 @@ use crate::cmd::run::branch::BranchArgs;
 use crate::cmd::run::complete::CompleteArgs;
 use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
+use crate::cmd::run::get::GetArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::init::InitArgs;
 use crate::cmd::run::merge::MergeArgs;
@@ -30,6 +31,7 @@ pub enum Commands {
     Remove(RemoveArgs),
     Detach(DetachArgs),
     Config(ConfigArgs),
+    Get(GetArgs),
 }
 
 impl Run for App {
@@ -44,6 +46,7 @@ impl Run for App {
             Commands::Remove(args) => args.run(),
             Commands::Detach(args) => args.run(),
             Commands::Config(args) => args.run(),
+            Commands::Get(args) => args.run(),
         }
     }
 }

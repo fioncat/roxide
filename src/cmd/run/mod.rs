@@ -3,6 +3,7 @@ pub mod branch;
 pub mod complete;
 pub mod config;
 pub mod detach;
+pub mod get;
 pub mod home;
 pub mod init;
 pub mod merge;

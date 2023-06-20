@@ -6,9 +6,11 @@ use std::process;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{bail, Context, Error, Result};
+use chrono::{Local, LocalResult, TimeZone};
 use console::{self, style};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Editor, Input};
+use pad::PadStr;
 
 use crate::errors::SilentExit;
 
@@ -198,5 +200,62 @@ where
             }
             Ok(String::new())
         }
+    }
+}
+
+pub struct Table {
+    ncol: usize,
+    rows: Vec<Vec<String>>,
+}
+
+impl Table {
+    pub fn with_capacity(size: usize) -> Table {
+        Table {
+            ncol: 0,
+            rows: Vec::with_capacity(size),
+        }
+    }
+
+    pub fn add(&mut self, row: Vec<String>) {
+        if row.is_empty() {
+            panic!("Empty row");
+        }
+        if self.ncol == 0 {
+            self.ncol = row.len();
+        } else if row.len() != self.ncol {
+            panic!("Unexpect row len");
+        }
+        self.rows.push(row);
+    }
+
+    pub fn show(self) {
+        let mut pads = Vec::with_capacity(self.ncol);
+        for i in 0..self.ncol {
+            let mut max_len: usize = 0;
+            for row in self.rows.iter() {
+                let cell = row.get(i).unwrap();
+                if cell.len() > max_len {
+                    max_len = cell.len()
+                }
+            }
+            pads.push(max_len + 2);
+        }
+
+        for row in self.rows.into_iter() {
+            for (i, cell) in row.into_iter().enumerate() {
+                let pad = pads[i];
+                let cell = cell.pad_to_width_with_alignment(pad, pad::Alignment::Left);
+                print!("{}", cell);
+            }
+            println!()
+        }
+    }
+}
+
+pub fn format_time(time: u64) -> Result<String> {
+    match Local.timestamp_opt(time as i64, 0) {
+        LocalResult::None => bail!("Invalid timestamp {time}"),
+        LocalResult::Ambiguous(_, _) => bail!("Ambiguous parse timestamp {time}"),
+        LocalResult::Single(time) => Ok(time.format("%Y-%m-%d %H:%M:%S").to_string()),
     }
 }

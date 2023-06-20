@@ -45,6 +45,7 @@ impl CompleteArgs {
             "remove" => home::complete,
             "detach" => no_complete,
             "config" => remote::complete,
+            "get" => home::complete,
         }
     }
 
