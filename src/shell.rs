@@ -12,12 +12,10 @@ use console::{style, StyledObject};
 use regex::{Captures, Regex};
 
 use crate::api::types::Provider;
-use crate::config;
 use crate::config::types::{Remote, WorkflowStep};
 use crate::errors::SilentExit;
-use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::{api, utils};
+use crate::utils;
 use crate::{confirm, exec, info};
 
 pub struct Shell {

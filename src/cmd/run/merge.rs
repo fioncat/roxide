@@ -9,7 +9,6 @@ use roxide::info;
 use roxide::repo::database::Database;
 use roxide::shell;
 use roxide::shell::GitBranch;
-use roxide::shell::GitRemote;
 use roxide::utils;
 
 use crate::cmd::Run;
@@ -82,12 +81,6 @@ impl Run for MergeArgs {
             utils::open_url(&url)?;
             return Ok(());
         }
-
-        let git_remote = if self.upstream {
-            GitRemote::from_upstream(&remote, &repo, &provider)?
-        } else {
-            GitRemote::new()
-        };
 
         println!();
         println!("About to create merge: {}", merge.pretty_display());
