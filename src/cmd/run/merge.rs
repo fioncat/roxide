@@ -9,6 +9,7 @@ use roxide::info;
 use roxide::repo::database::Database;
 use roxide::shell;
 use roxide::shell::GitBranch;
+use roxide::shell::GitRemote;
 use roxide::utils;
 
 use crate::cmd::Run;
@@ -82,10 +83,27 @@ impl Run for MergeArgs {
             return Ok(());
         }
 
+        let git_remote = if self.upstream {
+            GitRemote::from_upstream(&remote, &repo, &provider)?
+        } else {
+            GitRemote::new()
+        };
+        let commits = git_remote.commits_between(Some(&merge.target))?;
+        if commits.is_empty() {
+            bail!("No commit to merge");
+        }
+
+        let (commit_desc, init_title) = if commits.len() == 1 {
+            (String::from("1 commit"), Some(commits[0].as_str()))
+        } else {
+            (format!("{} commits", commits.len()), None)
+        };
+
         println!();
         println!("About to create merge: {}", merge.pretty_display());
+        println!("With {commit_desc}");
         confirm!("Continue");
-        let title = utils::input("Please input title", true, None)?;
+        let title = utils::input("Please input title", true, init_title)?;
         let body = if utils::confirm("Do you need body")? {
             utils::edit("", ".md", true)?
         } else {

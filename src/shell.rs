@@ -460,6 +460,42 @@ impl GitRemote {
             .check()?;
         Ok(target)
     }
+
+    pub fn commits_between(&self, branch: Option<&str>) -> Result<Vec<String>> {
+        let target = self.target(branch)?;
+        let compare = format!("HEAD...{}", target);
+        let lines = Shell::git(&[
+            "log",
+            "--left-right",
+            "--cherry-pick",
+            "--oneline",
+            compare.as_str(),
+        ])
+        .with_desc(format!("Get commits between {target}"))
+        .execute()?
+        .checked_lines()?;
+        let commits: Vec<_> = lines
+            .iter()
+            .filter(|line| {
+                // If the commit message output by "git log xxx" does not start
+                // with "<", it means that this commit is from the target branch.
+                // Since we only list commits from current branch, ignore such
+                // commits.
+                line.trim().starts_with("<")
+            })
+            .map(|line| line.strip_prefix("<").unwrap().to_string())
+            .map(|line| {
+                let mut fields = line.split_whitespace();
+                fields.next();
+                let commit = fields
+                    .map(|field| field.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                commit
+            })
+            .collect();
+        Ok(commits)
+    }
 }
 
 pub struct GitTag(String);
