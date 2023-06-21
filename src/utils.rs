@@ -5,13 +5,15 @@ use std::path::PathBuf;
 use std::process;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
 use console::{self, style};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Editor, Input};
+use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
 
+use crate::config;
 use crate::errors::SilentExit;
 
 pub const SECOND: u64 = 1;
@@ -311,6 +313,63 @@ pub fn dir_size(dir: PathBuf) -> Result<String> {
             if meta.is_dir() {
                 stack.push(path);
             }
+        }
+    }
+}
+
+pub struct Lock {
+    path: PathBuf,
+    _file_lock: FileLock,
+}
+
+impl Lock {
+    const RESOURCE_TEMPORARILY_UNAVAILABLE_CODE: i32 = 11;
+
+    pub fn acquire(name: impl AsRef<str>) -> Result<Lock> {
+        let dir = PathBuf::from(config::base().metadir.as_str());
+        ensure_dir(&dir)?;
+        let path = dir.join(format!("lock_{}", name.as_ref()));
+
+        let lock_opts = FileOptions::new().write(true).create(true).truncate(true);
+        let mut file_lock = match FileLock::lock(&path, false, lock_opts) {
+            Ok(lock) => lock,
+            Err(err) => match err.raw_os_error() {
+                Some(code) if code == Self::RESOURCE_TEMPORARILY_UNAVAILABLE_CODE => {
+                    bail!("Acquire file lock error, {} is occupied by another roxide, please wait for it to complete", name.as_ref());
+                }
+                _ => {
+                    return Err(err).with_context(|| format!("Acquire file lock {}", name.as_ref()))
+                }
+            },
+        };
+
+        let pid = process::id();
+        let pid = format!("{pid}");
+
+        file_lock
+            .file
+            .write_all(pid.as_bytes())
+            .with_context(|| format!("Write pid to lock file {}", path.display()))?;
+        file_lock
+            .file
+            .flush()
+            .with_context(|| format!("Flush pid to lock file {}", path.display()))?;
+
+        Ok(Lock {
+            path,
+            _file_lock: file_lock,
+        })
+    }
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        match fs::remove_file(&self.path) {
+            Ok(_) => {}
+            Err(err) => error_exit(anyhow!(
+                "Delete lock file {} error: {err}",
+                self.path.display()
+            )),
         }
     }
 }

@@ -303,6 +303,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "file-lock"
+version = "2.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f59be9010c5418713a48aac4c1b897d85dafd958055683dc31bdae553536647b"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -933,6 +943,7 @@ dependencies = [
  "clap",
  "console",
  "dialoguer",
+ "file-lock",
  "open",
  "openssl",
  "pad",
