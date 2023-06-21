@@ -1,7 +1,9 @@
 pub mod attach;
 pub mod branch;
 pub mod home;
+pub mod release;
 pub mod remote;
+pub mod tag;
 
 pub struct Complete {
     pub items: Vec<String>,

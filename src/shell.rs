@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::io::{ErrorKind, Read, Write};
 use std::mem;
 use std::path::PathBuf;
@@ -510,10 +508,6 @@ impl GitTag {
     const NUM_REGEX: &str = r"\d+";
     const PLACEHOLDER_REGEX: &str = r"\{(\d+|%[yYmMdD])(\+)*}";
 
-    pub fn from_str(s: impl AsRef<str>) -> GitTag {
-        GitTag(s.as_ref().to_string())
-    }
-
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -540,7 +534,7 @@ impl GitTag {
             .execute()?
             .checked_read()?;
         if output.is_empty() {
-            bail!("no latest tag")
+            bail!("No latest tag");
         }
         Ok(GitTag(output))
     }
@@ -605,7 +599,7 @@ pub fn execute_workflow(steps: &Vec<WorkflowStep>, repo: &Rc<Repo>) -> Result<()
 
             cmd.with_desc(format!("Run {}", step.name));
 
-            cmd.execute()?;
+            cmd.execute()?.check()?;
             continue;
         }
         if let None = step.file {

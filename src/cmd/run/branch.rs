@@ -44,7 +44,7 @@ impl Run for BranchArgs {
             shell::ensure_no_uncommitted()?;
             self.fetch()?;
         }
-        let branches = GitBranch::list().context("unable to list branch")?;
+        let branches = GitBranch::list().context("List branch")?;
         if self.sync {
             return self.sync(&branches);
         }
@@ -60,12 +60,18 @@ impl Run for BranchArgs {
         }
         let name = self.name.as_ref().unwrap();
         if self.create {
-            Shell::git(&["checkout", "-b", name.as_str()]).execute()?;
+            Shell::git(&["checkout", "-b", name.as_str()])
+                .execute()?
+                .check()?;
         } else {
-            Shell::git(&["checkout", name.as_str()]).execute()?;
+            Shell::git(&["checkout", name.as_str()])
+                .execute()?
+                .check()?;
         }
         if self.push {
-            Shell::git(&["push", "--set-upstream", "origin", name.as_str()]).execute()?;
+            Shell::git(&["push", "--set-upstream", "origin", name.as_str()])
+                .execute()?
+                .check()?;
         }
 
         Ok(())
@@ -89,7 +95,7 @@ impl BranchArgs {
     }
 
     fn sync(&self, branches: &Vec<GitBranch>) -> Result<()> {
-        let default = GitBranch::default().context("unable to get default branch")?;
+        let default = GitBranch::default().context("Get default branch")?;
 
         let mut back = &default;
         let mut tasks: Vec<SyncBranchTask> = vec![];
@@ -121,13 +127,13 @@ impl BranchArgs {
 
         println!();
         if tasks.is_empty() {
-            println!("nothing to do");
+            println!("Nothing to do");
             return Ok(());
         }
 
-        println!("backup branch is {}", style(back).magenta());
-        let word = if tasks.len() == 1 { "Task" } else { "Tasks" };
-        println!("{} ({}):", word, tasks.len());
+        println!("Backup branch is {}", style(back).magenta());
+        let word = if tasks.len() == 1 { "task" } else { "tasks" };
+        println!("Sync {} ({}):", word, tasks.len());
         for task in &tasks {
             match task {
                 SyncBranchTask::Sync(op, branch) => {
@@ -138,8 +144,7 @@ impl BranchArgs {
                 }
             }
         }
-        println!();
-        confirm!("Do you want to process the synchronization");
+        confirm!("Continue");
 
         println!();
         for task in tasks {
@@ -147,25 +152,25 @@ impl BranchArgs {
                 SyncBranchTask::Sync(op, branch) => {
                     if current != branch {
                         // checkout to this branch to perform push/pull
-                        Shell::git(&["checkout", branch]).execute()?;
+                        Shell::git(&["checkout", branch]).execute()?.check()?;
                         current = branch;
                     }
-                    Shell::git(&[op]).execute()?;
+                    Shell::git(&[op]).execute()?.check()?;
                 }
                 SyncBranchTask::Delete(branch) => {
                     if current == branch {
                         // we cannot delete branch when we are inside it, checkout
                         // to default branch first.
                         let default = default.as_str();
-                        Shell::git(&["checkout", default]).execute()?;
+                        Shell::git(&["checkout", default]).execute()?.check()?;
                         current = default;
                     }
-                    Shell::git(&["branch", "-D", branch]).execute()?;
+                    Shell::git(&["branch", "-D", branch]).execute()?.check()?;
                 }
             }
         }
         if current != back {
-            Shell::git(&["checkout", back]).execute()?;
+            Shell::git(&["checkout", back]).execute()?.check()?;
         }
 
         Ok(())
@@ -173,7 +178,7 @@ impl BranchArgs {
 
     fn fetch(&self) -> Result<()> {
         let mut git = Shell::git(&["fetch", "origin", "--prune"]);
-        git.execute()?;
+        git.execute()?.check()?;
         Ok(())
     }
 
@@ -186,19 +191,27 @@ impl BranchArgs {
             if branch.name.eq(&default) {
                 bail!("Could not delete default branch");
             }
-            Shell::git(&["checkout", default.as_str()]).execute()?;
+            Shell::git(&["checkout", default.as_str()])
+                .execute()?
+                .check()?;
         }
 
-        Shell::git(&["branch", "-D", &branch.name]).execute()?;
+        Shell::git(&["branch", "-D", &branch.name])
+            .execute()?
+            .check()?;
         if self.push {
-            Shell::git(&["push", "origin", "--delete", &branch.name]).execute()?;
+            Shell::git(&["push", "origin", "--delete", &branch.name])
+                .execute()?
+                .check()?;
         }
         Ok(())
     }
 
     fn push(&self, branches: &Vec<GitBranch>) -> Result<()> {
         let branch = self.get_branch_or_current(branches)?;
-        Shell::git(&["push", "--set-upstream", "origin", branch.name.as_ref()]).execute()?;
+        Shell::git(&["push", "--set-upstream", "origin", branch.name.as_ref()])
+            .execute()?
+            .check()?;
         Ok(())
     }
 

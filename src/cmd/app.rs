@@ -10,7 +10,12 @@ use crate::cmd::run::get::GetArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::init::InitArgs;
 use crate::cmd::run::merge::MergeArgs;
+use crate::cmd::run::open::OpenArgs;
+use crate::cmd::run::rebase::RebaseArgs;
+use crate::cmd::run::release::ReleaseArgs;
 use crate::cmd::run::remove::RemoveArgs;
+use crate::cmd::run::squash::SquashArgs;
+use crate::cmd::run::tag::TagArgs;
 use crate::cmd::Run;
 
 #[derive(Parser)]
@@ -32,6 +37,11 @@ pub enum Commands {
     Detach(DetachArgs),
     Config(ConfigArgs),
     Get(GetArgs),
+    Rebase(RebaseArgs),
+    Squash(SquashArgs),
+    Tag(TagArgs),
+    Release(ReleaseArgs),
+    Open(OpenArgs),
 }
 
 impl Run for App {
@@ -47,6 +57,11 @@ impl Run for App {
             Commands::Detach(args) => args.run(),
             Commands::Config(args) => args.run(),
             Commands::Get(args) => args.run(),
+            Commands::Rebase(args) => args.run(),
+            Commands::Squash(args) => args.run(),
+            Commands::Tag(args) => args.run(),
+            Commands::Release(args) => args.run(),
+            Commands::Open(args) => args.run(),
         }
     }
 }

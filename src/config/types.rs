@@ -27,6 +27,10 @@ pub struct Base {
     /// Workflow can execute some pre-defined scripts on the repo.
     #[serde(default = "default::workflows")]
     pub workflows: HashMap<String, Vec<WorkflowStep>>,
+
+    /// The release rule
+    #[serde(default = "default::release")]
+    pub release: HashMap<String, String>,
 }
 
 /// The command mapping, in order to change the current directory, the `roxide`
