@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::io::{ErrorKind, Read, Write};
 use std::mem;
 use std::path::PathBuf;
@@ -509,10 +507,6 @@ impl std::fmt::Display for GitTag {
 impl GitTag {
     const NUM_REGEX: &str = r"\d+";
     const PLACEHOLDER_REGEX: &str = r"\{(\d+|%[yYmMdD])(\+)*}";
-
-    pub fn from_str(s: impl AsRef<str>) -> GitTag {
-        GitTag(s.as_ref().to_string())
-    }
 
     pub fn as_str(&self) -> &str {
         self.0.as_str()
