@@ -64,10 +64,10 @@ download() {
 	file="$1"
 	url="$2"
 
-	if has curl; then
+	if has wget; then
+		execute "wget" "-q" "--output-document=$file" "$url"
+	elif has curl; then
 		execute "curl" "--fail" "--location" "--output" "$file" "$url"
-	elif has wget; then
-		execute "wget" "--output-document=$file" "$url"
 	elif has fetch; then
 		execute "fetch" "--output=$file" "$url"
 	else
@@ -102,7 +102,7 @@ detect_arch() {
 detect_os() {
 	os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 	case "${os}" in
-		linux) os="unknown-linux-gnu" ;;
+		linux) os="unknown-linux-musl" ;;
 		darwin) os="apple-darwin" ;;
 	esac
 	printf '%s' "${os}"
@@ -163,10 +163,38 @@ else
 fi
 
 rm -r ${TMP_DIR}
+
+SHELL_TYPE=$(basename $SHELL)
+case "$SHELL_TYPE" in
+    "zsh")
+		PROFILE_PATH=${HOME}/.zshrc
+		;;
+	"bash")
+		PROFILE_PATH=${HOME}/.bashrc
+        ;;
+    *)
+		error "Sorry, now we donot support your shell ${SHELL_TYPE}"
+		exit 1
+        ;;
+esac
+
+INIT_ROXIDE_SEARCH="source <(roxide init ${SHELL_TYPE})"
+INIT_ROXIDE="
+if command -v roxide &> /dev/null; then
+	source <(roxide init ${SHELL_TYPE})
+fi
+"
+
+if ! grep -q "$INIT_ROXIDE_SEARCH" "$PROFILE_PATH"; then
+	echo ""
+	confirm "Do you want to install shell support for roxide to ${PROFILE_PATH}?"
+	info "Write init script to ${PROFILE_PATH}"
+	echo "$INIT_ROXIDE" >> ${PROFILE_PATH}
+fi
+
+
 cat << EOF
 
-Congratulations! roxide has been already installed to ${CYAN}${BIN_DIR}${RESET}.
-You should add the init script to your shell profile:
-   ${GREEN}source <(roxide init {shell-type})${RESET}
+Congratulations! roxide has been already installed (or updated) to ${CYAN}${BIN_DIR}${RESET}.
 For more details, please refer to: https://github.com/fioncat/roxide
 EOF
