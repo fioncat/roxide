@@ -1,2 +1,7 @@
 # roxide
-Git repository based zoxide
+
+Install roxide:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fioncat/roxide/HEAD/install.sh)"
+```
