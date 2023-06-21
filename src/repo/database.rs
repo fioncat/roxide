@@ -7,19 +7,22 @@ use anyhow::{bail, Result};
 use crate::config;
 use crate::repo::bytes::Bytes;
 use crate::repo::types::Repo;
+use crate::utils::Lock;
 
 pub struct Database {
     repos: Vec<Rc<Repo>>,
     path: PathBuf,
+    lock: Lock,
 }
 
 impl Database {
     pub fn read() -> Result<Database> {
+        let lock = Lock::acquire("database")?;
         let path = PathBuf::from(&config::base().metadir).join("database");
         let bytes = Bytes::read(&path)?;
         let repos: Vec<Rc<Repo>> = bytes.into();
 
-        Ok(Database { repos, path })
+        Ok(Database { repos, path, lock })
     }
 
     pub fn get<S>(&self, remote: S, owner: S, name: S) -> Option<Rc<Repo>>
@@ -194,9 +197,12 @@ impl Database {
     }
 
     pub fn close(self) -> Result<()> {
-        let Database { repos, path } = self;
+        let Database { repos, path, lock } = self;
         let bytes: Bytes = repos.into();
-        bytes.save(&path)
+        bytes.save(&path)?;
+        // Drop lock to release file lock after write done.
+        drop(lock);
+        Ok(())
     }
 
     fn position(&self, repo: &Rc<Repo>) -> Option<usize> {

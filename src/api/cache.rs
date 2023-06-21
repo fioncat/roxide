@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::api::types::{ApiRepo, MergeOptions, Provider};
-use crate::utils;
+use crate::utils::{self, Lock};
 
 pub struct Cache {
     dir: PathBuf,
@@ -18,6 +18,8 @@ pub struct Cache {
     expire: Duration,
 
     upstream: Box<dyn Provider>,
+
+    _lock: Lock,
 }
 
 impl Provider for Cache {
@@ -52,6 +54,7 @@ impl Provider for Cache {
 
 impl Cache {
     pub fn new(dir: PathBuf, hours: u64, p: Box<dyn Provider>) -> Result<Box<dyn Provider>> {
+        let lock = Lock::acquire("cache")?;
         let now = utils::current_time()?;
         let expire = Duration::from_secs(hours * 3600);
 
@@ -60,6 +63,7 @@ impl Cache {
             expire,
             now,
             upstream: p,
+            _lock: lock,
         }))
     }
 
