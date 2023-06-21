@@ -540,7 +540,7 @@ impl GitTag {
             .execute()?
             .checked_read()?;
         if output.is_empty() {
-            bail!("no latest tag")
+            bail!("No latest tag");
         }
         Ok(GitTag(output))
     }
@@ -605,7 +605,7 @@ pub fn execute_workflow(steps: &Vec<WorkflowStep>, repo: &Rc<Repo>) -> Result<()
 
             cmd.with_desc(format!("Run {}", step.name));
 
-            cmd.execute()?;
+            cmd.execute()?.check()?;
             continue;
         }
         if let None = step.file {

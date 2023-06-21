@@ -6,7 +6,9 @@ use clap::Args;
 use crate::cmd::complete::attach;
 use crate::cmd::complete::branch;
 use crate::cmd::complete::home;
+use crate::cmd::complete::release;
 use crate::cmd::complete::remote;
+use crate::cmd::complete::tag;
 use crate::cmd::complete::Complete;
 use crate::cmd::Run;
 
@@ -46,6 +48,11 @@ impl CompleteArgs {
             "detach" => no_complete,
             "config" => remote::complete,
             "get" => home::complete,
+            "rebase" => branch::complete,
+            "squash" => branch::complete,
+            "tag" => tag::complete,
+            "open" => no_complete,
+            "release" => release::complete,
         }
     }
 
@@ -59,7 +66,6 @@ impl Run for CompleteArgs {
         if self.args.is_empty() {
             return Ok(());
         }
-        // TODO: Handle stash("-x")
         let cmds = Self::get_cmds();
         if self.args.len() == 1 {
             let mut keys: Vec<_> = cmds.into_keys().map(|key| key.to_string()).collect();

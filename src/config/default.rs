@@ -26,6 +26,18 @@ pub fn workflows() -> HashMap<String, Vec<WorkflowStep>> {
     HashMap::new()
 }
 
+pub fn release() -> HashMap<String, String> {
+    let mut hmap = HashMap::with_capacity(5);
+    hmap.insert(String::from("patch"), String::from("v{0}.{1}.{2+}"));
+    hmap.insert(String::from("minor"), String::from("v{0}.{1+}.0"));
+    hmap.insert(String::from("major"), String::from("v{0+}.0.0"));
+
+    hmap.insert(String::from("date-stash"), String::from("{%Y}-{%m}-{%d}"));
+    hmap.insert(String::from("date-dot"), String::from("{%Y}.{%m}.{%d}"));
+
+    hmap
+}
+
 pub fn cache_hours() -> u32 {
     24
 }
@@ -48,6 +60,7 @@ pub fn base() -> Base {
         metadir: metadir(),
         command: command(),
         workflows: workflows(),
+        release: release(),
     }
 }
 

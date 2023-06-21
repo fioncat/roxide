@@ -58,12 +58,14 @@ impl Run for AttachArgs {
         if let Some(user) = &remote.user {
             Shell::git(&["config", "user.name", user.as_str()])
                 .with_desc(format!("Set user to {}", user))
-                .execute()?;
+                .execute()?
+                .check()?;
         }
         if let Some(email) = &remote.email {
             Shell::git(&["config", "user.email", email.as_str()])
                 .with_desc(format!("Set email to {}", email))
-                .execute()?;
+                .execute()?
+                .check()?;
         }
         info!("Attach current directory to {}", repo.long_name());
         db.update(repo);
