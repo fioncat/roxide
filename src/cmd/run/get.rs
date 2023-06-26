@@ -5,6 +5,7 @@ use clap::Args;
 use serde::Serialize;
 
 use crate::cmd::Run;
+use crate::config;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
 use crate::utils::{self, Table};
@@ -69,22 +70,27 @@ impl Run for GetArgs {
         if let None = self.remote {
             return self.list(&db, None, None);
         }
-        let remote = self.remote.as_ref().unwrap().as_str();
+        let remote_name = self.remote.as_ref().unwrap().as_str();
         if let None = self.query {
-            return self.list(&db, Some(remote), None);
-        }
-        let query = self.query.as_ref().unwrap().as_str();
-        if query.ends_with("/") {
-            let owner = query.trim_end_matches("/");
-            return self.list(&db, Some(remote), Some(owner));
+            return self.list(&db, Some(remote_name), None);
         }
 
-        let (owner, name) = utils::parse_query(query);
+        let remote = config::must_get_remote(remote_name)?;
+        let query = self.query.as_ref().unwrap().as_str();
+        if query.ends_with("/") {
+            let mut owner = query.trim_end_matches("/");
+            if let Some(raw_owner) = remote.owner_alias.get(owner) {
+                owner = raw_owner.as_str();
+            }
+            return self.list(&db, Some(remote_name), Some(owner));
+        }
+
+        let (owner, name) = utils::parse_query(&remote, query);
         if owner.is_empty() || name.is_empty() {
             bail!("Invalid query {query}, you should provide owner and name");
         }
 
-        let repo = db.must_get(remote, owner.as_str(), name.as_str())?;
+        let repo = db.must_get(remote_name, owner.as_str(), name.as_str())?;
         let info = RepoInfo::from_repo(repo)?;
         let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
         print!("{yaml}");

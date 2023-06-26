@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -14,6 +15,7 @@ use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
 
 use crate::config;
+use crate::config::types::Remote;
 use crate::errors::SilentExit;
 
 pub const SECOND: u64 = 1;
@@ -130,7 +132,18 @@ pub fn handle_result(result: Result<()>) {
     }
 }
 
-pub fn parse_query(query: impl AsRef<str>) -> (String, String) {
+pub fn parse_query(remote: &Remote, query: impl AsRef<str>) -> (String, String) {
+    let (mut owner, mut name) = parse_query_raw(query);
+    if let Some(raw_owner) = remote.owner_alias.get(owner.as_str()) {
+        owner = raw_owner.clone();
+    }
+    if let Some(raw_name) = remote.repo_alias.get(name.as_str()) {
+        name = raw_name.clone();
+    }
+    (owner, name)
+}
+
+fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
     let items: Vec<_> = query.as_ref().split("/").collect();
     let items_len = items.len();
     let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
@@ -143,6 +156,12 @@ pub fn parse_query(query: impl AsRef<str>) -> (String, String) {
         }
     }
     (group_buffer.join("/"), base.to_string())
+}
+
+pub fn revert_map(map: &HashMap<String, String>) -> HashMap<String, String> {
+    map.iter()
+        .map(|(key, value)| (value.clone(), key.clone()))
+        .collect()
 }
 
 pub fn open_url(url: impl AsRef<str>) -> Result<()> {

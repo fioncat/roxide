@@ -41,16 +41,19 @@ impl Run for RemoveArgs {
 
 impl RemoveArgs {
     fn get_repo(&self, remote: &Remote, db: &Database) -> Result<Rc<Repo>> {
-        let (owner, name) = utils::parse_query(&self.query);
-        if self.query.ends_with("/") || owner.is_empty() {
-            let owner = self.query.trim_end_matches("/").to_string();
-            let mut repos = db.list_by_owner(&remote.name, &owner);
+        if self.query.ends_with("/") {
+            let mut owner = self.query.trim_end_matches("/");
+            if let Some(raw_owner) = remote.owner_alias.get(owner) {
+                owner = raw_owner.as_str();
+            }
+            let mut repos = db.list_by_owner(remote.name.as_str(), owner);
             let items: Vec<_> = repos.iter().map(|repo| format!("{}", repo.name)).collect();
 
             let idx = shell::search(&items)?;
 
             return Ok(repos.remove(idx));
         }
+        let (owner, name) = utils::parse_query(remote, &self.query);
         db.must_get(&remote.name, &owner, &name)
     }
 

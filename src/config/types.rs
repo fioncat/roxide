@@ -51,7 +51,7 @@ pub struct Command {
     ///
     /// The key is remote, value is command. The command will be mapping to
     /// `roxide home {remote}`
-    #[serde(default = "default::command_remotes")]
+    #[serde(default = "default::empty_map")]
     pub remotes: HashMap<String, String>,
 }
 
@@ -112,6 +112,20 @@ pub struct Remote {
     /// For Gitlab, see: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
     pub token: Option<String>,
 
+    /// The alias name of the Owner, which is used to quickly access the owner on
+    /// the command line.
+    ///
+    /// For example, if you set "kubernetes" alias to "k8s", you can use
+    /// `roxide home k8s/` in commands and to access the owner. Note that alias has
+    /// higher priority than owner, please make sure that the alias you configure
+    /// will not conflict with other owners, roxide will not do this check for you.
+    #[serde(default = "default::empty_map")]
+    pub owner_alias: HashMap<String, String>,
+
+    /// Same as `owner_alias`, but for repo name.
+    #[serde(default = "default::empty_map")]
+    pub repo_alias: HashMap<String, String>,
+
     /// In order to speed up the response, after accessing the remote api, the
     /// data will be cached, which indicates the cache expiration time, in hours.
     /// Cache data will be stored under `{metadir}/cache`.
@@ -156,35 +170,11 @@ pub struct Owner {
     /// If not empty, override remote's ssh.
     pub ssh: Option<bool>,
 
-    /// The alias name of the Owner, which is used to quickly access the owner on
-    /// the command line.
-    ///
-    /// For example, if you set "kubernetes" alias to "k8s", you can use
-    /// `roxide home k8s/` in commands and to access the owner. Note that alias has
-    /// higher priority than owner, please make sure that the alias you configure
-    /// will not conflict with other owners, roxide will not do this check for you.
-    pub alias: Option<String>,
-
     /// After cloning or creating a repo, perform some additional workflows.
     pub on_create: Option<Vec<String>>,
 }
 
 impl Remote {
-    pub fn replace_owner(&self, owner: String) -> String {
-        if self.owners.is_empty() {
-            return owner;
-        }
-
-        for (raw_owner, cfg) in self.owners.iter() {
-            if let Some(alias) = &cfg.alias {
-                if alias.eq(&owner) {
-                    return raw_owner.clone();
-                }
-            }
-        }
-        owner
-    }
-
     fn validate(&mut self) -> Result<()> {
         if let Some(token) = &self.token {
             self.token = Some(expandenv(token).context("Expand token")?);

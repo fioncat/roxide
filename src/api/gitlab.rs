@@ -9,7 +9,7 @@ use crate::config::types::Remote;
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
-    pub name: String,
+    pub path: String,
     pub default_branch: String,
     pub web_url: String,
 }
@@ -17,7 +17,7 @@ struct GitlabRepo {
 impl GitlabRepo {
     fn to_api(self) -> ApiRepo {
         ApiRepo {
-            name: self.name,
+            name: self.path,
             default_branch: self.default_branch,
             upstream: None,
             web_url: self.web_url,
@@ -58,7 +58,7 @@ impl Provider for Gitlab {
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = format!("groups/{owner}/projects?per_page={}", self.per_page);
         let gitlab_repos = self.execute_get::<Vec<GitlabRepo>>(&path)?;
-        let repos: Vec<String> = gitlab_repos.into_iter().map(|repo| repo.name).collect();
+        let repos: Vec<String> = gitlab_repos.into_iter().map(|repo| repo.path).collect();
         Ok(repos)
     }
 

@@ -88,19 +88,20 @@ impl HomeArgs {
                 let remote = config::must_get_remote(remote_name)?;
                 let query = &self.query[1];
                 if query.ends_with("/") {
-                    let owner = query.strip_suffix("/").unwrap();
-                    let owner = remote.replace_owner(owner.to_string());
+                    let mut owner = query.strip_suffix("/").unwrap();
+                    if let Some(raw_owner) = remote.owner_alias.get(owner) {
+                        owner = raw_owner.as_str();
+                    }
                     let repo = self.search_api(db, &remote, &owner)?;
                     return Ok((remote, repo));
                 }
 
-                let (owner, name) = utils::parse_query(query);
+                let (owner, name) = utils::parse_query(&remote, query);
                 if owner.is_empty() {
                     let repo = db.must_get_fuzzy(&remote.name, &name)?;
                     return Ok((remote, repo));
                 }
 
-                let owner = remote.replace_owner(owner);
                 Ok((remote, self.get_repo(db, remote_name, &owner, &name)?))
             }
         }

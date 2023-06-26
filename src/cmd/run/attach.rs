@@ -78,13 +78,15 @@ impl AttachArgs {
     fn get_repo(&self, remote: &Remote, db: &Database) -> Result<Rc<Repo>> {
         let path = config::current_dir();
         let path = format!("{}", path.display());
-        let (owner, name) = utils::parse_query(&self.query);
-        if self.query.ends_with("/") || owner.is_empty() {
-            let owner = self.query.trim_end_matches("/").to_string();
+        if self.query.ends_with("/") {
+            let mut owner = self.query.trim_end_matches("/");
+            if let Some(raw_owner) = remote.owner_alias.get(owner) {
+                owner = raw_owner.as_str();
+            }
             let provider = api::init_provider(remote, self.force)?;
-            let items = provider.list_repos(owner.as_str())?;
+            let items = provider.list_repos(owner)?;
 
-            let attached = db.list_by_owner(&remote.name, &owner);
+            let attached = db.list_by_owner(remote.name.as_str(), owner);
             let attached_set: HashSet<&str> =
                 attached.iter().map(|repo| repo.name.as_str()).collect();
 
@@ -95,9 +97,15 @@ impl AttachArgs {
 
             let idx = shell::search(&items)?;
             let name = items.remove(idx);
-            return Ok(Repo::new(&remote.name, &owner, &name, Some(path)));
+            return Ok(Repo::new(
+                remote.name.as_str(),
+                owner,
+                name.as_str(),
+                Some(path),
+            ));
         }
 
+        let (owner, name) = utils::parse_query(remote, &self.query);
         Ok(Repo::new(&remote.name, &owner, &name, Some(path)))
     }
 }
