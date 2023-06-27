@@ -14,11 +14,11 @@ pub fn command() -> Command {
     Command {
         base: Some(String::from("z")),
         home: Some(String::from("zz")),
-        remotes: command_remotes(),
+        remotes: empty_map(),
     }
 }
 
-pub fn command_remotes() -> HashMap<String, String> {
+pub fn empty_map() -> HashMap<String, String> {
     HashMap::new()
 }
 
