@@ -23,6 +23,8 @@ pub const MINUTE: u64 = 60 * SECOND;
 pub const HOUR: u64 = 60 * MINUTE;
 pub const DAY: u64 = 24 * HOUR;
 pub const WEEK: u64 = 7 * DAY;
+pub const MONTH: u64 = 30 * DAY;
+pub const YEAR: u64 = 365 * DAY;
 
 #[macro_export]
 macro_rules! confirm {
@@ -273,6 +275,41 @@ impl Table {
     }
 }
 
+pub fn format_since(time: u64) -> String {
+    let duration = config::now_secs().saturating_sub(time);
+
+    let unit: &str;
+    let value: u64;
+    if duration < MINUTE {
+        unit = "second";
+        value = duration;
+    } else if duration < HOUR {
+        unit = "minute";
+        value = duration / MINUTE;
+    } else if duration < DAY {
+        unit = "hour";
+        value = duration / HOUR;
+    } else if duration < WEEK {
+        unit = "day";
+        value = duration / DAY;
+    } else if duration < MONTH {
+        unit = "week";
+        value = duration / WEEK;
+    } else if duration < YEAR {
+        unit = "month";
+        value = duration / MONTH;
+    } else {
+        unit = "year";
+        value = duration / YEAR;
+    }
+
+    if value > 1 {
+        format!("{value} {unit}s ago")
+    } else {
+        format!("last {unit}")
+    }
+}
+
 pub fn format_time(time: u64) -> Result<String> {
     match Local.timestamp_opt(time as i64, 0) {
         LocalResult::None => bail!("Invalid timestamp {time}"),
@@ -281,8 +318,8 @@ pub fn format_time(time: u64) -> Result<String> {
     }
 }
 
-const BYTES_UNIT: f64 = 1024.0;
-const BYTES_SUFFIX: [&str; 9] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+const BYTES_UNIT: f64 = 1000.0;
+const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
 pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
     let size = bytes.into();
