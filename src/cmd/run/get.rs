@@ -127,7 +127,7 @@ impl GetArgs {
         for repo in repos {
             let name = repo.as_string(&level);
             let access = format!("{}", repo.accessed as u64);
-            let last_access = utils::format_time(repo.last_accessed)?;
+            let last_access = utils::format_since(repo.last_accessed);
             let score = format!("{:.2}", repo.score());
 
             let mut row = vec![name, access, last_access, score];
