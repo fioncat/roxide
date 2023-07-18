@@ -88,8 +88,9 @@ impl From<MergeOptions> for PullRequestOptions {
 
         let head = match upstream {
             Some(upstream) => {
+                let head = format!("{owner}:{source}");
                 (owner, name) = (upstream.owner, upstream.name);
-                format!("{}:{}", owner, source)
+                head
             }
             None => source,
         };
