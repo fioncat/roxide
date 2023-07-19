@@ -56,7 +56,8 @@ struct GitlabError {
 
 impl Provider for Gitlab {
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
-        let path = format!("groups/{owner}/projects?per_page={}", self.per_page);
+        let owner_encode = urlencoding::encode(owner);
+        let path = format!("groups/{owner_encode}/projects?per_page={}", self.per_page);
         let gitlab_repos = self.execute_get::<Vec<GitlabRepo>>(&path)?;
         let repos: Vec<String> = gitlab_repos.into_iter().map(|repo| repo.path).collect();
         Ok(repos)

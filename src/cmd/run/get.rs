@@ -23,6 +23,10 @@ pub struct GetArgs {
     /// command to take too long to execute.
     #[clap(long, short)]
     pub size: bool,
+
+    /// Show current repo info.
+    #[clap(long, short)]
+    pub current: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -68,6 +72,13 @@ impl Run for GetArgs {
     fn run(&self) -> Result<()> {
         let db = Database::read()?;
         if let None = self.remote {
+            if self.current {
+                let repo = db.must_current()?;
+                let info = RepoInfo::from_repo(repo)?;
+                let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
+                print!("{yaml}");
+                return Ok(());
+            }
             return self.list(&db, None, None);
         }
         let remote_name = self.remote.as_ref().unwrap().as_str();
