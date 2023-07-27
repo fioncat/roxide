@@ -282,6 +282,9 @@ pub fn format_since(time: u64) -> String {
     let value: u64;
     if duration < MINUTE {
         unit = "second";
+        if duration < 30 {
+            return String::from("now");
+        }
         value = duration;
     } else if duration < HOUR {
         unit = "minute";
