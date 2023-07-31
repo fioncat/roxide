@@ -32,11 +32,11 @@ pub fn init_provider(remote: &Remote, force: bool) -> Result<Box<dyn Provider>> 
         ProviderType::Github => Github::new(remote),
         ProviderType::Gitlab => Gitlab::new(remote),
     };
-    if !force && remote.cache_hours > 0 {
+    if remote.cache_hours > 0 {
         let cache_dir = PathBuf::from(&config::base().metadir)
             .join("cache")
             .join(&remote.name);
-        provider = Cache::new(cache_dir, remote.cache_hours as u64, provider)?;
+        provider = Cache::new(cache_dir, remote.cache_hours as u64, provider, force)?;
     }
     Ok(provider)
 }
