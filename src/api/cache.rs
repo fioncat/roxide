@@ -19,14 +19,18 @@ pub struct Cache {
 
     upstream: Box<dyn Provider>,
 
+    force: bool,
+
     _lock: Lock,
 }
 
 impl Provider for Cache {
     fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
         let path = self.get_repo_path(owner, name);
-        if let Some(repo) = self.read(&path)? {
-            return Ok(repo);
+        if !self.force {
+            if let Some(repo) = self.read(&path)? {
+                return Ok(repo);
+            }
         }
         let repo = self.upstream.get_repo(owner, name)?;
         self.write(&repo, &path)?;
@@ -35,8 +39,10 @@ impl Provider for Cache {
 
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = self.list_repos_path(owner);
-        if let Some(repos) = self.read(&path)? {
-            return Ok(repos);
+        if !self.force {
+            if let Some(repos) = self.read(&path)? {
+                return Ok(repos);
+            }
         }
         let repos = self.upstream.list_repos(owner)?;
         self.write(&repos, &path)?;
@@ -53,7 +59,12 @@ impl Provider for Cache {
 }
 
 impl Cache {
-    pub fn new(dir: PathBuf, hours: u64, p: Box<dyn Provider>) -> Result<Box<dyn Provider>> {
+    pub fn new(
+        dir: PathBuf,
+        hours: u64,
+        p: Box<dyn Provider>,
+        force: bool,
+    ) -> Result<Box<dyn Provider>> {
         let lock = Lock::acquire("cache")?;
         let now = utils::current_time()?;
         let expire = Duration::from_secs(hours * 3600);
@@ -63,6 +74,7 @@ impl Cache {
             expire,
             now,
             upstream: p,
+            force,
             _lock: lock,
         }))
     }
