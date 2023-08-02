@@ -64,6 +64,8 @@ struct PullRequestOptions {
     name: String,
 
     head: String,
+    head_search: String,
+
     base: String,
 }
 
@@ -86,18 +88,23 @@ impl From<MergeOptions> for PullRequestOptions {
             target,
         } = merge;
 
-        let head = match upstream {
+        let (head, head_search) = match upstream {
             Some(upstream) => {
                 let head = format!("{owner}:{source}");
+                let head_search = format!("{owner}/{source}");
                 (owner, name) = (upstream.owner, upstream.name);
-                head
+                (head, head_search)
             }
-            None => source,
+            None => {
+                let head_search = source.clone();
+                (source, head_search)
+            }
         };
         PullRequestOptions {
             owner,
             name,
             head,
+            head_search,
             base: target,
         }
     }
@@ -131,9 +138,11 @@ impl Provider for Github {
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
         let opts: PullRequestOptions = merge.into();
+        let head = urlencoding::encode(&opts.head_search);
+        let base = urlencoding::encode(&opts.base);
         let path = format!(
             "repos/{}/{}/pulls?state=open&head={}&base={}",
-            opts.owner, opts.name, opts.head, opts.base
+            opts.owner, opts.name, head, base
         );
         let mut prs = self.execute_get::<Vec<PullRequest>>(&path)?;
         if prs.is_empty() {
