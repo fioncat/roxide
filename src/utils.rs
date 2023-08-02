@@ -3,14 +3,14 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
-use std::process;
+use std::process::{self, Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
 use console::{self, style};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Editor, Input};
+use dialoguer::Input;
 use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
 
@@ -207,23 +207,48 @@ pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Resu
     Ok(text)
 }
 
-pub fn edit<S>(default: S, ext: S, require: bool) -> Result<String>
+pub fn edit_content<S>(raw: S, name: S, require: bool) -> Result<String>
 where
     S: AsRef<str>,
 {
-    let text = Editor::new()
-        .executable(ext.as_ref())
-        .edit(default.as_ref())
-        .context("Terminal edit")?;
-    match text {
-        Some(text) => Ok(text),
-        None => {
-            if require {
-                bail!("Edit cannot be empty");
-            }
-            Ok(String::new())
-        }
+    let editor = get_editor()?;
+    let edit_path = PathBuf::from(&config::base().metadir)
+        .join("tmp")
+        .join(name.as_ref());
+    if !raw.as_ref().is_empty() {
+        let data = raw.as_ref().to_string();
+        write_file(&edit_path, data.as_bytes())?;
     }
+    edit_file(&editor, &edit_path)?;
+
+    let data = fs::read(&edit_path).context("Read edit file")?;
+    fs::remove_file(&edit_path).context("Remove edit file")?;
+    let content = String::from_utf8(data).context("Decode edit content as utf-8")?;
+    if require && content.is_empty() {
+        bail!("Require edit content");
+    }
+
+    Ok(content)
+}
+
+pub fn edit_file(editor: impl AsRef<str>, path: &PathBuf) -> Result<()> {
+    ensure_dir(path)?;
+    let mut cmd = Command::new(editor.as_ref());
+    cmd.stdout(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
+    cmd.stdin(Stdio::inherit());
+    cmd.arg(&path);
+    cmd.output()
+        .with_context(|| format!("Use editor {} to edit {}", editor.as_ref(), path.display()))?;
+    Ok(())
+}
+
+pub fn get_editor() -> Result<String> {
+    let editor = env::var("EDITOR").context("Get EDITOR env")?;
+    if editor.is_empty() {
+        bail!("Could not get your default editor, please check env `EDITOR`");
+    }
+    Ok(editor)
 }
 
 pub struct Table {

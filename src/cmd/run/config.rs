@@ -1,13 +1,13 @@
+use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::{env, fs};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 
 use crate::cmd::Run;
 use crate::config::types::Config;
+use crate::utils;
 
 /// Edit roxide config file in terminal.
 #[derive(Args)]
@@ -41,17 +41,8 @@ impl Run for ConfigArgs {
     fn run(&self) -> Result<()> {
         let editor = self.get_editor()?;
         let path = self.get_path()?;
-        let path = format!("{}", path.display());
 
-        let mut cmd = Command::new(&editor);
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
-        cmd.stdin(Stdio::inherit());
-        cmd.arg(&path);
-        cmd.output()
-            .with_context(|| format!("Use editor {editor} to edit config {path}"))?;
-
-        Ok(())
+        utils::edit_file(&editor, &path)
     }
 }
 
@@ -60,11 +51,7 @@ impl ConfigArgs {
         if let Some(editor) = &self.editor {
             return Ok(editor.to_string());
         }
-        let editor = env::var("EDITOR").context("Get EDITOR env")?;
-        if editor.is_empty() {
-            bail!("Could not get your default editor, please check env `EDITOR`");
-        }
-        Ok(editor)
+        utils::get_editor()
     }
 
     fn get_path(&self) -> Result<PathBuf> {
