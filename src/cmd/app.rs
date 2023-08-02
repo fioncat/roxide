@@ -14,6 +14,7 @@ use crate::cmd::run::open::OpenArgs;
 use crate::cmd::run::rebase::RebaseArgs;
 use crate::cmd::run::release::ReleaseArgs;
 use crate::cmd::run::remove::RemoveArgs;
+use crate::cmd::run::reset::ResetArgs;
 use crate::cmd::run::squash::SquashArgs;
 use crate::cmd::run::tag::TagArgs;
 use crate::cmd::Run;
@@ -42,6 +43,7 @@ pub enum Commands {
     Tag(TagArgs),
     Release(ReleaseArgs),
     Open(OpenArgs),
+    Reset(ResetArgs),
 }
 
 impl Run for App {
@@ -62,6 +64,7 @@ impl Run for App {
             Commands::Tag(args) => args.run(),
             Commands::Release(args) => args.run(),
             Commands::Open(args) => args.run(),
+            Commands::Reset(args) => args.run(),
         }
     }
 }
