@@ -102,7 +102,7 @@ impl Run for MergeArgs {
         confirm!("Continue");
         let title = utils::input("Please input title", true, init_title)?;
         let body = if utils::confirm("Do you need body")? {
-            utils::edit("", ".md", true)?
+            utils::edit_content("Please input your body (markdown)", "body.md", true)?
         } else {
             String::new()
         };
