@@ -11,5 +11,6 @@ pub mod open;
 pub mod rebase;
 pub mod release;
 pub mod remove;
+pub mod reset;
 pub mod squash;
 pub mod tag;

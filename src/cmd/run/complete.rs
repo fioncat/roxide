@@ -53,6 +53,7 @@ impl CompleteArgs {
             "tag" => tag::complete,
             "open" => no_complete,
             "release" => release::complete,
+            "reset" => branch::complete,
         }
     }
 
