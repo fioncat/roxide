@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{bail, Context, Result};
 use reqwest::blocking::{Client, Request};
 use reqwest::{Method, Url};
@@ -32,6 +34,11 @@ struct Owner {
 #[derive(Debug, Deserialize)]
 struct Error {
     pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Release {
+    pub tag_name: String,
 }
 
 impl Repo {
@@ -177,6 +184,18 @@ impl Github {
         })
     }
 
+    pub fn new_empty() -> Github {
+        let client = Client::builder()
+            .timeout(Duration::from_secs_f32(20.0))
+            .build()
+            .unwrap();
+        Github {
+            token: None,
+            per_page: 30,
+            client,
+        }
+    }
+
     fn execute_get<T>(&self, path: &str) -> Result<T>
     where
         T: DeserializeOwned + ?Sized,
@@ -232,5 +251,11 @@ impl Github {
             builder = builder.body(body);
         }
         builder.build().context("Build Github request")
+    }
+
+    pub fn get_latest_tag(&self, owner: &str, name: &str) -> Result<String> {
+        let path = format!("repos/{owner}/{name}/releases/latest");
+        let release = self.execute_get::<Release>(&path)?;
+        Ok(release.tag_name)
     }
 }

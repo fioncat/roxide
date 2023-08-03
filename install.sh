@@ -118,9 +118,18 @@ ensure_command() {
 ensure_command "perl"
 ensure_command "tar"
 
-BIN_DIR="/usr/local/bin"
+if [[ $# -ge 1 ]]; then
+	BIN_DIR="$1"
+else
+	BIN_DIR="/usr/local/bin"
+fi
 TMP_DIR="/tmp/roxide-install"
 BASE_URL="https://github.com/fioncat/roxide/releases"
+
+SKIP_CONFIRM="false"
+if [[ $# -ge 2 ]]; then
+	SKIP_CONFIRM="$2"
+fi
 
 PLATFORM="$(detect_os)"
 ARCH="$(detect_arch)"
@@ -140,7 +149,12 @@ if [ -z ${SUPPORT} ]; then
 	exit 1
 fi
 
-confirm "Install roxide to ${BIN_DIR}?"
+if [[ ! "${SKIP_CONFIRM}" == "true" ]]; then
+	confirm "Install roxide to ${BIN_DIR}?"
+else
+	info "About to install roxide to ${BIN_DIR}"
+fi
+
 
 if [ -d ${TMP_DIR} ]; then
 	rm -r ${TMP_DIR}
@@ -192,6 +206,10 @@ if ! grep -q "$INIT_ROXIDE_SEARCH" "$PROFILE_PATH"; then
 	echo "$INIT_ROXIDE" >> ${PROFILE_PATH}
 fi
 
+
+if [[ "${SKIP_CONFIRM}" == "true" ]]; then
+	exit 0
+fi
 
 cat << EOF
 

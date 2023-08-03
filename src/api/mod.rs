@@ -1,5 +1,5 @@
 mod cache;
-mod github;
+pub mod github;
 mod gitlab;
 pub mod types;
 
