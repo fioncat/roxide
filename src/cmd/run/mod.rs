@@ -14,3 +14,4 @@ pub mod remove;
 pub mod reset;
 pub mod squash;
 pub mod tag;
+pub mod update;

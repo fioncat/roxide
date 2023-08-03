@@ -3,6 +3,7 @@ mod cmd;
 mod config;
 mod errors;
 mod repo;
+mod self_update;
 mod shell;
 mod utils;
 

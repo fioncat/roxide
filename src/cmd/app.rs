@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use crate::cmd::run::attach::AttachArgs;
@@ -17,7 +17,9 @@ use crate::cmd::run::remove::RemoveArgs;
 use crate::cmd::run::reset::ResetArgs;
 use crate::cmd::run::squash::SquashArgs;
 use crate::cmd::run::tag::TagArgs;
+use crate::cmd::run::update::UpdateArgs;
 use crate::cmd::Run;
+use crate::self_update;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -44,10 +46,15 @@ pub enum Commands {
     Release(ReleaseArgs),
     Open(OpenArgs),
     Reset(ResetArgs),
+    Update(UpdateArgs),
 }
 
 impl Run for App {
     fn run(&self) -> Result<()> {
+        match &self.command {
+            Commands::Update(_) | Commands::Init(_) | Commands::Complete(_) => {}
+            _ => self_update::auto().context("Check auto self-update")?,
+        }
         match &self.command {
             Commands::Init(args) => args.run(),
             Commands::Home(args) => args.run(),
@@ -65,6 +72,7 @@ impl Run for App {
             Commands::Release(args) => args.run(),
             Commands::Open(args) => args.run(),
             Commands::Reset(args) => args.run(),
+            Commands::Update(args) => args.run(),
         }
     }
 }
