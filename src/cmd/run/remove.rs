@@ -1,16 +1,13 @@
-use std::fs;
-use std::io::ErrorKind;
-use std::path::PathBuf;
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::{config, confirm, info, shell, utils};
+use crate::{config, confirm, shell, utils};
 
 /// Remove a repo from database and disk.
 #[derive(Args)]
@@ -31,7 +28,7 @@ impl Run for RemoveArgs {
         confirm!("Do you want to remove repo {}", repo.long_name());
 
         let path = repo.get_path();
-        self.remove_path(path)?;
+        utils::remove_dir_recursively(path)?;
 
         db.remove(repo);
 
@@ -55,34 +52,5 @@ impl RemoveArgs {
         }
         let (owner, name) = utils::parse_query(remote, &self.query);
         db.must_get(&remote.name, &owner, &name)
-    }
-
-    fn remove_path(&self, path: PathBuf) -> Result<()> {
-        info!("Remove dir {}", path.display());
-        fs::remove_dir_all(&path).context("Remove directory")?;
-
-        let dir = path.parent();
-        if let None = dir {
-            return Ok(());
-        }
-        let mut dir = dir.unwrap();
-        loop {
-            match fs::read_dir(dir) {
-                Ok(dir_read) => {
-                    let count = dir_read.count();
-                    if count > 0 {
-                        return Ok(());
-                    }
-                    info!("Remove dir {}", dir.display());
-                    fs::remove_dir(dir).context("Remove directory")?;
-                    match dir.parent() {
-                        Some(parent) => dir = parent,
-                        None => return Ok(()),
-                    }
-                }
-                Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-                Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
-            }
-        }
     }
 }
