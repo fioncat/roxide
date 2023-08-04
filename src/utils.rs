@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime};
+use std::{env, thread};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
@@ -68,6 +69,21 @@ macro_rules! info {
     };
 }
 
+#[macro_export]
+macro_rules! error {
+    ($dst:expr $(,)?) => {
+        {
+            $crate::utils::show_error($dst);
+        }
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        {
+            let msg = format!($fmt, $($arg)*);
+            $crate::utils::show_error(msg.as_str());
+        }
+    };
+}
+
 pub fn show_exec(msg: impl AsRef<str>) {
     let msg = format!("{} {}", style("==>").cyan(), msg.as_ref());
     write_stderr(msg);
@@ -75,6 +91,11 @@ pub fn show_exec(msg: impl AsRef<str>) {
 
 pub fn show_info(msg: impl AsRef<str>) {
     let msg = format!("{} {}", style("==>").green(), msg.as_ref());
+    write_stderr(msg);
+}
+
+pub fn show_error(msg: impl AsRef<str>) {
+    let msg = format!("{} {}", style("==>").red(), msg.as_ref());
     write_stderr(msg);
 }
 
@@ -533,4 +554,91 @@ impl Drop for Lock {
             )),
         }
     }
+}
+
+pub fn run_async<T, R>(func: fn(T) -> Result<R>, tasks: Vec<T>) -> Vec<Result<R>>
+where
+    T: Send + 'static,
+    R: Send + 'static,
+{
+    if tasks.is_empty() {
+        return vec![];
+    }
+    let task_len = tasks.len();
+    let mut results = Vec::with_capacity(task_len);
+
+    // In order to ensure the maximum utilization of the cpu, the number of started
+    // threads is equal to the number of cpus. If the cpu is single-core, directly
+    // process and return.
+    let worker_len = num_cpus::get();
+    assert!(worker_len > 0);
+    if worker_len == 1 {
+        info!("Starting 1 worker");
+        // No need to spawn threads, handle myself.
+        for task in tasks {
+            let result = func(task);
+            results.push(result);
+        }
+        return results;
+    }
+
+    let (task_tx, task_rx) = mpsc::channel::<T>();
+    // The rx of mpsc is not shareable, we need to convert it to shareable.
+    // And need to use Mutex to protect it.
+    let task_shared_rx = Arc::new(Mutex::new(task_rx));
+
+    // This is used to recv handle results returned by workers.
+    let (result_tx, result_rx) = mpsc::channel::<Result<R>>();
+
+    info!("Starting {} workers", worker_len);
+    let mut handlers = Vec::with_capacity(worker_len);
+    for _ in 0..worker_len {
+        let task_shared_rx = Arc::clone(&task_shared_rx);
+        let result_tx = result_tx.clone();
+        let handler = thread::spawn(move || loop {
+            let task_rx = match task_shared_rx.lock() {
+                Ok(rx) => rx,
+                Err(_) => return,
+            };
+            // Consume a task from shared task channel.
+            let task = task_rx.recv();
+            // Dropping task_rx here can release the Mutex that protects it at the
+            // same time, so that other workers can obtain tasks from task_shared_rx
+            // asynchronously.
+            drop(task_rx);
+
+            if let Ok(task) = task {
+                let result = func(task);
+                // The result_tx will be closed only after all workers done, so it
+                // is safe to call `unwrap` here.
+                result_tx.send(result).unwrap();
+            } else {
+                // task_rx is closed, it means that all tasks have been processed.
+                // The worker can exit now.
+                return;
+            }
+        });
+        handlers.push(handler);
+    }
+
+    // Produce all tasks to workers.
+    for task in tasks {
+        task_tx.send(task).unwrap();
+    }
+    drop(task_tx);
+
+    // Wait for all workers done.
+    for handler in handlers {
+        handler.join().unwrap();
+    }
+
+    // When the execution reaches this point, all workers have already exited, so
+    // it should be possible to just get the execution results of all tasks from
+    // result_rx.
+    while results.len() < task_len {
+        let result = result_rx.recv().unwrap();
+        results.push(result);
+    }
+
+    results
 }

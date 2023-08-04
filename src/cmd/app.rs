@@ -9,6 +9,7 @@ use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
 use crate::cmd::run::get::GetArgs;
 use crate::cmd::run::home::HomeArgs;
+use crate::cmd::run::import::ImportArgs;
 use crate::cmd::run::init::InitArgs;
 use crate::cmd::run::merge::MergeArgs;
 use crate::cmd::run::open::OpenArgs;
@@ -49,6 +50,7 @@ pub enum Commands {
     Reset(ResetArgs),
     Update(UpdateArgs),
     Clear(ClearArgs),
+    Import(ImportArgs),
 }
 
 impl Run for App {
@@ -76,6 +78,7 @@ impl Run for App {
             Commands::Reset(args) => args.run(),
             Commands::Update(args) => args.run(),
             Commands::Clear(args) => args.run(),
+            Commands::Import(args) => args.run(),
         }
     }
 }
