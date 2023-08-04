@@ -97,6 +97,6 @@ impl ClearArgs {
                 .collect());
         }
 
-        bail!("You should provider at least one filter condition without `all`")
+        bail!("You should provide at least one filter condition without `all`")
     }
 }
