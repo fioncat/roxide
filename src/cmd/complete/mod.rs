@@ -1,6 +1,7 @@
 pub mod attach;
 pub mod branch;
 pub mod home;
+pub mod owner;
 pub mod release;
 pub mod remote;
 pub mod tag;

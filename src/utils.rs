@@ -13,6 +13,7 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::Input;
 use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
+use regex::Regex;
 
 use crate::config;
 use crate::config::types::Remote;
@@ -346,10 +347,86 @@ pub fn format_time(time: u64) -> Result<String> {
     }
 }
 
-const BYTES_UNIT: f64 = 1000.0;
-const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
+    let parse_err = format!(
+        "Invalid duration {}, the format should be <number><s|m|h|d>",
+        style(s.as_ref()).yellow()
+    );
+
+    const DURATION_REGEX: &str = r"^(\d+)([s|m|h|d])$";
+    let re = Regex::new(DURATION_REGEX).expect("parse duration regex");
+    let mut iter = re.captures_iter(s.as_ref());
+    let caps = match iter.next() {
+        Some(caps) => caps,
+        None => bail!(parse_err),
+    };
+
+    // We have 3 captures:
+    //   0 -> string itself
+    //   1 -> number
+    //   2 -> unit
+    if caps.len() != 3 {
+        bail!(parse_err);
+    }
+    let number = match caps.get(1) {
+        Some(num) => num
+            .as_str()
+            .parse::<u64>()
+            .with_context(|| format!("Invalid duration number {}", style(num.as_str()).yellow()))?,
+        None => bail!("Missing number in duration"),
+    };
+    if number == 0 {
+        bail!("duration cannot be zero");
+    }
+
+    let unit = match caps.get(2) {
+        Some(unit) => unit.as_str(),
+        None => bail!("Missing unit in duration"),
+    };
+
+    let secs = match unit {
+        "s" => number,
+        "m" => number * MINUTE,
+        "h" => number * HOUR,
+        "d" => number * DAY,
+        _ => bail!("Invalid unit {}", unit),
+    };
+
+    Ok(secs)
+}
+
+pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
+    info!("Remove dir {}", path.display());
+    fs::remove_dir_all(&path).context("Remove directory")?;
+
+    let dir = path.parent();
+    if let None = dir {
+        return Ok(());
+    }
+    let mut dir = dir.unwrap();
+    loop {
+        match fs::read_dir(dir) {
+            Ok(dir_read) => {
+                let count = dir_read.count();
+                if count > 0 {
+                    return Ok(());
+                }
+                info!("Remove dir {}", dir.display());
+                fs::remove_dir(dir).context("Remove directory")?;
+                match dir.parent() {
+                    Some(parent) => dir = parent,
+                    None => return Ok(()),
+                }
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
+        }
+    }
+}
 
 pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
+    const BYTES_UNIT: f64 = 1000.0;
+    const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
     let size = bytes.into();
     if size <= 0.0 {
         return String::from("0B");

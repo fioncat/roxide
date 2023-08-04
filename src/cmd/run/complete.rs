@@ -6,6 +6,7 @@ use clap::Args;
 use crate::cmd::complete::attach;
 use crate::cmd::complete::branch;
 use crate::cmd::complete::home;
+use crate::cmd::complete::owner;
 use crate::cmd::complete::release;
 use crate::cmd::complete::remote;
 use crate::cmd::complete::tag;
@@ -54,6 +55,8 @@ impl CompleteArgs {
             "open" => no_complete,
             "release" => release::complete,
             "reset" => branch::complete,
+            "update" => no_complete,
+            "clear" => owner::complete,
         }
     }
 

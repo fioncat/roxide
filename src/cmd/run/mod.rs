@@ -1,5 +1,6 @@
 pub mod attach;
 pub mod branch;
+pub mod clear;
 pub mod complete;
 pub mod config;
 pub mod detach;
