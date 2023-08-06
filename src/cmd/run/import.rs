@@ -2,12 +2,13 @@ use std::fs;
 use std::io::ErrorKind;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args;
 use console::style;
 
 use crate::cmd::Run;
 use crate::config::types::Remote;
+use crate::errors::SilentExit;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
@@ -39,14 +40,24 @@ impl Task {
     fn handle(self) -> Result<Task> {
         match self._handle() {
             Ok(_) => Ok(self),
-            Err(err) => {
-                error!(
-                    "Import {} failed: {}",
-                    style(&self.name).cyan(),
-                    style(&err).red()
-                );
-                Err(err)
-            }
+            Err(err) => match err.downcast::<SilentExit>() {
+                Ok(SilentExit { code }) => {
+                    error!(
+                        "Import {} git command failed with code {}, please try to import manually",
+                        code,
+                        style(&self.name).cyan(),
+                    );
+                    bail!("git failed with code {}", code)
+                }
+                Err(err) => {
+                    error!(
+                        "Import {} failed: {}",
+                        style(&self.name).cyan(),
+                        style(&err).red()
+                    );
+                    Err(err)
+                }
+            },
         }
     }
 
@@ -77,13 +88,13 @@ impl Task {
         if let Some(user) = &self.remote_cfg.user {
             Shell::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
                 .piped_stderr()
-                .with_desc(format!("Set {} user to {}", display, user))
+                .set_mute(true)
                 .execute()?
                 .check()?;
         }
         if let Some(email) = &self.remote_cfg.email {
             Shell::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
-                .with_desc(format!("Set {} email to {}", display, email))
+                .set_mute(true)
                 .execute()?
                 .check()?;
         }
