@@ -57,6 +57,7 @@ impl CompleteArgs {
             "reset" => branch::complete,
             "update" => no_complete,
             "clear" => owner::complete,
+            "import" => owner::complete,
         }
     }
 

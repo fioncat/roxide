@@ -89,15 +89,25 @@ impl Repo {
         }
     }
 
+    pub fn get_workspace_path<S>(remote: S, owner: S, name: S) -> PathBuf
+    where
+        S: AsRef<str>,
+    {
+        PathBuf::from(&config::base().workspace)
+            .join(remote.as_ref())
+            .join(owner.as_ref())
+            .join(name.as_ref())
+    }
+
     pub fn get_path(&self) -> PathBuf {
         if let Some(path) = &self.path {
             return PathBuf::from(path);
         }
-
-        PathBuf::from(&config::base().workspace)
-            .join(self.remote.as_str())
-            .join(self.owner.as_str())
-            .join(self.name.as_str())
+        Self::get_workspace_path(
+            self.remote.as_str(),
+            self.owner.as_str(),
+            self.name.as_str(),
+        )
     }
 
     pub fn as_string(&self, level: &NameLevel) -> String {
@@ -116,9 +126,12 @@ impl Repo {
         format!("{}:{}/{}", self.remote, self.owner, self.name)
     }
 
-    pub fn clone_url(&self, remote: &Remote) -> String {
+    pub fn get_clone_url<S>(owner: S, name: S, remote: &Remote) -> String
+    where
+        S: AsRef<str>,
+    {
         let mut ssh = remote.ssh;
-        if let Some(owner_cfg) = remote.owners.get(self.owner.as_str()) {
+        if let Some(owner_cfg) = remote.owners.get(owner.as_ref()) {
             if let Some(use_ssh) = owner_cfg.ssh {
                 ssh = use_ssh;
             }
@@ -130,9 +143,18 @@ impl Repo {
         };
 
         if ssh {
-            format!("git@{}:{}.git", domain, self.long_name())
+            format!("git@{}:{}/{}.git", domain, owner.as_ref(), name.as_ref())
         } else {
-            format!("https://{}/{}.git", domain, self.long_name())
+            format!(
+                "https://{}/{}/{}.git",
+                domain,
+                owner.as_ref(),
+                name.as_ref()
+            )
         }
+    }
+
+    pub fn clone_url(&self, remote: &Remote) -> String {
+        Self::get_clone_url(self.owner.as_str(), self.name.as_str(), remote)
     }
 }

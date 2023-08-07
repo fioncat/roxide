@@ -103,6 +103,11 @@ impl Shell {
         Self::with_args("sh", &["-c", script.as_str()])
     }
 
+    pub fn piped_stderr(&mut self) -> &mut Self {
+        self.cmd.stderr(Stdio::piped());
+        self
+    }
+
     pub fn with_desc(&mut self, desc: impl AsRef<str>) -> &mut Self {
         self.desc = Some(desc.as_ref().to_string());
         self
