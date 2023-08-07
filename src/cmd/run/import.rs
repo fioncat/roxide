@@ -135,7 +135,7 @@ impl Run for ImportArgs {
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(self.owner.clone());
 
-        let results = batch::run(tasks);
+        let results = batch::run("Import", tasks);
         for result in results {
             if let Ok(name) = result {
                 let name = Arc::try_unwrap(name).unwrap();

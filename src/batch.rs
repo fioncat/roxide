@@ -16,7 +16,7 @@ enum Report<R> {
     Done(usize, Result<R>, String),
 }
 
-pub fn run<T, R>(tasks: Vec<T>) -> Vec<Result<R>>
+pub fn run<T, R>(desc: &str, tasks: Vec<T>) -> Vec<Result<R>>
 where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
@@ -101,6 +101,8 @@ where
     }
     drop(task_tx);
 
+    let mut suc_count = 0;
+    let mut fail_count = 0;
     let mut running: Vec<(usize, String)> = Vec::with_capacity(task_len);
     let mut results: Vec<(usize, Result<R>)> = Vec::with_capacity(task_len);
     while results.len() < task_len {
@@ -116,8 +118,14 @@ where
             Report::Done(idx, result, msg) => {
                 cursor_up(running.len());
                 let ok = match result {
-                    Ok(_) => true,
-                    Err(_) => false,
+                    Ok(_) => {
+                        suc_count += 1;
+                        true
+                    },
+                    Err(_) => {
+                        fail_count += 1;
+                        false
+                    },
                 };
                 show_done(ok, msg, results.len(), task_len);
                 if let Some(running_idx) = running.iter().position(|(task_idx, _)| *task_idx == idx)
@@ -138,13 +146,14 @@ where
         handler.join().unwrap();
     }
 
+    println!("{desc} done, with {} successed, {} failed", style(suc_count).green(), style(fail_count).red());
     results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
     results.into_iter().map(|(_, result)| result).collect()
 }
 
 fn show_done(ok: bool, msg: String, current: usize, total: usize) {
     let pad_len = total.to_string().chars().count();
-    let current_pad = format!("{:pad_len$}", current, pad_len = pad_len);
+    let current_pad = format!("{:pad_len$}", current+1, pad_len = pad_len);
     if ok {
         println!("({current_pad}/{total}) {} {msg}", style("==>").green());
     } else {
