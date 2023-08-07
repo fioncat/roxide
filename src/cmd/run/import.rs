@@ -13,7 +13,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{api, config, confirm};
+use crate::{api, config, confirm, utils};
 
 /// Batch import repos
 #[derive(Args)]
@@ -27,6 +27,10 @@ pub struct ImportArgs {
     /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
+
+    /// If true, filter import repos.
+    #[clap(long, short)]
+    pub filter: bool,
 }
 
 struct ImportTask {
@@ -98,20 +102,36 @@ impl Run for ImportArgs {
         let remote = config::must_get_remote(&self.remote)?;
 
         let provider = api::init_provider(&remote, self.force)?;
-        let names = provider.list_repos(&self.owner)?;
+        let mut names: Vec<String> = provider
+            .list_repos(&self.owner)?
+            .into_iter()
+            .filter(|name| {
+                if let None = db.get(&self.remote, &self.owner, &name) {
+                    true
+                } else {
+                    false
+                }
+            })
+            .collect();
+        if names.is_empty() {
+            println!("Nothing to import");
+            return Ok(());
+        }
+
+        if self.filter {
+            names = utils::edit_items(names)?;
+        }
 
         let remote_arc = Arc::new(remote);
         let owner_arc = Arc::new(self.owner.clone());
 
         let mut tasks = Vec::with_capacity(names.len());
         for name in names {
-            if let None = db.get(&self.remote, &self.owner, &name) {
-                tasks.push(ImportTask {
-                    remote: remote_arc.clone(),
-                    owner: owner_arc.clone(),
-                    name: Arc::new(name),
-                })
-            }
+            tasks.push(ImportTask {
+                remote: remote_arc.clone(),
+                owner: owner_arc.clone(),
+                name: Arc::new(name),
+            })
         }
         drop(remote_arc);
         drop(owner_arc);

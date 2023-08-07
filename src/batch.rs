@@ -1,4 +1,5 @@
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
@@ -121,11 +122,11 @@ where
                     Ok(_) => {
                         suc_count += 1;
                         true
-                    },
+                    }
                     Err(_) => {
                         fail_count += 1;
                         false
-                    },
+                    }
                 };
                 show_done(ok, msg, results.len(), task_len);
                 if let Some(running_idx) = running.iter().position(|(task_idx, _)| *task_idx == idx)
@@ -146,18 +147,23 @@ where
         handler.join().unwrap();
     }
 
-    println!("{desc} done, with {} successed, {} failed", style(suc_count).green(), style(fail_count).red());
+    println!(
+        "{desc} done, with {} successed, {} failed",
+        style(suc_count).green(),
+        style(fail_count).red()
+    );
     results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
     results.into_iter().map(|(_, result)| result).collect()
 }
 
 fn show_done(ok: bool, msg: String, current: usize, total: usize) {
     let pad_len = total.to_string().chars().count();
-    let current_pad = format!("{:pad_len$}", current+1, pad_len = pad_len);
+    let current_pad = format!("{:pad_len$}", current + 1, pad_len = pad_len);
+    let prefix = format!("({current_pad}/{total})");
     if ok {
-        println!("({current_pad}/{total}) {} {msg}", style("==>").green());
+        println!("{} {} {msg}", style(prefix).bold(), style("==>").green());
     } else {
-        println!("({current_pad}/{total}) {} {msg}", style("==>").red());
+        println!("{} {} {msg}", style(prefix).bold(), style("==>").red());
     }
 }
 

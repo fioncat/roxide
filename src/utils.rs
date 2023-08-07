@@ -232,6 +232,16 @@ where
     Ok(content)
 }
 
+pub fn edit_items(items: Vec<String>) -> Result<Vec<String>> {
+    let content = items.join("\n");
+    let content = edit_content(content.as_str(), "filter_names", true)?;
+    Ok(content
+        .split('\n')
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect())
+}
+
 pub fn edit_file(editor: impl AsRef<str>, path: &PathBuf) -> Result<()> {
     ensure_dir(path)?;
     let mut cmd = Command::new(editor.as_ref());
