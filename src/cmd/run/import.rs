@@ -12,7 +12,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{api, config, confirm, utils};
+use crate::{api, config, utils};
 
 /// Batch import repos
 #[derive(Args)]
@@ -119,16 +119,8 @@ impl Run for ImportArgs {
         drop(remote_arc);
         drop(owner_arc);
 
-        if tasks.is_empty() {
-            println!("Nothing to import");
-            return Ok(());
-        }
-
-        println!("About to import:");
-        for task in tasks.iter() {
-            println!("  * {}", task.name);
-        }
-        confirm!("Do you want to import {}", utils::plural(&tasks, "repo"));
+        let items: Vec<_> = tasks.iter().map(|task| format!("{}", task.name)).collect();
+        utils::confirm_items(items, "import", "import", "Repo", "Repos")?;
 
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(self.owner.clone());

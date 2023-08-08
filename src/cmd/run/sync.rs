@@ -14,7 +14,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{config, confirm, utils};
+use crate::{config, utils};
 
 /// Sync database and workspace.
 #[derive(Args)]
@@ -95,18 +95,13 @@ impl Run for SyncArgs {
             .collect();
         let mut added = false;
         if !to_add.is_empty() {
-            println!("About to add missing repo:");
-            for repo in to_add.iter() {
-                println!("  * {}", repo.full_name());
+            let items: Vec<_> = to_add.iter().map(|repo| repo.full_name()).collect();
+            if utils::confirm_items_weak(items, "add", "addition", "Repo", "Repos")? {
+                for repo in to_add {
+                    db.update(repo);
+                }
+                added = true;
             }
-            confirm!(
-                "Do you want to add {} to database",
-                utils::plural(&to_add, "repo")
-            );
-            for repo in to_add {
-                db.update(repo);
-            }
-            added = true;
         }
 
         let repos = db.list_all();

@@ -6,7 +6,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::{config, confirm, utils};
+use crate::{config, utils};
 
 /// Batch remove repo(s)
 #[derive(Args)]
@@ -42,19 +42,8 @@ impl Run for ClearArgs {
             None => db.list_all(),
         };
         let repos = self.filter(repos)?;
-
-        if repos.is_empty() {
-            println!("Nothing to clear");
-            return Ok(());
-        }
-
-        println!("About to remove:");
-        for repo in repos.iter() {
-            println!(" * {}", repo.full_name());
-        }
-        println!();
-
-        confirm!("Do you want to remove {}", utils::plural(&repos, "repo"));
+        let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
+        utils::confirm_items(items, "remove", "removal", "Repo", "Repos")?;
 
         for repo in repos.into_iter() {
             let path = repo.get_path();

@@ -4,7 +4,7 @@ use console::style;
 
 use crate::cmd::Run;
 use crate::shell::{self, BranchStatus, GitBranch, Shell};
-use crate::{confirm, utils};
+use crate::utils;
 
 /// Git branch operations
 #[derive(Args)]
@@ -139,21 +139,19 @@ impl BranchArgs {
         }
 
         println!("Backup branch is {}", style(back).magenta());
-        println!(
-            "About to sync {}:",
-            utils::plural_full(&tasks, "branch", "branches")
-        );
+        let mut items = Vec::with_capacity(tasks.len());
         for task in &tasks {
-            match task {
-                SyncBranchTask::Sync(op, branch) => {
-                    println!("{} {} {} ", style("+").green(), op, style(branch).magenta())
+            let msg = match task {
+                SyncBranchTask::Sync(_, branch) => {
+                    format!("{}{}", style("+").green(), style(branch).magenta())
                 }
                 SyncBranchTask::Delete(branch) => {
-                    println!("{} delete {} ", style("-").red(), style(branch).magenta())
+                    format!("{}{}", style("-").red(), style(branch).magenta())
                 }
-            }
+            };
+            items.push(msg);
         }
-        confirm!("Continue");
+        utils::confirm_items(items, "sync", "synchronization", "Branch", "Branches")?;
 
         println!();
         for task in tasks {
