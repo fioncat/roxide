@@ -12,7 +12,7 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
 use crate::shell::Workflow;
-use crate::{config, utils};
+use crate::{config, confirm, utils};
 
 /// Run workflow
 #[derive(Args)]
@@ -81,6 +81,11 @@ impl Run for RunArgs {
         }
         if repos.len() == 1 {
             let repo = repos.into_iter().next().unwrap();
+            confirm!(
+                "Run workflow {} for repo {}",
+                self.workflow,
+                repo.full_name()
+            );
             workflow.execute_repo(&repo)?;
             return Ok(());
         }
@@ -97,6 +102,22 @@ impl Run for RunArgs {
                 return Ok(());
             }
         }
+
+        println!("About to run:");
+        for repo in repos.iter() {
+            let name = repo.as_string(&level);
+            println!("  * {}", name);
+        }
+        let repo_word = if repos.len() == 1 {
+            String::from("1 repo")
+        } else {
+            format!("{} repos", repos.len())
+        };
+        confirm!(
+            "Do you want to run workflow {} for {}",
+            self.workflow,
+            repo_word
+        );
 
         let level = Arc::new(level);
         let mut tasks = Vec::with_capacity(repos.len());
