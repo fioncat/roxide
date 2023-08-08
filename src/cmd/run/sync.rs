@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::batch::{self, Reporter, Task};
@@ -45,54 +45,24 @@ impl Task<()> for SyncTask {
         let path = format!("{}", self.path.display());
         if clone {
             rp.message(format!("Cloning {}...", self.show_name));
-            if Shell::git(&["clone", url.as_str(), path.as_str()])
-                .piped_stderr()
-                .set_mute(true)
-                .execute()?
-                .check()
-                .is_err()
-            {
-                bail!("Clone {} failed", url);
-            }
+            Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
         } else {
-            rp.message(format!("Setup {}...", self.show_name));
-            if Shell::git(&[
+            rp.message(format!("Fetching {}...", self.show_name));
+            Shell::exec_git_mute(&[
                 "-C",
                 path.as_str(),
                 "remote",
                 "set-url",
                 "origin",
                 url.as_str(),
-            ])
-            .piped_stderr()
-            .set_mute(true)
-            .execute()?
-            .check()
-            .is_err()
-            {
-                bail!("Set origin url to {} failed", url);
-            }
+            ])?;
+            Shell::exec_git_mute(&["-C", path.as_str(), "fetch", "--all"])?;
         }
         if let Some(user) = &self.remote.user {
-            if Shell::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
-                .piped_stderr()
-                .set_mute(true)
-                .execute()?
-                .check()
-                .is_err()
-            {
-                bail!("Set user.name to {} failed", user);
-            }
+            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.name", user.as_str()])?;
         }
         if let Some(email) = &self.remote.email {
-            if Shell::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
-                .set_mute(true)
-                .execute()?
-                .check()
-                .is_err()
-            {
-                bail!("Set user.email to {} failed", email);
-            }
+            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.email", email.as_str()])?;
         }
         Ok(())
     }

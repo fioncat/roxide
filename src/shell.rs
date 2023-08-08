@@ -97,6 +97,25 @@ impl Shell {
         Self::with_args("git", args)
     }
 
+    pub fn exec_mute(program: &str, args: &[&str]) -> Result<()> {
+        if Self::with_args(program, args)
+            .piped_stderr()
+            .set_mute(true)
+            .execute()?
+            .check()
+            .is_err()
+        {
+            let cmd = args.join(" ");
+            bail!("Execute command failed: {} {}", program, cmd);
+        }
+
+        Ok(())
+    }
+
+    pub fn exec_git_mute(args: &[&str]) -> Result<()> {
+        Self::exec_mute("git", args)
+    }
+
     pub fn sh(script: &str) -> Shell {
         // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
         // the script does not output any content to stdout. This method is not
