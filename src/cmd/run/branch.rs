@@ -142,18 +142,13 @@ impl BranchArgs {
         let mut items = Vec::with_capacity(tasks.len());
         for task in &tasks {
             let msg = match task {
-                SyncBranchTask::Sync(_, branch) => {
-                    format!("{}{}", style("+").green(), style(branch).magenta())
-                }
-                SyncBranchTask::Delete(branch) => {
-                    format!("{}{}", style("-").red(), style(branch).magenta())
-                }
+                SyncBranchTask::Sync(_, branch) => format!("+{branch}"),
+                SyncBranchTask::Delete(branch) => format!("-{branch}"),
             };
             items.push(msg);
         }
         utils::confirm_items(items, "sync", "synchronization", "Branch", "Branches")?;
 
-        println!();
         for task in tasks {
             match task {
                 SyncBranchTask::Sync(op, branch) => {
