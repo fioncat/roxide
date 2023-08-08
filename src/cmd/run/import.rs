@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use console::style;
 
-use crate::batch::{self, Task};
+use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
@@ -41,7 +41,9 @@ struct ImportTask {
 }
 
 impl Task<Arc<String>> for ImportTask {
-    fn run(&self) -> Result<Arc<String>> {
+    fn run(&self, rp: &Reporter<Arc<String>>) -> Result<Arc<String>> {
+        rp.message(format!("Cloning {}...", self.name));
+
         let path = Repo::get_workspace_path(
             self.remote.name.as_str(),
             self.owner.as_str(),
@@ -79,10 +81,6 @@ impl Task<Arc<String>> for ImportTask {
                 .check()?;
         }
         Ok(Arc::clone(&self.name))
-    }
-
-    fn message_running(&self) -> String {
-        format!("Cloning {}...", self.name)
     }
 
     fn message_done(&self, result: &Result<Arc<String>>) -> String {
