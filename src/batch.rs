@@ -164,6 +164,7 @@ where
         handler.join().unwrap();
     }
 
+    println!();
     println!(
         "{desc} done, with {} successed, {} failed",
         style(suc_count).green(),

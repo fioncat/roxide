@@ -11,10 +11,11 @@ use console::{style, StyledObject};
 use regex::{Captures, Regex};
 
 use crate::api::types::Provider;
+use crate::batch::Reporter;
 use crate::config::types::{Remote, WorkflowStep};
 use crate::errors::SilentExit;
-use crate::repo::types::Repo;
-use crate::utils;
+use crate::repo::types::{NameLevel, Repo};
+use crate::{config, utils};
 use crate::{confirm, exec, info};
 
 pub struct Shell {
@@ -640,35 +641,114 @@ impl GitTag {
     }
 }
 
-pub fn execute_workflow(steps: &Vec<WorkflowStep>, repo: &Rc<Repo>) -> Result<()> {
-    let dir = repo.get_path();
-    for step in steps.iter() {
-        if let Some(run) = &step.run {
-            let script = run.replace("\n", ";");
-            let mut cmd = Shell::sh(&script);
-            cmd.with_path(&dir);
+pub struct Workflow {
+    pub name: String,
+    steps: &'static Vec<WorkflowStep>,
+}
 
-            cmd.with_env("REPO_NAME", repo.name.as_str());
-            cmd.with_env("REPO_OWNER", repo.owner.as_str());
-            cmd.with_env("REMOTE", repo.remote.as_str());
-            cmd.with_env("REPO_LONG", repo.long_name());
-            cmd.with_env("REPO_FULL", repo.full_name());
-
-            cmd.with_desc(format!("Run {}", step.name));
-
-            cmd.execute()?.check()?;
-            continue;
+impl Workflow {
+    pub fn new(name: impl AsRef<str>) -> Result<Workflow> {
+        match config::base().workflows.get(name.as_ref()) {
+            Some(steps) => Ok(Workflow {
+                name: name.as_ref().to_string(),
+                steps,
+            }),
+            None => bail!("Could not find workeflow {}", name.as_ref()),
         }
-        if let None = step.file {
-            continue;
-        }
-
-        let content = step.file.as_ref().unwrap();
-        let content = content.replace("\\t", "\t");
-
-        exec!("Create file {}", step.name);
-        let path = dir.join(&step.name);
-        utils::write_file(&path, content.as_bytes())?;
     }
-    Ok(())
+
+    pub fn execute_repo(&self, repo: &Rc<Repo>) -> Result<()> {
+        info!("Execute workflow {} for {}", self.name, repo.full_name());
+        let dir = repo.get_path();
+        for step in self.steps.iter() {
+            if let Some(run) = &step.run {
+                let script = run.replace("\n", ";");
+                let mut cmd = Shell::sh(&script);
+                cmd.with_path(&dir);
+
+                cmd.with_env("REPO_NAME", repo.name.as_str());
+                cmd.with_env("REPO_OWNER", repo.owner.as_str());
+                cmd.with_env("REMOTE", repo.remote.as_str());
+                cmd.with_env("REPO_LONG", repo.long_name());
+                cmd.with_env("REPO_FULL", repo.full_name());
+
+                cmd.with_desc(format!("Run {}", step.name));
+
+                cmd.execute()?.check()?;
+                continue;
+            }
+            if let None = step.file {
+                continue;
+            }
+
+            let content = step.file.as_ref().unwrap();
+            let content = content.replace("\\t", "\t");
+
+            exec!("Create file {}", step.name);
+            let path = dir.join(&step.name);
+            utils::write_file(&path, content.as_bytes())?;
+        }
+        Ok(())
+    }
+
+    pub fn execute_task<S, R>(
+        &self,
+        name_level: &NameLevel,
+        rp: &Reporter<R>,
+        dir: &PathBuf,
+        remote: S,
+        owner: S,
+        name: S,
+    ) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let long_name = format!("{}/{}", owner.as_ref(), name.as_ref());
+        let full_name = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
+        let show_name = match name_level {
+            NameLevel::Full => full_name.as_str(),
+            NameLevel::Owner => long_name.as_str(),
+            NameLevel::Name => name.as_ref(),
+        };
+
+        for step in self.steps.iter() {
+            if let Some(run) = &step.run {
+                let script = run.replace("\n", ";");
+                let mut cmd = Shell::sh(&script);
+                cmd.with_path(&dir);
+
+                cmd.with_env("REPO_NAME", name.as_ref());
+                cmd.with_env("REPO_OWNER", owner.as_ref());
+                cmd.with_env("REMOTE", remote.as_ref());
+                cmd.with_env("REPO_LONG", long_name.as_str());
+                cmd.with_env("REPO_FULL", full_name.as_str());
+
+                cmd.set_mute(true).piped_stderr();
+
+                rp.message(format!(
+                    "Running step {} for {}",
+                    style(&step.name).green(),
+                    style(show_name).cyan()
+                ));
+
+                cmd.execute()?.check()?;
+                continue;
+            }
+            if let None = step.file {
+                continue;
+            }
+
+            let content = step.file.as_ref().unwrap();
+            let content = content.replace("\\t", "\t");
+
+            rp.message(format!(
+                "Create file {} for {}",
+                style(&step.name).green(),
+                style(show_name).cyan()
+            ));
+            let path = dir.join(&step.name);
+            utils::write_file(&path, content.as_bytes())?;
+        }
+        Ok(())
+    }
 }

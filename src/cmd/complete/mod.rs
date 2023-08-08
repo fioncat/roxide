@@ -4,6 +4,7 @@ pub mod home;
 pub mod owner;
 pub mod release;
 pub mod remote;
+pub mod run;
 pub mod tag;
 
 pub struct Complete {
