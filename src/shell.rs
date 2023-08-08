@@ -233,16 +233,9 @@ pub fn ensure_no_uncommitted() -> Result<()> {
     let mut git = Shell::git(&["status", "-s"]);
     let lines = git.execute()?.checked_lines()?;
     if !lines.is_empty() {
-        let (word, call) = if lines.len() == 1 {
-            ("change", "it")
-        } else {
-            ("changes", "them")
-        };
         bail!(
-            "you have {} uncommitted {}, please handle {} first",
-            lines.len(),
-            word,
-            call
+            "You have {} to handle",
+            utils::plural(&lines, "uncommitted change"),
         );
     }
     Ok(())

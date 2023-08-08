@@ -108,15 +108,10 @@ impl Run for RunArgs {
             let name = repo.as_string(&level);
             println!("  * {}", name);
         }
-        let repo_word = if repos.len() == 1 {
-            String::from("1 repo")
-        } else {
-            format!("{} repos", repos.len())
-        };
         confirm!(
             "Do you want to run workflow {} for {}",
             self.workflow,
-            repo_word
+            utils::plural(&repos, "repo")
         );
 
         let level = Arc::new(level);

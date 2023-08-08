@@ -146,7 +146,7 @@ pub fn parse_query(remote: &Remote, query: impl AsRef<str>) -> (String, String) 
     (owner, name)
 }
 
-fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
+pub fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
     let items: Vec<_> = query.as_ref().split("/").collect();
     let items_len = items.len();
     let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
@@ -542,5 +542,21 @@ impl Drop for Lock {
                 self.path.display()
             )),
         }
+    }
+}
+
+pub fn plural<T>(vec: &Vec<T>, name: &str) -> String {
+    let plural = format!("{name}s");
+    plural_full(vec, name, plural.as_str())
+}
+
+pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
+    if vec.is_empty() {
+        return format!("0 {}", name);
+    }
+    if vec.len() == 1 {
+        format!("1 {}", name)
+    } else {
+        format!("{} {}", vec.len(), plural)
     }
 }

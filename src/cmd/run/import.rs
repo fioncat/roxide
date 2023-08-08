@@ -143,12 +143,7 @@ impl Run for ImportArgs {
         for task in tasks.iter() {
             println!("  * {}", task.name);
         }
-        let task_word = if tasks.len() == 1 {
-            String::from("1 repo")
-        } else {
-            format!("{} repos", tasks.len())
-        };
-        confirm!("Do you want to import {}", task_word);
+        confirm!("Do you want to import {}", utils::plural(&tasks, "repo"));
 
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(self.owner.clone());

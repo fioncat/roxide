@@ -54,12 +54,7 @@ impl Run for ClearArgs {
         }
         println!();
 
-        let word = if repos.len() == 1 {
-            String::from("1 repo")
-        } else {
-            format!("{} repos", repos.len())
-        };
-        confirm!("Do you want to remove {}", word);
+        confirm!("Do you want to remove {}", utils::plural(&repos, "repo"));
 
         for repo in repos.into_iter() {
             let path = repo.get_path();
