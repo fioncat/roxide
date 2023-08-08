@@ -3,15 +3,15 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
-use crate::shell::Shell;
-use crate::{api, info, shell};
+use crate::shell::{Shell, Workflow};
+use crate::{api, shell};
 use crate::{config, confirm, utils};
 
 /// Print the home path of a repo, recommand to use `zz` command instead.
@@ -158,17 +158,8 @@ impl HomeArgs {
         if let Some(owner) = remote.owners.get(repo.owner.as_str()) {
             if let Some(workflow_names) = &owner.on_create {
                 for workflow_name in workflow_names.iter() {
-                    let maybe_workflow = config::base().workflows.get(workflow_name);
-                    if let None = maybe_workflow {
-                        bail!(
-                            "Could not find workeflow {} for owner {}, please check your config",
-                            workflow_name,
-                            repo.owner.as_str(),
-                        );
-                    }
-                    let workflow = maybe_workflow.unwrap();
-                    info!("Execute on_create workflow {}", workflow_name);
-                    shell::execute_workflow(workflow, repo)?;
+                    let wf = Workflow::new(workflow_name)?;
+                    wf.execute_repo(repo)?;
                 }
             }
         }
