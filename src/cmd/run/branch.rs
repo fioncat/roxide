@@ -131,8 +131,6 @@ impl BranchArgs {
                 tasks.push(task);
             }
         }
-
-        println!();
         if tasks.is_empty() {
             println!("Nothing to do");
             return Ok(());
