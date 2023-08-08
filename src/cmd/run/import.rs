@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Args;
-use console::style;
 
 use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
@@ -13,7 +12,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{api, config, confirm, utils};
+use crate::{api, config, utils};
 
 /// Batch import repos
 #[derive(Args)]
@@ -61,24 +60,13 @@ impl Task<Arc<String>> for ImportTask {
         let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         let path = format!("{}", path.display());
 
-        Shell::git(&["clone", url.as_str(), path.as_str()])
-            .piped_stderr()
-            .set_mute(true)
-            .execute()?
-            .check()?;
+        Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
 
         if let Some(user) = &self.remote.user {
-            Shell::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
-                .piped_stderr()
-                .set_mute(true)
-                .execute()?
-                .check()?;
+            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.name", user.as_str()])?;
         }
         if let Some(email) = &self.remote.email {
-            Shell::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
-                .set_mute(true)
-                .execute()?
-                .check()?;
+            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.email", email.as_str()])?;
         }
         Ok(Arc::clone(&self.name))
     }
@@ -86,10 +74,7 @@ impl Task<Arc<String>> for ImportTask {
     fn message_done(&self, result: &Result<Arc<String>>) -> String {
         match result {
             Ok(_) => format!("Clone {} done", self.name),
-            Err(_) => {
-                let msg = format!("Clone {} failed", self.name);
-                format!("{}", style(msg).red())
-            }
+            Err(err) => format!("Clone {} error: {}", self.name, err),
         }
     }
 }
@@ -134,21 +119,8 @@ impl Run for ImportArgs {
         drop(remote_arc);
         drop(owner_arc);
 
-        if tasks.is_empty() {
-            println!("Nothing to import");
-            return Ok(());
-        }
-
-        println!("About to import:");
-        for task in tasks.iter() {
-            println!("  * {}", task.name);
-        }
-        let task_word = if tasks.len() == 1 {
-            String::from("1 repo")
-        } else {
-            format!("{} repos", tasks.len())
-        };
-        confirm!("Do you want to import {}", task_word);
+        let items: Vec<_> = tasks.iter().map(|task| format!("{}", task.name)).collect();
+        utils::confirm_items(items, "import", "import", "Repo", "Repos")?;
 
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(self.owner.clone());

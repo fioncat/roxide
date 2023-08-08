@@ -146,7 +146,7 @@ pub fn parse_query(remote: &Remote, query: impl AsRef<str>) -> (String, String) 
     (owner, name)
 }
 
-fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
+pub fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
     let items: Vec<_> = query.as_ref().split("/").collect();
     let items_len = items.len();
     let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
@@ -543,4 +543,60 @@ impl Drop for Lock {
             )),
         }
     }
+}
+
+pub fn plural<T>(vec: &Vec<T>, name: &str) -> String {
+    let plural = format!("{name}s");
+    plural_full(vec, name, plural.as_str())
+}
+
+pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
+    if vec.is_empty() {
+        return format!("0 {}", name);
+    }
+    if vec.len() == 1 {
+        format!("1 {}", name)
+    } else {
+        format!("{} {}", vec.len(), plural)
+    }
+}
+
+pub fn confirm_items(
+    items: Vec<String>,
+    action: &str,
+    noun: &str,
+    name: &str,
+    plural: &str,
+) -> Result<()> {
+    if !confirm_items_weak(items, action, noun, name, plural)? {
+        bail!(SilentExit { code: 60 });
+    }
+    Ok(())
+}
+
+pub fn confirm_items_weak(
+    items: Vec<String>,
+    action: &str,
+    noun: &str,
+    name: &str,
+    plural: &str,
+) -> Result<bool> {
+    info!("Require confirm to {}", action);
+    println!();
+
+    if items.is_empty() {
+        println!("Nothing to {action}");
+        return Ok(false);
+    }
+
+    let name = if items.len() == 1 { name } else { plural };
+    println!("{} ({}): {}", name, items.len(), items.join("  "));
+    println!();
+    println!("Total {} {} to {}", items.len(), name, action);
+    println!();
+    let ok = confirm(format!("Proceed with {noun}"))?;
+    if ok {
+        println!();
+    }
+    Ok(ok)
 }

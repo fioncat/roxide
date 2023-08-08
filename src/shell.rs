@@ -97,6 +97,25 @@ impl Shell {
         Self::with_args("git", args)
     }
 
+    pub fn exec_mute(program: &str, args: &[&str]) -> Result<()> {
+        if Self::with_args(program, args)
+            .piped_stderr()
+            .set_mute(true)
+            .execute()?
+            .check()
+            .is_err()
+        {
+            let cmd = args.join(" ");
+            bail!("Execute command failed: {} {}", program, cmd);
+        }
+
+        Ok(())
+    }
+
+    pub fn exec_git_mute(args: &[&str]) -> Result<()> {
+        Self::exec_mute("git", args)
+    }
+
     pub fn sh(script: &str) -> Shell {
         // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
         // the script does not output any content to stdout. This method is not
@@ -233,16 +252,9 @@ pub fn ensure_no_uncommitted() -> Result<()> {
     let mut git = Shell::git(&["status", "-s"]);
     let lines = git.execute()?.checked_lines()?;
     if !lines.is_empty() {
-        let (word, call) = if lines.len() == 1 {
-            ("change", "it")
-        } else {
-            ("changes", "them")
-        };
         bail!(
-            "you have {} uncommitted {}, please handle {} first",
-            lines.len(),
-            word,
-            call
+            "You have {} to handle",
+            utils::plural(&lines, "uncommitted change"),
         );
     }
     Ok(())

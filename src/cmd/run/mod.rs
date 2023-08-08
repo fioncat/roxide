@@ -16,5 +16,6 @@ pub mod remove;
 pub mod reset;
 pub mod run;
 pub mod squash;
+pub mod sync;
 pub mod tag;
 pub mod update;

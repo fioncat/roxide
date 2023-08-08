@@ -60,6 +60,7 @@ impl CompleteArgs {
             "clear" => owner::complete,
             "import" => owner::complete,
             "run" => run::complete,
+            "sync" => no_complete,
         }
     }
 
