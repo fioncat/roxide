@@ -31,6 +31,10 @@ pub struct BranchArgs {
     /// Push change (create or delete) to remote
     #[clap(long, short)]
     pub push: bool,
+
+    /// Search and switch to remote branch
+    #[clap(long, short)]
+    pub remote: bool,
 }
 
 enum SyncBranchTask<'a> {
@@ -43,6 +47,9 @@ impl Run for BranchArgs {
         if self.sync {
             shell::ensure_no_uncommitted()?;
             self.fetch()?;
+        }
+        if self.remote {
+            return self.search_and_switch_remote();
         }
         let branches = GitBranch::list().context("List branch")?;
         if self.sync {
@@ -230,5 +237,19 @@ impl BranchArgs {
             Some(b) => Ok(b),
             None => bail!("Could not find current branch"),
         }
+    }
+
+    fn search_and_switch_remote(&self) -> Result<()> {
+        self.fetch()?;
+        let branches = GitBranch::list_remote("origin")?;
+        if branches.is_empty() {
+            println!("No remote branch to switch");
+            return Ok(());
+        }
+
+        let idx = shell::search(&branches)?;
+        let target = branches[idx].as_str();
+
+        Shell::git(&["checkout", target]).execute()?.check()
     }
 }

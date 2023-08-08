@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{ErrorKind, Read, Write};
 use std::mem;
 use std::path::PathBuf;
@@ -294,6 +295,57 @@ impl GitBranch {
         }
 
         Ok(branches)
+    }
+
+    pub fn list_remote(remote: &str) -> Result<Vec<String>> {
+        let lines = Shell::git(&["branch", "-al"])
+            .with_desc("List remote git branch")
+            .execute()?
+            .checked_lines()?;
+        let remote_prefix = format!("{remote}/");
+        let mut items = Vec::with_capacity(lines.len());
+        for line in lines {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if !line.starts_with("remotes/") {
+                continue;
+            }
+            let item = line.strip_prefix("remotes/").unwrap();
+            if !item.starts_with(&remote_prefix) {
+                continue;
+            }
+            let item = item.strip_prefix(&remote_prefix).unwrap().trim();
+            if item.is_empty() {
+                continue;
+            }
+            if item.starts_with("HEAD ->") {
+                continue;
+            }
+            items.push(item.to_string());
+        }
+
+        let lines = Shell::git(&["branch"])
+            .with_desc("List local git branch")
+            .execute()?
+            .checked_lines()?;
+        let mut local_branch_map = HashSet::with_capacity(lines.len());
+        for line in lines {
+            let mut line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with("*") {
+                line = line.strip_prefix("*").unwrap().trim();
+            }
+            local_branch_map.insert(line.to_string());
+        }
+
+        Ok(items
+            .into_iter()
+            .filter(|item| !local_branch_map.contains(item))
+            .collect())
     }
 
     pub fn default() -> Result<String> {
