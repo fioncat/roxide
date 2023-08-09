@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use anyhow::{bail, Result};
 use clap::Args;
@@ -6,10 +8,11 @@ use console::style;
 
 use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
+use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::snapshot::{Item, Snapshot};
 use crate::shell::Shell;
-use crate::{info, utils};
+use crate::{config, info, utils};
 
 /// Snapshot operations for workspace
 #[derive(Args)]
@@ -53,7 +56,26 @@ impl Run for SnapshotArgs {
 impl SnapshotArgs {
     fn create(&self, name: String) -> Result<()> {
         let db = Database::read()?;
-        let repos = db.list_all();
+        let all_repos = db.list_all();
+        let mut repos = Vec::with_capacity(all_repos.len());
+        let mut remotes: HashMap<String, Rc<Remote>> = HashMap::new();
+        for repo in all_repos {
+            let remote = match remotes.get(repo.remote.as_str()) {
+                Some(remote) => remote.clone(),
+                None => {
+                    let remote = config::must_get_remote(repo.remote.as_str())?;
+                    let remote = Rc::new(remote);
+                    let ret = remote.clone();
+                    remotes.insert(format!("{}", repo.remote), remote);
+                    ret
+                }
+            };
+            if let None = remote.clone.as_ref() {
+                continue;
+            }
+            repos.push(repo);
+        }
+
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
         utils::confirm_items(items, "take snapshot", "snapshot", "repo", "repos")?;
 
