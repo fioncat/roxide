@@ -182,12 +182,16 @@ impl Database {
         owners
     }
 
-    pub fn update(&mut self, repo: Rc<Repo>) {
+    pub fn add(&mut self, repo: Rc<Repo>) {
         if let Some(idx) = self.position(&repo) {
-            self.repos[idx] = repo.update();
+            self.repos[idx] = repo;
         } else {
-            self.repos.push(repo.update());
+            self.repos.push(repo);
         }
+    }
+
+    pub fn update(&mut self, repo: Rc<Repo>) {
+        self.add(repo.update());
     }
 
     pub fn remove(&mut self, repo: Rc<Repo>) {

@@ -174,6 +174,15 @@ where
     results.into_iter().map(|(_, result)| result).collect()
 }
 
+pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
+    for result in results {
+        if let Err(_) = result {
+            return false;
+        }
+    }
+    true
+}
+
 fn show_done(ok: bool, msg: String, current: usize, total: usize) {
     let pad_len = total.to_string().chars().count();
     let current_pad = format!("{:pad_len$}", current + 1, pad_len = pad_len);
