@@ -406,6 +406,11 @@ pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
 }
 
 pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
+    match fs::read_dir(&path) {
+        Ok(_) => {}
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err).with_context(|| format!("Read repo dir {}", path.display())),
+    }
     info!("Remove dir {}", path.display());
     fs::remove_dir_all(&path).context("Remove directory")?;
 
