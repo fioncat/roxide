@@ -43,7 +43,7 @@ impl Run for ClearArgs {
         };
         let repos = self.filter(repos)?;
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
-        utils::confirm_items(items, "remove", "removal", "Repo", "Repos")?;
+        utils::confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
 
         for repo in repos.into_iter() {
             let path = repo.get_path();

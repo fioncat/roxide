@@ -104,7 +104,7 @@ impl Run for RunArgs {
         }
 
         let items: Vec<_> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-        utils::confirm_items(items, "run workflow", "workflow", "Repo", "Repos")?;
+        utils::confirm_items(&items, "run workflow", "workflow", "Repo", "Repos")?;
 
         let level = Arc::new(level);
         let mut tasks = Vec::with_capacity(repos.len());

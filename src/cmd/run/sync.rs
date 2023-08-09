@@ -99,7 +99,7 @@ impl Run for SyncArgs {
         let mut added = false;
         if !to_add.is_empty() {
             let items: Vec<_> = to_add.iter().map(|repo| repo.full_name()).collect();
-            if utils::confirm_items_weak(items, "add", "addition", "Repo", "Repos")? {
+            if utils::confirm_items_weak(&items, "add", "addition", "Repo", "Repos")? {
                 info!("Add {} to database done", utils::plural(&to_add, "repo"));
                 for repo in to_add {
                     db.update(repo);

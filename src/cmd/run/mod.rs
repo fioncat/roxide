@@ -15,6 +15,7 @@ pub mod release;
 pub mod remove;
 pub mod reset;
 pub mod run;
+pub mod snapshot;
 pub mod squash;
 pub mod sync;
 pub mod tag;

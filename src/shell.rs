@@ -112,6 +112,44 @@ impl Shell {
         Ok(())
     }
 
+    pub fn exec_mute_lines(program: &str, args: &[&str]) -> Result<Vec<String>> {
+        let result = Self::with_args(program, args)
+            .piped_stderr()
+            .set_mute(true)
+            .execute()?
+            .checked_lines();
+        match result {
+            Ok(lines) => Ok(lines),
+            Err(_) => {
+                let cmd = args.join(" ");
+                bail!("Execute command failed: {} {}", program, cmd)
+            }
+        }
+    }
+
+    pub fn exec_mute_read(program: &str, args: &[&str]) -> Result<String> {
+        let result = Self::with_args(program, args)
+            .piped_stderr()
+            .set_mute(true)
+            .execute()?
+            .checked_read();
+        match result {
+            Ok(s) => Ok(s),
+            Err(_) => {
+                let cmd = args.join(" ");
+                bail!("Execute command failed: {} {}", program, cmd)
+            }
+        }
+    }
+
+    pub fn exec_git_mute_lines(args: &[&str]) -> Result<Vec<String>> {
+        Self::exec_mute_lines("git", args)
+    }
+
+    pub fn exec_git_mute_read(args: &[&str]) -> Result<String> {
+        Self::exec_mute_read("git", args)
+    }
+
     pub fn exec_git_mute(args: &[&str]) -> Result<()> {
         Self::exec_mute("git", args)
     }

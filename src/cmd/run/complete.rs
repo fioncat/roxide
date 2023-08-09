@@ -10,6 +10,7 @@ use crate::cmd::complete::owner;
 use crate::cmd::complete::release;
 use crate::cmd::complete::remote;
 use crate::cmd::complete::run;
+use crate::cmd::complete::snapshot;
 use crate::cmd::complete::tag;
 use crate::cmd::complete::Complete;
 use crate::cmd::Run;
@@ -61,6 +62,7 @@ impl CompleteArgs {
             "import" => owner::complete,
             "run" => run::complete,
             "sync" => no_complete,
+            "snapshot" => snapshot::complete,
         }
     }
 
