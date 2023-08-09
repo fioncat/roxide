@@ -140,7 +140,11 @@ impl BranchArgs {
         let mut items = Vec::with_capacity(tasks.len());
         for task in &tasks {
             let msg = match task {
-                SyncBranchTask::Sync(_, branch) => format!("+{branch}"),
+                SyncBranchTask::Sync(op, branch) => match *op {
+                    "push" => format!("↑{branch}"),
+                    "pull" => format!("↓{branch}"),
+                    _ => format!("?{branch}"),
+                },
                 SyncBranchTask::Delete(branch) => format!("-{branch}"),
             };
             items.push(msg);
