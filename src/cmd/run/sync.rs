@@ -14,7 +14,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{config, utils};
+use crate::{config, info, utils};
 
 /// Sync database and workspace.
 #[derive(Args)]
@@ -33,6 +33,9 @@ struct SyncTask {
 
 impl Task<()> for SyncTask {
     fn run(&self, rp: &Reporter<()>) -> Result<()> {
+        if let None = self.remote.clone.as_ref() {
+            return Ok(());
+        }
         let clone = match fs::read_dir(&self.path) {
             Ok(_) => false,
             Err(err) if err.kind() == ErrorKind::NotFound => true,
@@ -97,37 +100,43 @@ impl Run for SyncArgs {
         if !to_add.is_empty() {
             let items: Vec<_> = to_add.iter().map(|repo| repo.full_name()).collect();
             if utils::confirm_items_weak(items, "add", "addition", "Repo", "Repos")? {
+                info!("Add {} to database done", utils::plural(&to_add, "repo"));
                 for repo in to_add {
                     db.update(repo);
                 }
                 added = true;
             }
+        } else {
+            info!("Database is up-to-date");
         }
 
-        let repos = db.list_all();
-        let mut tasks = Vec::with_capacity(repos.len());
-        let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
-        for repo in repos {
-            let remote = match remotes.get(repo.remote.as_str()) {
-                Some(remote) => remote.clone(),
-                None => {
-                    let remote = config::must_get_remote(repo.remote.as_str())?;
-                    let remote = Arc::new(remote);
-                    let ret = remote.clone();
-                    remotes.insert(format!("{}", repo.remote), remote);
-                    ret
-                }
-            };
-            tasks.push(SyncTask {
-                remote,
-                owner: format!("{}", repo.owner),
-                name: format!("{}", repo.name),
-                path: repo.get_path(),
-                show_name: repo.full_name(),
-            });
+        println!();
+        if utils::confirm("Proceed with workspace synchronization")? {
+            let repos = db.list_all();
+            let mut tasks = Vec::with_capacity(repos.len());
+            let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
+            for repo in repos {
+                let remote = match remotes.get(repo.remote.as_str()) {
+                    Some(remote) => remote.clone(),
+                    None => {
+                        let remote = config::must_get_remote(repo.remote.as_str())?;
+                        let remote = Arc::new(remote);
+                        let ret = remote.clone();
+                        remotes.insert(format!("{}", repo.remote), remote);
+                        ret
+                    }
+                };
+                tasks.push(SyncTask {
+                    remote,
+                    owner: format!("{}", repo.owner),
+                    name: format!("{}", repo.name),
+                    path: repo.get_path(),
+                    show_name: repo.full_name(),
+                });
+            }
+            let _ = batch::run("Sync", tasks);
         }
 
-        let _ = batch::run("Sync", tasks);
         if added {
             db.close()?;
         }
