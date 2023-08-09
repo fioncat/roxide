@@ -141,7 +141,13 @@ impl Task<String> for CheckSnapshotTask {
             };
         let origin_target = format!("origin/{branch}");
         let compare = format!("{origin_target}..HEAD");
-        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "log", compare.as_str()])?;
+        let lines = Shell::exec_git_mute_lines(&[
+            "-C",
+            path.as_str(),
+            "log",
+            "--oneline",
+            compare.as_str(),
+        ])?;
         if !lines.is_empty() {
             bail!(
                 "Found {}",
