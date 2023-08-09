@@ -592,7 +592,12 @@ pub fn confirm_items_weak(
     let name = if items.len() == 1 { name } else { plural };
     println!("{} ({}): {}", name, items.len(), items.join("  "));
     println!();
-    println!("Total {} {} to {}", items.len(), name, action);
+    println!(
+        "Total {} {} to {}",
+        items.len(),
+        name.to_lowercase(),
+        action
+    );
     println!();
     let ok = confirm(format!("Proceed with {noun}"))?;
     if ok {
