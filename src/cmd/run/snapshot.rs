@@ -134,11 +134,10 @@ impl Task<String> for CheckSnapshotTask {
         }
 
         Shell::exec_git_mute(&["-C", path.as_str(), "fetch", "--all"])?;
-        let branch =
-            match Shell::exec_git_mute_read(&["-C", path.as_str(), "branch", "--show-current"]) {
-                Ok(branch) => branch,
-                Err(_) => bail!("Please switch to an existing branch"),
-            };
+        let branch = Shell::exec_git_mute_read(&["-C", path.as_str(), "branch", "--show-current"])?;
+        if branch.is_empty() {
+            bail!("Please switch to an existing branch");
+        }
         let origin_target = format!("origin/{branch}");
         let compare = format!("{origin_target}..HEAD");
         let lines = Shell::exec_git_mute_lines(&[
