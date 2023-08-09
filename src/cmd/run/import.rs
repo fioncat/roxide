@@ -120,7 +120,7 @@ impl Run for ImportArgs {
         drop(owner_arc);
 
         let items: Vec<_> = tasks.iter().map(|task| format!("{}", task.name)).collect();
-        utils::confirm_items(items, "import", "import", "Repo", "Repos")?;
+        utils::confirm_items(&items, "import", "import", "Repo", "Repos")?;
 
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(self.owner.clone());

@@ -567,7 +567,7 @@ pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
 }
 
 pub fn confirm_items(
-    items: Vec<String>,
+    items: &Vec<String>,
     action: &str,
     noun: &str,
     name: &str,
@@ -580,7 +580,7 @@ pub fn confirm_items(
 }
 
 pub fn confirm_items_weak(
-    items: Vec<String>,
+    items: &Vec<String>,
     action: &str,
     noun: &str,
     name: &str,

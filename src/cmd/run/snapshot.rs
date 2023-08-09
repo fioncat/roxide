@@ -29,10 +29,6 @@ pub struct SnapshotArgs {
     #[clap(long, short)]
     pub restore: bool,
 
-    /// Only available in recover mode, with this, we will skip clear step.
-    #[clap(long)]
-    pub skip_clear: bool,
-
     /// Only available in recover mode, with this, we will skip checkout step.
     #[clap(long)]
     pub skip_checkout: bool,
@@ -81,7 +77,7 @@ impl SnapshotArgs {
         }
 
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
-        utils::confirm_items(items, "take snapshot", "snapshot", "repo", "repos")?;
+        utils::confirm_items(&items, "take snapshot", "snapshot", "repo", "repos")?;
 
         let mut tasks: Vec<CheckSnapshotTask> = Vec::with_capacity(repos.len());
         for repo in repos.iter() {
@@ -147,7 +143,8 @@ impl SnapshotArgs {
             .iter()
             .map(|item| format!("{}:{}/{}", item.remote, item.owner, item.name))
             .collect();
-        utils::confirm_items(show_items, "restore snapshot", "snapshot", "Item", "Items")?;
+        utils::confirm_items(&show_items, "restore snapshot", "snapshot", "Item", "Items")?;
+        let items_set: HashSet<_> = show_items.into_iter().collect();
 
         let mut tasks = Vec::with_capacity(items.len());
         let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
@@ -186,28 +183,23 @@ impl SnapshotArgs {
         }
         println!();
 
-        if !self.skip_clear {
-            let items_set: HashSet<String> = items
-                .iter()
-                .map(|item| format!("{}:{}/{}", item.remote, item.owner, item.name))
-                .collect();
+        let to_remove: Vec<Rc<Repo>> = db
+            .list_all()
+            .iter()
+            .filter(|repo| !items_set.contains(&repo.full_name()))
+            .map(|repo| repo.clone())
+            .collect();
 
-            let to_remove: Vec<Rc<Repo>> = db
-                .list_all()
-                .iter()
-                .filter(|repo| !items_set.contains(&repo.long_name()))
-                .map(|repo| repo.clone())
-                .collect();
-
-            if !to_remove.is_empty() {
-                let remove_items: Vec<_> = to_remove.iter().map(|repo| repo.long_name()).collect();
-                if utils::confirm_items_weak(remove_items, "remove", "removal", "Repo", "Repos")? {
-                    for repo in to_remove {
-                        let path = repo.get_path();
-                        utils::remove_dir_recursively(path)?;
-                        db.remove(repo);
-                    }
+        if !to_remove.is_empty() {
+            let remove_items: Vec<_> = to_remove.iter().map(|repo| repo.long_name()).collect();
+            if utils::confirm_items_weak(&remove_items, "remove", "removal", "Repo", "Repos")? {
+                for repo in to_remove {
+                    let path = repo.get_path();
+                    utils::remove_dir_recursively(path)?;
+                    db.remove(repo);
                 }
+            } else {
+                drop(to_remove);
             }
         }
 

@@ -149,7 +149,7 @@ impl BranchArgs {
             };
             items.push(msg);
         }
-        utils::confirm_items(items, "sync", "synchronization", "Branch", "Branches")?;
+        utils::confirm_items(&items, "sync", "synchronization", "Branch", "Branches")?;
 
         for task in tasks {
             match task {
