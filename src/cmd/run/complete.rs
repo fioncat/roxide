@@ -63,6 +63,7 @@ impl CompleteArgs {
             "run" => run::complete,
             "sync" => no_complete,
             "snapshot" => snapshot::complete,
+            "version" => no_complete,
         }
     }
 

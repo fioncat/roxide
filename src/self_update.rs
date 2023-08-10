@@ -18,8 +18,7 @@ pub fn trigger() -> Result<()> {
     info!("Checking new version for roxide");
     let api = Github::new_empty();
     let latest = api.get_latest_tag("fioncat", "roxide")?;
-    let current = env!("CARGO_PKG_VERSION");
-    let current = format!("v{current}");
+    let current = format!("v{}", env!("ROXIDE_VERSION"));
     if latest.as_str() == current {
         info!("Your roxide is up-to-date");
         return Ok(());

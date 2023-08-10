@@ -20,3 +20,4 @@ pub mod squash;
 pub mod sync;
 pub mod tag;
 pub mod update;
+pub mod version;
