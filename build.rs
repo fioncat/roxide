@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // .git_describe(false, true, None)
         .emit()?;
 
-    let descibe = exec_git(&["descibe", "--tags"])?;
+    let descibe = exec_git(&["describe", "--tags"])?;
     let sha = exec_git(&["rev-parse", "HEAD"])?;
     let short_sha = exec_git(&["rev-parse", "--short", "HEAD"])?;
 
