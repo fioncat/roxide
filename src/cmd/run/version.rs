@@ -11,15 +11,17 @@ pub struct VersionArgs {}
 impl Run for VersionArgs {
     fn run(&self) -> Result<()> {
         println!("roxide {}", env!("ROXIDE_VERSION"));
+        println!(
+            "rustc {}-{}-{}",
+            env!("VERGEN_RUSTC_SEMVER"),
+            env!("VERGEN_RUSTC_LLVM_VERSION"),
+            env!("VERGEN_RUSTC_CHANNEL")
+        );
         println!();
         println!("Build type:   {}", env!("ROXIDE_BUILD_TYPE"));
+        println!("Build target: {}", env!("ROXIDE_TARGET"));
         println!("Commit SHA:   {}", env!("ROXIDE_SHA"));
-        println!("Build target: {}", env!("VERGEN_RUSTC_HOST_TRIPLE"));
         println!("Build time:   {}", env!("VERGEN_BUILD_TIMESTAMP"));
-        println!();
-        println!("rustc version:      {}", env!("VERGEN_RUSTC_SEMVER"));
-        println!("rustc LLVM version: {}", env!("VERGEN_RUSTC_LLVM_VERSION"));
-        println!("rustc channel:      {}", env!("VERGEN_RUSTC_CHANNEL"));
 
         let cfg = config::get();
         let config_dir = format!("{}", cfg.dir.display());

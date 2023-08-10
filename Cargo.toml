@@ -33,4 +33,5 @@ file-lock = "2.1.9"
 num_cpus = "1.16.0"
 
 [build-dependencies]
+simple-error = "0.3.0"
 vergen = { version = "8.2.4", features = [ "build", "rustc" ] }

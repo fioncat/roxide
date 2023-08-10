@@ -960,6 +960,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shellexpand",
+ "simple-error",
  "urlencoding",
  "vergen",
 ]
@@ -1107,6 +1108,12 @@ checksum = "da03fa3b94cc19e3ebfc88c4229c49d8f08cdbd1228870a45f0ffdf84988e14b"
 dependencies = [
  "dirs",
 ]
+
+[[package]]
+name = "simple-error"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8542b68b8800c3cda649d2c72d688b6907b30f1580043135d61669d4aad1c175"
 
 [[package]]
 name = "slab"

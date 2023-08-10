@@ -1,10 +1,12 @@
-use std::{error::Error, process::Command};
+use std::env;
+use std::error::Error;
+use std::process::Command;
+
+use simple_error::bail;
 use vergen::EmitBuilder;
 
 fn uncommitted_count() -> Result<usize, Box<dyn Error>> {
-    let mut cmd = Command::new("git");
-    let output = cmd.args(&["status", "-s"]).output()?;
-    let output = String::from_utf8(output.stdout)?;
+    let output = exec_git(&["status", "-s"])?;
     let lines = output.trim().split("\n");
     Ok(lines.filter(|line| !line.trim().is_empty()).count())
 }
@@ -12,20 +14,20 @@ fn uncommitted_count() -> Result<usize, Box<dyn Error>> {
 fn exec_git(args: &[&str]) -> Result<String, Box<dyn Error>> {
     let mut cmd = Command::new("git");
     let output = cmd.args(args).output()?;
+    if !output.status.success() {
+        let cmd = format!("git {}", args.join(" "));
+        bail!("Execute git command {} failed", cmd);
+    }
     let output = String::from_utf8(output.stdout)?;
     Ok(output.trim().to_string())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Emit the instructions
     EmitBuilder::builder()
         .rustc_semver()
         .rustc_llvm_version()
         .rustc_channel()
-        .rustc_host_triple()
         .build_timestamp()
-        // .git_sha(false)
-        // .git_describe(false, true, None)
         .emit()?;
 
     let descibe = exec_git(&["describe", "--tags"])?;
@@ -57,6 +59,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rustc-env=ROXIDE_VERSION={version}");
     println!("cargo:rustc-env=ROXIDE_BUILD_TYPE={build_type}");
     println!("cargo:rustc-env=ROXIDE_SHA={sha}");
+    println!(
+        "cargo:rustc-env=ROXIDE_TARGET={}",
+        env::var("TARGET").unwrap()
+    );
 
     Ok(())
 }
