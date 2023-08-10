@@ -6,7 +6,6 @@ use anyhow::{bail, Context, Result};
 use console::style;
 
 use crate::api::github::Github;
-use crate::build_info::BuildInfo;
 use crate::shell::Shell;
 use crate::{config, confirm, info, utils};
 
@@ -19,8 +18,7 @@ pub fn trigger() -> Result<()> {
     info!("Checking new version for roxide");
     let api = Github::new_empty();
     let latest = api.get_latest_tag("fioncat", "roxide")?;
-    let build_info = BuildInfo::new();
-    let current = format!("v{}", build_info.version);
+    let current = format!("v{}", env!("ROXIDE_VERSION"));
     if latest.as_str() == current {
         info!("Your roxide is up-to-date");
         return Ok(());

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
-use crate::build_info::BuildInfo;
 use crate::cmd::run::attach::AttachArgs;
 use crate::cmd::run::branch::BranchArgs;
 use crate::cmd::run::clear::ClearArgs;
@@ -29,7 +28,7 @@ use crate::cmd::Run;
 use crate::self_update;
 
 #[derive(Parser)]
-#[command(author, version = BuildInfo::new().version, about)]
+#[command(author, version = env!("ROXIDE_VERSION"), about)]
 pub struct App {
     #[command(subcommand)]
     pub command: Commands,

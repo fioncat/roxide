@@ -1,6 +1,5 @@
 mod api;
 mod batch;
-mod build_info;
 mod cmd;
 mod config;
 mod errors;
