@@ -23,6 +23,7 @@ use crate::cmd::run::squash::SquashArgs;
 use crate::cmd::run::sync::SyncArgs;
 use crate::cmd::run::tag::TagArgs;
 use crate::cmd::run::update::UpdateArgs;
+use crate::cmd::run::version::VersionArgs;
 use crate::cmd::Run;
 use crate::self_update;
 
@@ -57,6 +58,7 @@ pub enum Commands {
     Run(RunArgs),
     Sync(SyncArgs),
     Snapshot(SnapshotArgs),
+    Version(VersionArgs),
 }
 
 impl Run for App {
@@ -88,6 +90,7 @@ impl Run for App {
             Commands::Run(args) => args.run(),
             Commands::Sync(args) => args.run(),
             Commands::Snapshot(args) => args.run(),
+            Commands::Version(args) => args.run(),
         }
     }
 }
