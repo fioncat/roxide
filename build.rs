@@ -33,7 +33,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let short_sha = exec_git(&["rev-parse", "--short", "HEAD"])?;
 
     let cargo_version = env!("CARGO_PKG_VERSION");
-    let (mut version, mut build_type) = if cargo_version == descibe {
+    let stable_tag = format!("v{cargo_version}");
+    let (mut version, mut build_type) = if stable_tag == descibe {
         if cargo_version.ends_with("alpha") {
             (cargo_version.to_string(), "alpha")
         } else if cargo_version.ends_with("beta") {
