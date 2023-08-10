@@ -6,7 +6,7 @@ fn uncommitted_count() -> Result<usize, Box<dyn Error>> {
     let output = cmd.args(&["status", "-s"]).output()?;
     let output = String::from_utf8(output.stdout)?;
     let lines = output.trim().split("\n");
-    Ok(lines.count())
+    Ok(lines.filter(|line| !line.trim().is_empty()).count())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
