@@ -30,13 +30,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build_timestamp()
         .emit()?;
 
-    let descibe = exec_git(&["describe", "--tags"])?;
+    let describe = match exec_git(&["describe", "--tags"]) {
+        Ok(d) => d,
+        Err(_) => String::from("unknown"),
+    };
     let sha = exec_git(&["rev-parse", "HEAD"])?;
     let short_sha = exec_git(&["rev-parse", "--short", "HEAD"])?;
 
     let cargo_version = env!("CARGO_PKG_VERSION");
     let stable_tag = format!("v{cargo_version}");
-    let (mut version, mut build_type) = if stable_tag == descibe {
+    let (mut version, mut build_type) = if stable_tag == describe {
         if cargo_version.ends_with("alpha") {
             (cargo_version.to_string(), "alpha")
         } else if cargo_version.ends_with("beta") {
