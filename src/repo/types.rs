@@ -67,62 +67,34 @@ impl Repo {
         let mut repos = Vec::new();
         let dir = PathBuf::from(&config::base().workspace);
         let workspace = dir.clone();
-        let mut stack = vec![dir];
 
-        while !stack.is_empty() {
-            let dir = stack.pop().unwrap();
-            Self::scan_dir(dir, &mut repos, &workspace, &mut stack)?;
-        }
-        Ok(repos)
-    }
-
-    fn scan_dir(
-        dir: PathBuf,
-        repos: &mut Vec<Rc<Repo>>,
-        workspace: &PathBuf,
-        stack: &mut Vec<PathBuf>,
-    ) -> Result<()> {
-        let dir_read = match fs::read_dir(&dir) {
-            Ok(dir_read) => dir_read,
-            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
-        };
-        for entry in dir_read.into_iter() {
-            let entry = entry.with_context(|| format!("Read subdir for {}", dir.display()))?;
-            let subdir = dir.join(entry.file_name());
-            let meta = entry
-                .metadata()
-                .with_context(|| format!("Read metadata for {}", subdir.display()))?;
+        utils::walk_dir(dir, |path, meta| {
             if !meta.is_dir() {
-                continue;
+                return Ok(false);
             }
-            let git_dir = subdir.join(".git");
+            let git_dir = path.join(".git");
             match fs::read_dir(&git_dir) {
                 Ok(_) => {}
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    stack.push(subdir);
-                    continue;
-                }
+                Err(err) if err.kind() == ErrorKind::NotFound => return Ok(true),
                 Err(err) => {
                     return Err(err).with_context(|| format!("Read git dir {}", git_dir.display()))
                 }
             }
-            if !subdir.starts_with(&workspace) {
-                continue;
+            if !path.starts_with(&workspace) {
+                return Ok(true);
             }
-            let rel = subdir.strip_prefix(&workspace).with_context(|| {
+            let rel = path.strip_prefix(&workspace).with_context(|| {
                 format!(
                     "Strip prefix for dir {}, workspace {}",
-                    subdir.display(),
+                    path.display(),
                     workspace.display()
                 )
             })?;
-            let rel = PathBuf::from(rel);
             let mut iter = rel.iter();
             let remote = match iter.next() {
                 Some(s) => match s.to_str() {
                     Some(s) => s,
-                    None => continue,
+                    None => return Ok(true),
                 },
                 None => bail!(
                     "Scan found invalid rel path {}, missing remote",
@@ -148,8 +120,11 @@ impl Repo {
                 last_accessed: 0,
                 accessed: 0.0,
             }));
-        }
-        Ok(())
+
+            Ok(false)
+        })?;
+
+        Ok(repos)
     }
 
     pub fn from_upstream<S>(remote: S, upstream: ApiUpstream) -> Rc<Repo>

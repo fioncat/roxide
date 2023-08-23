@@ -26,7 +26,7 @@ pub struct ClearArgs {
     #[clap(long, short)]
     pub duration: Option<String>,
 
-    /// Delete repos whose access times are less than this value.
+    /// Remove repos whose access times are less than this value.
     #[clap(long, short)]
     pub access: Option<u64>,
 }
