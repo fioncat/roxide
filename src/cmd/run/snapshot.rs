@@ -183,9 +183,18 @@ impl SnapshotArgs {
         }
         println!();
 
+        let mut skip_remote = HashSet::new();
+        for remote in config::list_remotes() {
+            let remote_cfg = config::must_get_remote(remote)?;
+            if let None = remote_cfg.clone.as_ref() {
+                skip_remote.insert(remote);
+            }
+        }
+
         let to_remove: Vec<Rc<Repo>> = db
             .list_all()
             .iter()
+            .filter(|repo| !skip_remote.contains(repo.remote.as_str()))
             .filter(|repo| !items_set.contains(&repo.full_name()))
             .map(|repo| repo.clone())
             .collect();
