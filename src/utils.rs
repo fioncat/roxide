@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, Metadata, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
@@ -643,4 +643,32 @@ pub fn confirm_items_weak(
         println!();
     }
     Ok(ok)
+}
+
+pub fn walk_dir<F>(root: PathBuf, mut handle: F) -> Result<()>
+where
+    F: FnMut(PathBuf, Metadata) -> Result<bool>,
+{
+    let mut stack = vec![root];
+    while !stack.is_empty() {
+        let dir = stack.pop().unwrap();
+        let dir_read = match fs::read_dir(&dir) {
+            Ok(dir_read) => dir_read,
+            Err(err) if err.kind() == ErrorKind::NotFound => continue,
+            Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
+        };
+        for entry in dir_read.into_iter() {
+            let entry = entry.with_context(|| format!("Read subdir for {}", dir.display()))?;
+            let sub = dir.join(entry.file_name());
+            let meta = entry
+                .metadata()
+                .with_context(|| format!("Read metadata for {}", sub.display()))?;
+            let is_dir = meta.is_dir();
+            let next = handle(sub.clone(), meta)?;
+            if next && is_dir {
+                stack.push(sub);
+            }
+        }
+    }
+    Ok(())
 }
