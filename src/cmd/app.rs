@@ -15,6 +15,7 @@ use crate::cmd::run::init::InitArgs;
 use crate::cmd::run::merge::MergeArgs;
 use crate::cmd::run::open::OpenArgs;
 use crate::cmd::run::rebase::RebaseArgs;
+use crate::cmd::run::recover::RecoverArgs;
 use crate::cmd::run::release::ReleaseArgs;
 use crate::cmd::run::remove::RemoveArgs;
 use crate::cmd::run::reset::ResetArgs;
@@ -61,6 +62,7 @@ pub enum Commands {
     Snapshot(SnapshotArgs),
     Version(VersionArgs),
     Gc(GcArgs),
+    Recover(RecoverArgs),
 }
 
 impl Run for App {
@@ -94,6 +96,7 @@ impl Run for App {
             Commands::Snapshot(args) => args.run(),
             Commands::Version(args) => args.run(),
             Commands::Gc(args) => args.run(),
+            Commands::Recover(args) => args.run(),
         }
     }
 }
