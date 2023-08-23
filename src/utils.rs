@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
-use console::{self, style};
+use console::{self, style, Term};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Input;
 use file_lock::{FileLock, FileOptions};
@@ -177,13 +177,16 @@ pub fn open_url(url: impl AsRef<str>) -> Result<()> {
 }
 
 pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
-    let result = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt(msg.as_ref())
-        .interact_on(&console::Term::stderr());
-    match result {
-        Ok(ok) => Ok(ok),
-        Err(err) => Err(err).context("Terminal confirm"),
+    let msg = format!(":: {}?", msg.as_ref());
+    _ = write!(std::io::stderr(), "{} [Y/n] ", style(msg).bold());
+
+    let mut answer = String::new();
+    scanf::scanf!("{}", answer).context("confirm: Scan terminal stdin")?;
+    if answer.to_lowercase() != "y" {
+        return Ok(false);
     }
+
+    return Ok(true);
 }
 
 pub fn must_confirm(msg: impl AsRef<str>) -> Result<()> {
@@ -586,17 +589,48 @@ pub fn confirm_items_weak(
     name: &str,
     plural: &str,
 ) -> Result<bool> {
-    info!("Require confirm to {}", action);
-    println!();
-
     if items.is_empty() {
         println!("Nothing to {action}");
         return Ok(false);
     }
 
-    let name = if items.len() == 1 { name } else { plural };
-    println!("{} ({}): {}", name, items.len(), items.join("  "));
+    info!("Require confirm to {}", action);
     println!();
+
+    let term = Term::stdout();
+    let (_, col_size) = term.size();
+    let col_size = col_size as usize;
+
+    let name = if items.len() == 1 { name } else { plural };
+    let head = format!("{} ({}): ", name, items.len());
+    let head_size = console::measure_text_width(head.as_str());
+    let head_space = " ".repeat(head_size);
+
+    let mut current_size: usize = 0;
+    for (idx, item) in items.iter().enumerate() {
+        let item_size = console::measure_text_width(&item);
+        if current_size == 0 {
+            if idx == 0 {
+                print!("{head}{item}");
+            } else {
+                print!("{head_space}{item}");
+            }
+            current_size = head_size + item_size;
+            continue;
+        }
+
+        current_size += 2 + item_size;
+        if current_size > col_size {
+            println!();
+            print!("{head_space}{item}");
+            current_size = head_size + item_size;
+            continue;
+        }
+
+        print!("  {item}");
+    }
+    println!("\n");
+
     println!(
         "Total {} {} to {}",
         items.len(),
