@@ -6,7 +6,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::{config, info, utils};
+use crate::{config, utils};
 
 /// Batch remove repo(s)
 #[derive(Args)]
@@ -29,20 +29,11 @@ pub struct ClearArgs {
     /// Remove repos whose access times are less than this value.
     #[clap(long, short)]
     pub access: Option<u64>,
-
-    /// Remove workspace unused dir.
-    #[clap(long, short)]
-    pub workspace: bool,
 }
 
 impl Run for ClearArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
-        if self.workspace {
-            self.clear_orphan_repos(&db)?;
-            return Ok(());
-        }
-
         let repos = match &self.remote {
             Some(remote) => match &self.owner {
                 Some(owner) => db.list_by_owner(remote, owner),
@@ -91,48 +82,5 @@ impl ClearArgs {
         }
 
         bail!("You should provide at least one filter condition without `all`")
-    }
-
-    fn clear_orphan_repos(&self, db: &Database) -> Result<()> {
-        let workspace_repos = Repo::scan_workspace()?;
-        let mut to_remove: Vec<Rc<Repo>> = workspace_repos
-            .into_iter()
-            .filter(|repo| {
-                if let Some(_) = db.get(
-                    repo.remote.as_str(),
-                    repo.owner.as_str(),
-                    repo.name.as_str(),
-                ) {
-                    return false;
-                }
-                true
-            })
-            .collect();
-
-        if let Some(filter_remote) = self.remote.as_ref() {
-            to_remove = to_remove
-                .into_iter()
-                .filter(|repo| repo.remote.as_str() == filter_remote.as_str())
-                .collect();
-        }
-
-        if let Some(filter_owner) = self.owner.as_ref() {
-            to_remove = to_remove
-                .into_iter()
-                .filter(|repo| repo.owner.as_str() == filter_owner.as_str())
-                .collect();
-        }
-        if to_remove.is_empty() {
-            info!("No orphan repo to remove");
-            return Ok(());
-        }
-
-        let items: Vec<_> = to_remove.iter().map(|repo| repo.full_name()).collect();
-        utils::confirm_items(&items, "remove", "removal", "Orphan repo", "Orphan repos")?;
-        for repo in to_remove.into_iter() {
-            let path = repo.get_path();
-            utils::remove_dir_recursively(path)?;
-        }
-        return Ok(());
     }
 }

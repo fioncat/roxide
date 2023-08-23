@@ -64,6 +64,7 @@ impl CompleteArgs {
             "sync" => no_complete,
             "snapshot" => snapshot::complete,
             "version" => no_complete,
+            "gc" => owner::complete,
         }
     }
 

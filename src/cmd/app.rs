@@ -7,6 +7,7 @@ use crate::cmd::run::clear::ClearArgs;
 use crate::cmd::run::complete::CompleteArgs;
 use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
+use crate::cmd::run::gc::GcArgs;
 use crate::cmd::run::get::GetArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::import::ImportArgs;
@@ -59,6 +60,7 @@ pub enum Commands {
     Sync(SyncArgs),
     Snapshot(SnapshotArgs),
     Version(VersionArgs),
+    Gc(GcArgs),
 }
 
 impl Run for App {
@@ -91,6 +93,7 @@ impl Run for App {
             Commands::Sync(args) => args.run(),
             Commands::Snapshot(args) => args.run(),
             Commands::Version(args) => args.run(),
+            Commands::Gc(args) => args.run(),
         }
     }
 }
