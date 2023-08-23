@@ -65,6 +65,7 @@ impl CompleteArgs {
             "snapshot" => snapshot::complete,
             "version" => no_complete,
             "gc" => owner::complete,
+            "recover" => no_complete,
         }
     }
 

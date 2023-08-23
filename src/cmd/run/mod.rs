@@ -12,6 +12,7 @@ pub mod init;
 pub mod merge;
 pub mod open;
 pub mod rebase;
+pub mod recover;
 pub mod release;
 pub mod remove;
 pub mod reset;
