@@ -76,6 +76,10 @@ impl SnapshotArgs {
             repos.push(repo);
         }
 
+        if repos.is_empty() {
+            info!("No repo to create snapshot");
+            return Ok(());
+        }
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
         utils::confirm_items(&items, "take snapshot", "snapshot", "repo", "repos")?;
 
@@ -139,6 +143,9 @@ impl SnapshotArgs {
         let snapshot = Snapshot::read(name)?;
         let items = snapshot.items;
 
+        if items.is_empty() {
+            bail!("No item in snapshot, please check it");
+        }
         let show_items: Vec<_> = items
             .iter()
             .map(|item| format!("{}:{}/{}", item.remote, item.owner, item.name))

@@ -12,7 +12,7 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
 use crate::shell::Workflow;
-use crate::{config, confirm, utils};
+use crate::{config, confirm, info, utils};
 
 /// Run workflow
 #[derive(Args)]
@@ -103,6 +103,10 @@ impl Run for RunArgs {
             }
         }
 
+        if repos.is_empty() {
+            info!("Nothing to run");
+            return Ok(());
+        }
         let items: Vec<_> = repos.iter().map(|repo| repo.as_string(&level)).collect();
         utils::confirm_items(&items, "run workflow", "workflow", "Repo", "Repos")?;
 
