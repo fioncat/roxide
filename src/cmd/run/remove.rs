@@ -1,30 +1,53 @@
-use std::rc::Rc;
-
 use anyhow::Result;
 use clap::Args;
 
 use crate::cmd::Run;
-use crate::config::types::Remote;
 use crate::repo::database::Database;
-use crate::repo::types::Repo;
-use crate::{config, confirm, shell, utils};
+use crate::repo::query::Query;
+use crate::{confirm, utils};
 
 /// Remove a repo from database and disk.
 #[derive(Args)]
 pub struct RemoveArgs {
     /// The remote name.
-    pub remote: String,
+    pub remote: Option<String>,
 
     /// The repo query, format is `owner[/[name]]`.
-    pub query: String,
+    pub query: Option<String>,
+
+    /// Recursively delete multiple repos.
+    #[clap(long, short)]
+    pub recursive: bool,
+
+    /// Remove repos whose last access interval is greater than or equal to
+    /// this value.
+    #[clap(long, short)]
+    pub duration: Option<String>,
+
+    /// Remove repos whose access times are less than this value.
+    #[clap(long, short)]
+    pub access: Option<u64>,
 }
 
 impl Run for RemoveArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
-        let remote = config::must_get_remote(&self.remote)?;
+        if self.recursive {
+        } else {
+            self.remove_one(&mut db)?;
+        }
 
-        let repo = self.get_repo(&remote, &db)?;
+        db.close()
+    }
+}
+
+impl RemoveArgs {
+    fn remove_one(&self, db: &mut Database) -> Result<()> {
+        let query = Query::from_args(&db, &self.remote, &self.query)
+            .with_local_only(true)
+            .with_search(true);
+
+        let (_, repo) = query.must_one()?;
         confirm!("Do you want to remove repo {}", repo.long_name());
 
         let path = repo.get_path();
@@ -32,25 +55,6 @@ impl Run for RemoveArgs {
 
         db.remove(repo);
 
-        db.close()
-    }
-}
-
-impl RemoveArgs {
-    fn get_repo(&self, remote: &Remote, db: &Database) -> Result<Rc<Repo>> {
-        if self.query.ends_with("/") {
-            let mut owner = self.query.trim_end_matches("/");
-            if let Some(raw_owner) = remote.owner_alias.get(owner) {
-                owner = raw_owner.as_str();
-            }
-            let mut repos = db.list_by_owner(remote.name.as_str(), owner);
-            let items: Vec<_> = repos.iter().map(|repo| format!("{}", repo.name)).collect();
-
-            let idx = shell::search(&items)?;
-
-            return Ok(repos.remove(idx));
-        }
-        let (owner, name) = utils::parse_query(remote, &self.query);
-        db.must_get(&remote.name, &owner, &name)
+        Ok(())
     }
 }
