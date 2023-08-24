@@ -367,11 +367,21 @@ impl<'a> Query<'_> {
         let remote_name = &self.query[0];
         let remote = config::must_get_remote(remote_name)?;
         let query = &self.query[1];
-        let owner = match query.strip_suffix("/") {
-            Some(owner) => owner,
-            None => query.as_str(),
-        };
+
         if self.remote_only {
+            let (owner, name) = parse_owner(&query);
+            if !owner.is_empty() && !name.is_empty() {
+                return Ok(QueryManyResult {
+                    remote: Some(remote),
+                    names: Some(vec![query.clone()]),
+                    repos: None,
+                    level: NameLevel::Name,
+                });
+            }
+            let owner = match query.strip_suffix("/") {
+                Some(owner) => owner,
+                None => query.as_str(),
+            };
             let provider = api::init_provider(&remote, self.force)?;
             let items = provider.list_repos(owner)?;
 
@@ -392,11 +402,29 @@ impl<'a> Query<'_> {
             });
         }
 
+        if query.ends_with("/") {
+            let owner = query.strip_suffix("/").unwrap();
+            return Ok(QueryManyResult {
+                remote: None,
+                names: None,
+
+                repos: Some(self.db.list_by_owner(remote.name.as_str(), owner)),
+                level: NameLevel::Name,
+            });
+        }
+
+        let (owner, name) = parse_owner(&query);
+        let repo = if owner.is_empty() {
+            self.db.must_get_fuzzy(&remote.name, &name)?
+        } else {
+            self.db.must_get(&remote.name, &owner, &name)?
+        };
+
         Ok(QueryManyResult {
             remote: None,
             names: None,
 
-            repos: Some(self.db.list_by_owner(remote.name.as_str(), owner)),
+            repos: Some(vec![repo]),
             level: NameLevel::Name,
         })
     }
