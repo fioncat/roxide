@@ -34,6 +34,10 @@ impl Run for RecoverArgs {
             })
             .collect();
 
+        if to_add.is_empty() {
+            info!("Nothing to recover");
+            return Ok(());
+        }
         let items: Vec<_> = to_add.iter().map(|repo| repo.full_name()).collect();
         utils::confirm_items(&items, "add", "addition", "Repo", "Repos")?;
         info!("Add {} to database done", utils::plural(&to_add, "repo"));

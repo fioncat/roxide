@@ -5,10 +5,10 @@ use clap::Args;
 use serde::Serialize;
 
 use crate::cmd::Run;
-use crate::config;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
 use crate::utils::{self, Table};
+use crate::{config, info};
 
 /// Get or list repo info.
 #[derive(Args)]
@@ -119,7 +119,7 @@ impl GetArgs {
             None => (db.list_all(), NameLevel::Full),
         };
         if repos.is_empty() {
-            println!("Nothing to show");
+            info!("Nothing to show");
             return Ok(());
         }
 

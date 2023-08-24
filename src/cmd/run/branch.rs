@@ -4,7 +4,7 @@ use console::style;
 
 use crate::cmd::Run;
 use crate::shell::{self, BranchStatus, GitBranch, Shell};
-use crate::utils;
+use crate::{info, utils};
 
 /// Git branch operations
 #[derive(Args)]
@@ -132,7 +132,7 @@ impl BranchArgs {
             }
         }
         if tasks.is_empty() {
-            println!("Nothing to do");
+            info!("Nothing to sync");
             return Ok(());
         }
 
