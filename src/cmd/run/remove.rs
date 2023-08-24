@@ -1,10 +1,13 @@
-use anyhow::Result;
+use std::rc::Rc;
+
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
-use crate::{confirm, utils};
+use crate::repo::types::Repo;
+use crate::{config, confirm, info, utils};
 
 /// Remove a repo from database and disk.
 #[derive(Args)]
@@ -27,12 +30,17 @@ pub struct RemoveArgs {
     /// Remove repos whose access times are less than this value.
     #[clap(long, short)]
     pub access: Option<u64>,
+
+    /// Filter items.
+    #[clap(long)]
+    pub filter: bool,
 }
 
 impl Run for RemoveArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
         if self.recursive {
+            self.remove_many(&mut db)?;
         } else {
             self.remove_one(&mut db)?;
         }
@@ -56,5 +64,53 @@ impl RemoveArgs {
         db.remove(repo);
 
         Ok(())
+    }
+
+    fn remove_many(&self, db: &mut Database) -> Result<()> {
+        let query = Query::from_args(&db, &self.remote, &self.query).with_filter(self.filter);
+        let result = query.many()?;
+        let repos = result.as_local();
+        let repos = self.filter_many(repos)?;
+
+        if repos.is_empty() {
+            info!("Nothing to remove");
+            return Ok(());
+        }
+
+        let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
+        utils::confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
+
+        for repo in repos.into_iter() {
+            let path = repo.get_path();
+            utils::remove_dir_recursively(path)?;
+            db.remove(repo);
+        }
+
+        Ok(())
+    }
+
+    fn filter_many(&self, repos: Vec<Rc<Repo>>) -> Result<Vec<Rc<Repo>>> {
+        if let Some(d) = &self.duration {
+            let d = utils::parse_duration_secs(d).context("Parse duration")?;
+            let now = config::now_secs();
+
+            return Ok(repos
+                .into_iter()
+                .filter(|repo| {
+                    let delta = now.saturating_sub(repo.last_accessed);
+                    delta >= d
+                })
+                .collect());
+        }
+
+        if let Some(access) = &self.access {
+            let access = *access as f64;
+            return Ok(repos
+                .into_iter()
+                .filter(|repo| repo.accessed <= access)
+                .collect());
+        }
+
+        Ok(repos)
     }
 }

@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 
 use crate::cmd::run::attach::AttachArgs;
 use crate::cmd::run::branch::BranchArgs;
-use crate::cmd::run::clear::ClearArgs;
 use crate::cmd::run::complete::CompleteArgs;
 use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
@@ -55,7 +54,6 @@ pub enum Commands {
     Open(OpenArgs),
     Reset(ResetArgs),
     Update(UpdateArgs),
-    Clear(ClearArgs),
     Import(ImportArgs),
     Run(RunArgs),
     Sync(SyncArgs),
@@ -89,7 +87,6 @@ impl Run for App {
             Commands::Open(args) => args.run(),
             Commands::Reset(args) => args.run(),
             Commands::Update(args) => args.run(),
-            Commands::Clear(args) => args.run(),
             Commands::Import(args) => args.run(),
             Commands::Run(args) => args.run(),
             Commands::Sync(args) => args.run(),

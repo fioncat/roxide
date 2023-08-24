@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
-use crate::{api, config, shell};
+use crate::{api, config, shell, utils};
 
 pub struct Query<'a> {
     db: &'a Database,
@@ -20,6 +20,8 @@ pub struct Query<'a> {
     remote_only: bool,
 
     repo_path: Option<String>,
+
+    filter: bool,
 }
 
 pub struct QueryOneResult {
@@ -31,6 +33,29 @@ pub struct QueryOneResult {
 impl QueryOneResult {
     pub fn as_repo(self) -> (Remote, Rc<Repo>) {
         (self.remote, self.repo)
+    }
+}
+
+pub struct QueryManyResult {
+    remote: Option<Remote>,
+    names: Option<Vec<String>>,
+
+    repos: Option<Vec<Rc<Repo>>>,
+
+    level: NameLevel,
+}
+
+impl QueryManyResult {
+    pub fn level(&self) -> NameLevel {
+        self.level.clone()
+    }
+
+    pub fn as_local(self) -> Vec<Rc<Repo>> {
+        self.repos.unwrap()
+    }
+
+    pub fn as_remote(self) -> (Remote, Vec<String>) {
+        (self.remote.unwrap(), self.names.unwrap())
     }
 }
 
@@ -59,6 +84,7 @@ impl<'a> Query<'_> {
             local_only: false,
             remote_only: false,
             repo_path: None,
+            filter: false,
         }
     }
 
@@ -84,6 +110,11 @@ impl<'a> Query<'_> {
 
     pub fn with_repo_path(mut self, path: String) -> Self {
         self.repo_path = Some(path);
+        self
+    }
+
+    pub fn with_filter(mut self, filter: bool) -> Self {
+        self.filter = filter;
         self
     }
 
@@ -239,6 +270,135 @@ impl<'a> Query<'_> {
         let idx = shell::search(&items)?;
         let repo = Rc::clone(&vec[idx]);
         Ok(repo)
+    }
+
+    pub fn many(&self) -> Result<QueryManyResult> {
+        let mut result = self.list_many()?;
+        if self.remote_only {
+            if result.names.as_ref().unwrap().is_empty() {
+                return Ok(result);
+            }
+            if self.filter {
+                let names = utils::edit_items(result.names.clone().unwrap())?;
+                result.names = Some(names);
+            }
+            return Ok(result);
+        }
+
+        if self.filter {
+            let items: Vec<String> = result
+                .repos
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|repo| repo.as_string(&result.level))
+                .collect();
+            let items = utils::edit_items(items)?;
+            let items_set: HashSet<String> = items.into_iter().collect();
+
+            let QueryManyResult {
+                remote: _,
+                names: _,
+
+                repos,
+                level,
+            } = result;
+
+            let repos: Vec<Rc<Repo>> = repos
+                .unwrap()
+                .into_iter()
+                .filter(|repo| items_set.contains(&repo.as_string(&level)))
+                .collect();
+
+            return Ok(QueryManyResult {
+                remote: None,
+                names: None,
+
+                repos: Some(repos),
+                level,
+            });
+        }
+
+        Ok(result)
+    }
+
+    fn list_many(&self) -> Result<QueryManyResult> {
+        if self.query.is_empty() {
+            if self.remote_only {
+                unreachable!();
+            }
+            return Ok(QueryManyResult {
+                remote: None,
+                names: None,
+
+                repos: Some(self.db.list_all()),
+                level: NameLevel::Full,
+            });
+        }
+
+        if self.query.len() == 1 {
+            if self.remote_only {
+                unreachable!();
+            }
+            let maybe_remote = &self.query[0];
+            return match config::get_remote(maybe_remote)? {
+                Some(remote) => {
+                    let repos = self.db.list_by_remote(&remote.name);
+                    Ok(QueryManyResult {
+                        remote: None,
+                        names: None,
+
+                        repos: Some(repos),
+                        level: NameLevel::Owner,
+                    })
+                }
+                None => {
+                    let repo = self.db.must_get_fuzzy("", maybe_remote)?;
+                    Ok(QueryManyResult {
+                        remote: None,
+                        names: None,
+
+                        repos: Some(vec![repo]),
+                        level: NameLevel::Owner,
+                    })
+                }
+            };
+        }
+        let remote_name = &self.query[0];
+        let remote = config::must_get_remote(remote_name)?;
+        let query = &self.query[1];
+        let owner = match query.strip_suffix("/") {
+            Some(owner) => owner,
+            None => query.as_str(),
+        };
+        if self.remote_only {
+            let provider = api::init_provider(&remote, self.force)?;
+            let items = provider.list_repos(owner)?;
+
+            let attached = self.db.list_by_owner(remote.name.as_str(), owner);
+            let attached_set: HashSet<&str> =
+                attached.iter().map(|repo| repo.name.as_str()).collect();
+
+            let names: Vec<_> = items
+                .into_iter()
+                .filter(|name| !attached_set.contains(name.as_str()))
+                .collect();
+            return Ok(QueryManyResult {
+                remote: Some(remote),
+                names: Some(names),
+
+                repos: None,
+                level: NameLevel::Name,
+            });
+        }
+
+        Ok(QueryManyResult {
+            remote: None,
+            names: None,
+
+            repos: Some(self.db.list_by_owner(remote.name.as_str(), owner)),
+            level: NameLevel::Name,
+        })
     }
 }
 

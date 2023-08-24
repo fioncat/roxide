@@ -58,7 +58,6 @@ impl CompleteArgs {
             "release" => release::complete,
             "reset" => branch::complete,
             "update" => no_complete,
-            "clear" => owner::complete,
             "import" => owner::complete,
             "run" => run::complete,
             "sync" => no_complete,
