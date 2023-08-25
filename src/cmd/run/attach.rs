@@ -4,7 +4,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::config;
 use crate::repo::database::Database;
-use crate::repo::query::Query;
+use crate::repo::query::{Query, SelectOptions};
 use crate::shell::Shell;
 use crate::{confirm, info};
 
@@ -34,12 +34,13 @@ impl Run for AttachArgs {
 
         let remote = config::must_get_remote(&self.remote)?;
 
-        let query = Query::new(&db, vec![self.remote.clone(), self.query.clone()])
-            .with_force(self.force)
-            .with_search(true)
-            .with_remote_only(true)
-            .with_repo_path(format!("{}", config::current_dir().display()));
-        let result = query.one()?;
+        let query = Query::new(&db, vec![self.remote.clone(), self.query.clone()]);
+        let result = query.select_remote(
+            SelectOptions::new()
+                .with_force(self.force)
+                .with_search(true)
+                .with_repo_path(format!("{}", config::current_dir().display())),
+        )?;
         if result.exists {
             bail!(
                 "The repo {} has already been bound to {}, please detach it first",

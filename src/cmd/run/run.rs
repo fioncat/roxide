@@ -126,11 +126,8 @@ impl RunArgs {
             let repo = db.must_current()?;
             return Ok((vec![repo], NameLevel::Name));
         }
-        let query = Query::from_args(&db, &self.remote, &self.query).with_filter(self.filter);
-        let result = query.many()?;
-
-        let level = result.level();
-        let repos = result.as_local();
+        let query = Query::from_args(&db, &self.remote, &self.query);
+        let (repos, level) = query.list_local(self.filter)?;
 
         Ok((repos, level))
     }

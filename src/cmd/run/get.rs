@@ -81,9 +81,7 @@ impl Run for GetArgs {
         }
 
         let query = Query::from_args(&db, &self.remote, &self.query);
-        let result = query.many()?;
-        let level = result.level();
-        let repos = result.as_local();
+        let (repos, level) = query.list_local(false)?;
         if repos.is_empty() {
             info!("No repo to show");
             return Ok(());

@@ -10,7 +10,7 @@ use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::confirm;
 use crate::repo::database::Database;
-use crate::repo::query::Query;
+use crate::repo::query::{Query, SelectOptions};
 use crate::repo::types::Repo;
 use crate::shell::{Shell, Workflow};
 
@@ -32,11 +32,12 @@ pub struct HomeArgs {
 impl Run for HomeArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
-        let query = Query::new(&db, self.query.clone())
-            .with_force(self.force)
-            .with_search(self.search);
-
-        let result = query.one()?;
+        let query = Query::new(&db, self.query.clone());
+        let result = query.select(
+            SelectOptions::new()
+                .with_force(self.force)
+                .with_search(self.search),
+        )?;
         if !result.exists {
             confirm!(
                 "Do you want to create {}/{}",

@@ -5,7 +5,7 @@ use clap::Args;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
-use crate::repo::query::Query;
+use crate::repo::query::{Query, SelectOptions};
 use crate::repo::types::Repo;
 use crate::{config, confirm, info, utils};
 
@@ -51,11 +51,9 @@ impl Run for RemoveArgs {
 
 impl RemoveArgs {
     fn remove_one(&self, db: &mut Database) -> Result<()> {
-        let query = Query::from_args(&db, &self.remote, &self.query)
-            .with_local_only(true)
-            .with_search(true);
-
-        let (_, repo) = query.must_one()?;
+        let query = Query::from_args(&db, &self.remote, &self.query);
+        let (_, repo) =
+            query.must_select(SelectOptions::new().with_local_only(true).with_search(true))?;
         confirm!("Do you want to remove repo {}", repo.long_name());
 
         let path = repo.get_path();
@@ -67,9 +65,8 @@ impl RemoveArgs {
     }
 
     fn remove_many(&self, db: &mut Database) -> Result<()> {
-        let query = Query::from_args(&db, &self.remote, &self.query).with_filter(self.filter);
-        let result = query.many()?;
-        let repos = result.as_local();
+        let query = Query::from_args(&db, &self.remote, &self.query);
+        let (repos, _) = query.list_local(self.filter)?;
         let repos = self.filter_many(repos)?;
 
         if repos.is_empty() {

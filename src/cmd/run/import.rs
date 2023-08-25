@@ -84,13 +84,8 @@ impl Run for ImportArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
 
-        let query = Query::new(&db, vec![self.remote.clone(), self.owner.clone()])
-            .with_remote_only(true)
-            .with_force(self.force)
-            .with_filter(self.filter);
-
-        let result = query.many()?;
-        let (remote, names) = result.as_remote();
+        let query = Query::new(&db, vec![self.remote.clone(), self.owner.clone()]);
+        let (remote, names) = query.list_remote(self.force, self.filter)?;
 
         if names.is_empty() {
             info!("Nothing to import");
