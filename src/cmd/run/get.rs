@@ -1,14 +1,15 @@
 use std::rc::Rc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 use serde::Serialize;
 
 use crate::cmd::Run;
+use crate::info;
 use crate::repo::database::Database;
-use crate::repo::types::{NameLevel, Repo};
+use crate::repo::query::Query;
+use crate::repo::types::Repo;
 use crate::utils::{self, Table};
-use crate::{config, info};
 
 /// Get or list repo info.
 #[derive(Args)]
@@ -71,58 +72,28 @@ impl RepoInfo {
 impl Run for GetArgs {
     fn run(&self) -> Result<()> {
         let db = Database::read()?;
-        if let None = self.remote {
-            if self.current {
-                let repo = db.must_current()?;
-                let info = RepoInfo::from_repo(repo)?;
-                let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
-                print!("{yaml}");
-                return Ok(());
-            }
-            return self.list(&db, None, None);
-        }
-        let remote_name = self.remote.as_ref().unwrap().as_str();
-        if let None = self.query {
-            return self.list(&db, Some(remote_name), None);
-        }
-
-        let remote = config::must_get_remote(remote_name)?;
-        let query = self.query.as_ref().unwrap().as_str();
-        if query.ends_with("/") {
-            let mut owner = query.trim_end_matches("/");
-            if let Some(raw_owner) = remote.owner_alias.get(owner) {
-                owner = raw_owner.as_str();
-            }
-            return self.list(&db, Some(remote_name), Some(owner));
-        }
-
-        let (owner, name) = utils::parse_query(&remote, query);
-        if owner.is_empty() || name.is_empty() {
-            bail!("Invalid query {query}, you should provide owner and name");
-        }
-
-        let repo = db.must_get(remote_name, owner.as_str(), name.as_str())?;
-        let info = RepoInfo::from_repo(repo)?;
-        let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
-        print!("{yaml}");
-        Ok(())
-    }
-}
-
-impl GetArgs {
-    fn list(&self, db: &Database, remote: Option<&str>, owner: Option<&str>) -> Result<()> {
-        let (repos, level) = match remote {
-            Some(remote) => match owner {
-                Some(owner) => (db.list_by_owner(remote, owner), NameLevel::Name),
-                None => (db.list_by_remote(remote), NameLevel::Owner),
-            },
-            None => (db.list_all(), NameLevel::Full),
-        };
-        if repos.is_empty() {
-            info!("Nothing to show");
+        if self.current {
+            let repo = db.must_current()?;
+            let info = RepoInfo::from_repo(repo)?;
+            let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
+            print!("{yaml}");
             return Ok(());
         }
 
+        let query = Query::from_args(&db, &self.remote, &self.query);
+        let (repos, level) = query.list_local(false)?;
+        if repos.is_empty() {
+            info!("No repo to show");
+            return Ok(());
+        }
+
+        if repos.len() == 1 {
+            let repo = repos.into_iter().next().unwrap();
+            let info = RepoInfo::from_repo(repo)?;
+            let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
+            print!("{yaml}");
+            return Ok(());
+        }
         let mut table = Table::with_capacity(1 + repos.len());
         let mut titles = vec![
             String::from("NAME"),

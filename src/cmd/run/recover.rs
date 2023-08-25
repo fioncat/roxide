@@ -8,6 +8,7 @@ use clap::Args;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
+use crate::repo::query;
 use crate::repo::types::Repo;
 use crate::{config, info, utils};
 
@@ -92,7 +93,7 @@ impl RecoverArgs {
 
             let query = format!("{}", iter.collect::<PathBuf>().display());
             let query = query.trim_matches('/');
-            let (owner, name) = utils::parse_query_raw(query);
+            let (owner, name) = query::parse_owner(query);
             if owner.is_empty() || name.is_empty() {
                 bail!(
                     "Scan found invalid rel path {}, missing owner or name",

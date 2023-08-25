@@ -1,16 +1,12 @@
-use std::collections::HashSet;
-use std::rc::Rc;
-
 use anyhow::{bail, Result};
 use clap::Args;
 
 use crate::cmd::Run;
-use crate::config::types::Remote;
+use crate::config;
 use crate::repo::database::Database;
-use crate::repo::types::Repo;
+use crate::repo::query::{Query, SelectOptions};
 use crate::shell::Shell;
-use crate::{api, confirm, info, shell};
-use crate::{config, utils};
+use crate::{confirm, info};
 
 /// Attach current directory to a repo.
 #[derive(Args)]
@@ -37,19 +33,22 @@ impl Run for AttachArgs {
         }
 
         let remote = config::must_get_remote(&self.remote)?;
-        let repo = self.get_repo(&remote, &db)?;
 
-        if let Some(found) = db.get(
-            remote.name.as_str(),
-            repo.owner.as_str(),
-            repo.name.as_str(),
-        ) {
+        let query = Query::new(&db, vec![self.remote.clone(), self.query.clone()]);
+        let result = query.select_remote(
+            SelectOptions::new()
+                .with_force(self.force)
+                .with_search(true)
+                .with_repo_path(format!("{}", config::current_dir().display())),
+        )?;
+        if result.exists {
             bail!(
                 "The repo {} has already been bound to {}, please detach it first",
-                found.long_name(),
-                found.get_path().display()
+                result.repo.long_name(),
+                result.repo.get_path().display()
             );
         }
+        let repo = result.repo;
 
         confirm!(
             "Do you want to attach current directory to {}",
@@ -71,41 +70,5 @@ impl Run for AttachArgs {
         db.update(repo);
 
         db.close()
-    }
-}
-
-impl AttachArgs {
-    fn get_repo(&self, remote: &Remote, db: &Database) -> Result<Rc<Repo>> {
-        let path = config::current_dir();
-        let path = format!("{}", path.display());
-        if self.query.ends_with("/") {
-            let mut owner = self.query.trim_end_matches("/");
-            if let Some(raw_owner) = remote.owner_alias.get(owner) {
-                owner = raw_owner.as_str();
-            }
-            let provider = api::init_provider(remote, self.force)?;
-            let items = provider.list_repos(owner)?;
-
-            let attached = db.list_by_owner(remote.name.as_str(), owner);
-            let attached_set: HashSet<&str> =
-                attached.iter().map(|repo| repo.name.as_str()).collect();
-
-            let mut items: Vec<_> = items
-                .into_iter()
-                .filter(|name| !attached_set.contains(name.as_str()))
-                .collect();
-
-            let idx = shell::search(&items)?;
-            let name = items.remove(idx);
-            return Ok(Repo::new(
-                remote.name.as_str(),
-                owner,
-                name.as_str(),
-                Some(path),
-            ));
-        }
-
-        let (owner, name) = utils::parse_query(remote, &self.query);
-        Ok(Repo::new(&remote.name, &owner, &name, Some(path)))
     }
 }

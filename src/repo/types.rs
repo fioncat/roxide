@@ -18,6 +18,7 @@ pub struct Repo {
     pub accessed: f64,
 }
 
+#[derive(Clone)]
 pub enum NameLevel {
     Full,
     Owner,

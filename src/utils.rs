@@ -16,7 +16,6 @@ use pad::PadStr;
 use regex::Regex;
 
 use crate::config;
-use crate::config::types::Remote;
 use crate::errors::SilentExit;
 
 pub const SECOND: u64 = 1;
@@ -133,32 +132,6 @@ pub fn handle_result(result: Result<()>) {
             Err(err) => error_exit(err),
         },
     }
-}
-
-pub fn parse_query(remote: &Remote, query: impl AsRef<str>) -> (String, String) {
-    let (mut owner, mut name) = parse_query_raw(query);
-    if let Some(raw_owner) = remote.owner_alias.get(owner.as_str()) {
-        owner = raw_owner.clone();
-    }
-    if let Some(raw_name) = remote.repo_alias.get(name.as_str()) {
-        name = raw_name.clone();
-    }
-    (owner, name)
-}
-
-pub fn parse_query_raw(query: impl AsRef<str>) -> (String, String) {
-    let items: Vec<_> = query.as_ref().split("/").collect();
-    let items_len = items.len();
-    let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
-    let mut base = "";
-    for (idx, item) in items.iter().enumerate() {
-        if idx == items_len - 1 {
-            base = item;
-        } else {
-            group_buffer.push(item.to_string());
-        }
-    }
-    (group_buffer.join("/"), base.to_string())
 }
 
 pub fn revert_map(map: &HashMap<String, String>) -> HashMap<String, String> {

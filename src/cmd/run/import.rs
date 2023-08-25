@@ -10,9 +10,10 @@ use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
+use crate::repo::query::Query;
 use crate::repo::types::Repo;
 use crate::shell::Shell;
-use crate::{api, config, info, utils};
+use crate::{info, utils};
 
 /// Batch import repos
 #[derive(Args)]
@@ -28,7 +29,7 @@ pub struct ImportArgs {
     pub force: bool,
 
     /// If true, filter import repos.
-    #[clap(long, short)]
+    #[clap(long)]
     pub filter: bool,
 }
 
@@ -82,27 +83,13 @@ impl Task<Arc<String>> for ImportTask {
 impl Run for ImportArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
-        let remote = config::must_get_remote(&self.remote)?;
 
-        let provider = api::init_provider(&remote, self.force)?;
-        let mut names: Vec<String> = provider
-            .list_repos(&self.owner)?
-            .into_iter()
-            .filter(|name| {
-                if let None = db.get(&self.remote, &self.owner, &name) {
-                    true
-                } else {
-                    false
-                }
-            })
-            .collect();
+        let query = Query::new(&db, vec![self.remote.clone(), self.owner.clone()]);
+        let (remote, names) = query.list_remote(self.force, self.filter)?;
+
         if names.is_empty() {
             info!("Nothing to import");
             return Ok(());
-        }
-
-        if self.filter {
-            names = utils::edit_items(names)?;
         }
 
         let remote_arc = Arc::new(remote);
