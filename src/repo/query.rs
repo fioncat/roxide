@@ -343,7 +343,7 @@ impl<'a> Query<'_> {
     }
 }
 
-fn parse_owner(query: impl AsRef<str>) -> (String, String) {
+pub fn parse_owner(query: impl AsRef<str>) -> (String, String) {
     let items: Vec<_> = query.as_ref().split("/").collect();
     let items_len = items.len();
     let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);

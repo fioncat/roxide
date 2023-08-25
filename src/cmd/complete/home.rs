@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use crate::cmd::complete::Complete;
 use crate::repo::database::Database;
+use crate::repo::query;
 use crate::{config, utils};
 
 pub fn complete(args: &[&str]) -> Result<Complete> {
@@ -38,7 +39,7 @@ pub fn complete(args: &[&str]) -> Result<Complete> {
                 return Ok(Complete::from(items).no_space());
             }
 
-            let (owner, _) = utils::parse_query(&remote, query);
+            let (owner, _) = query::parse_owner(query);
             let repos = db.list_by_remote(remote_name);
             let items: Vec<_> = repos
                 .into_iter()
