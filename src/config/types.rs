@@ -112,20 +112,6 @@ pub struct Remote {
     /// For Gitlab, see: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
     pub token: Option<String>,
 
-    /// The alias name of the Owner, which is used to quickly access the owner on
-    /// the command line.
-    ///
-    /// For example, if you set "kubernetes" alias to "k8s", you can use
-    /// `roxide home k8s/` in commands and to access the owner. Note that alias has
-    /// higher priority than owner, please make sure that the alias you configure
-    /// will not conflict with other owners, roxide will not do this check for you.
-    #[serde(default = "default::empty_map")]
-    pub owner_alias: HashMap<String, String>,
-
-    /// Same as `owner_alias`, but for repo name.
-    #[serde(default = "default::empty_map")]
-    pub repo_alias: HashMap<String, String>,
-
     /// In order to speed up the response, after accessing the remote api, the
     /// data will be cached, which indicates the cache expiration time, in hours.
     /// Cache data will be stored under `{metadir}/cache`.
@@ -153,6 +139,27 @@ pub struct Remote {
     /// API domain, only useful for Gitlab. If your Git remote is self-built, it
     /// should be set to your self-built domain host.
     pub api_domain: Option<String>,
+
+    #[serde(skip)]
+    alias_owner_map: Option<HashMap<String, String>>,
+
+    #[serde(skip)]
+    alias_repo_map: Option<HashMap<String, HashMap<String, String>>>,
+}
+
+/// Owner configuration. Some configurations will override remote's.
+#[derive(Debug, Deserialize)]
+pub struct Owner {
+    pub alias: Option<String>,
+
+    #[serde(default = "default::empty_map")]
+    pub repo_alias: HashMap<String, String>,
+
+    /// If not empty, override remote's ssh.
+    pub ssh: Option<bool>,
+
+    /// After cloning or creating a repo, perform some additional workflows.
+    pub on_create: Option<Vec<String>>,
 }
 
 /// The remote api provider type.
@@ -164,21 +171,86 @@ pub enum Provider {
     Gitlab,
 }
 
-/// Owner configuration. Some configurations will override remote's.
-#[derive(Debug, Deserialize)]
-pub struct Owner {
-    /// If not empty, override remote's ssh.
-    pub ssh: Option<bool>,
-
-    /// After cloning or creating a repo, perform some additional workflows.
-    pub on_create: Option<Vec<String>>,
-}
-
 impl Remote {
+    pub fn has_alias(&self) -> bool {
+        if let Some(_) = self.alias_owner_map {
+            return true;
+        }
+        if let Some(_) = self.alias_repo_map {
+            return true;
+        }
+        false
+    }
+
+    pub fn get_alias_map(
+        &self,
+    ) -> (
+        HashMap<String, String>,
+        HashMap<String, HashMap<String, String>>,
+    ) {
+        let owner_map = match self.alias_owner_map.as_ref() {
+            Some(map) => map.clone(),
+            None => HashMap::new(),
+        };
+        let repo_map = match self.alias_repo_map.as_ref() {
+            Some(map) => map.clone(),
+            None => HashMap::new(),
+        };
+        (owner_map, repo_map)
+    }
+
+    pub fn alias_owner<'a>(&'a self, raw: impl AsRef<str>) -> Option<&'a str> {
+        if let Some(alias_owner) = self.alias_owner_map.as_ref() {
+            if let Some(name) = alias_owner.get(raw.as_ref()) {
+                return Some(name.as_str());
+            }
+        }
+        None
+    }
+
+    pub fn alias_repo<'a, S>(&'a self, owner: S, name: S) -> Option<&'a str>
+    where
+        S: AsRef<str>,
+    {
+        if let Some(alias_repo) = self.alias_repo_map.as_ref() {
+            if let Some(alias_name) = alias_repo.get(owner.as_ref()) {
+                if let Some(name) = alias_name.get(name.as_ref()) {
+                    return Some(name.as_str());
+                }
+            }
+        }
+        None
+    }
+
     fn validate(&mut self) -> Result<()> {
         if let Some(token) = &self.token {
             self.token = Some(expandenv(token).context("Expand token")?);
         }
+
+        let mut owner_alias = HashMap::new();
+        let mut repo_alias = HashMap::new();
+        for (owner_name, owner) in self.owners.iter() {
+            if let Some(alias) = owner.alias.as_ref() {
+                owner_alias.insert(alias.clone(), owner_name.clone());
+            }
+            if !owner.repo_alias.is_empty() {
+                let map: HashMap<String, String> = owner
+                    .repo_alias
+                    .iter()
+                    .map(|(key, val)| (val.clone(), key.clone()))
+                    .collect();
+                repo_alias.insert(owner_name.clone(), map);
+            }
+        }
+
+        if !owner_alias.is_empty() {
+            self.alias_owner_map = Some(owner_alias);
+        }
+
+        if !repo_alias.is_empty() {
+            self.alias_repo_map = Some(repo_alias);
+        }
+
         Ok(())
     }
 }

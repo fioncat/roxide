@@ -1,3 +1,4 @@
+mod alias;
 mod cache;
 pub mod github;
 mod gitlab;
@@ -9,6 +10,7 @@ use std::time::Duration;
 use anyhow::{bail, Result};
 use reqwest::blocking::Client;
 
+use crate::api::alias::Alias;
 use crate::api::cache::Cache;
 use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
@@ -38,5 +40,11 @@ pub fn init_provider(remote: &Remote, force: bool) -> Result<Box<dyn Provider>> 
             .join(&remote.name);
         provider = Cache::new(cache_dir, remote.cache_hours as u64, provider, force)?;
     }
+
+    if remote.has_alias() {
+        let (alias_owner, alias_repo) = remote.get_alias_map();
+        provider = Alias::new(alias_owner, alias_repo, provider);
+    }
+
     Ok(provider)
 }
