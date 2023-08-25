@@ -13,6 +13,9 @@ use dialoguer::Input;
 use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
 use regex::Regex;
+use serde::Serialize;
+use serde_json::ser::PrettyFormatter;
+use serde_json::Serializer;
 
 use crate::config;
 use crate::errors::SilentExit;
@@ -636,5 +639,15 @@ where
             }
         }
     }
+    Ok(())
+}
+
+pub fn show_json<T: Serialize>(value: T) -> Result<()> {
+    let formatter = PrettyFormatter::with_indent(b"  ");
+    let mut buf = Vec::new();
+    let mut ser = Serializer::with_formatter(&mut buf, formatter);
+    value.serialize(&mut ser).context("Serialize object")?;
+    let json = String::from_utf8(buf).context("UTF8 encode json")?;
+    println!("{json}");
     Ok(())
 }

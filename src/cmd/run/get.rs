@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
 
@@ -75,9 +75,7 @@ impl Run for GetArgs {
         if self.current {
             let repo = db.must_current()?;
             let info = RepoInfo::from_repo(repo)?;
-            let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
-            print!("{yaml}");
-            return Ok(());
+            return utils::show_json(info);
         }
 
         let query = Query::from_args(&db, &self.remote, &self.query);
@@ -90,9 +88,7 @@ impl Run for GetArgs {
         if repos.len() == 1 {
             let repo = repos.into_iter().next().unwrap();
             let info = RepoInfo::from_repo(repo)?;
-            let yaml = serde_yaml::to_string(&info).context("Encode info yaml")?;
-            print!("{yaml}");
-            return Ok(());
+            return utils::show_json(info);
         }
         let mut table = Table::with_capacity(1 + repos.len());
         let mut titles = vec![
