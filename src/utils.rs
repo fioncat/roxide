@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs::{self, Metadata, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -132,12 +131,6 @@ pub fn handle_result(result: Result<()>) {
             Err(err) => error_exit(err),
         },
     }
-}
-
-pub fn revert_map(map: &HashMap<String, String>) -> HashMap<String, String> {
-    map.iter()
-        .map(|(key, value)| (value.clone(), key.clone()))
-        .collect()
 }
 
 pub fn open_url(url: impl AsRef<str>) -> Result<()> {
