@@ -68,7 +68,7 @@ impl Run for MergeArgs {
 
         let merge = MergeOptions {
             owner: format!("{}", repo.owner),
-            name: api_repo.name,
+            name: format!("{}", repo.name),
             upstream: api_repo.upstream,
             source,
             target,

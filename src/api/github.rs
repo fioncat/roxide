@@ -44,7 +44,7 @@ struct Release {
 impl Repo {
     fn to_api(self) -> ApiRepo {
         let Repo {
-            name,
+            name: _,
             html_url,
             source,
             default_branch,
@@ -58,7 +58,6 @@ impl Repo {
             None => None,
         };
         ApiRepo {
-            name,
             default_branch,
             upstream,
             web_url: html_url,

@@ -131,6 +131,25 @@ impl Repo {
     where
         S: AsRef<str>,
     {
+        if remote.has_alias() {
+            let owner = match remote.alias_owner(owner.as_ref()) {
+                Some(name) => name,
+                None => owner.as_ref(),
+            };
+            let name = match remote.alias_repo(owner, name.as_ref()) {
+                Some(name) => name,
+                None => name.as_ref(),
+            };
+
+            return Self::get_clone_url_raw(owner, name, remote);
+        }
+        Self::get_clone_url_raw(owner, name, remote)
+    }
+
+    pub fn get_clone_url_raw<S>(owner: S, name: S, remote: &Remote) -> String
+    where
+        S: AsRef<str>,
+    {
         let mut ssh = remote.ssh;
         if let Some(owner_cfg) = remote.owners.get(owner.as_ref()) {
             if let Some(use_ssh) = owner_cfg.ssh {

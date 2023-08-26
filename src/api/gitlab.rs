@@ -17,7 +17,6 @@ struct GitlabRepo {
 impl GitlabRepo {
     fn to_api(self) -> ApiRepo {
         ApiRepo {
-            name: self.path,
             default_branch: self.default_branch,
             upstream: None,
             web_url: self.web_url,

@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct ApiRepo {
-    pub name: String,
-
     pub default_branch: String,
 
     pub upstream: Option<ApiUpstream>,
