@@ -10,11 +10,12 @@ use regex::Regex;
 
 use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
-use crate::config;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
+use crate::repo::query::Query;
 use crate::repo::types::Repo;
 use crate::shell::{BranchStatus, GitBranch, GitTask, Shell};
+use crate::{config, info, utils};
 
 /// Sync database and workspace.
 #[derive(Args)]
@@ -45,6 +46,10 @@ pub struct SyncArgs {
     /// the remote quickly, use it. This also skips confirmation.
     #[clap(long)]
     pub fire: bool,
+
+    /// Filter repo
+    #[clap(long)]
+    pub filter: bool,
 }
 
 struct SyncTask {
@@ -98,7 +103,7 @@ impl Task<()> for SyncTask {
             git.exec(&["config", "user.email", email.as_str()])?;
         }
 
-        rp.message(format!("Ensuring changes"));
+        rp.message(format!("Ensuring changes for {}", self.show_name));
         let lines = git.lines(&["status", "-s"])?;
         let mut stash = false;
         if !lines.is_empty() {
@@ -110,7 +115,7 @@ impl Task<()> for SyncTask {
             }
         }
 
-        rp.message(format!("Getting default branch"));
+        rp.message(format!("Getting default branch for {}", self.show_name));
         let lines = git.lines(&["remote", "show", "origin"])?;
         let default_branch = GitBranch::parse_default_branch(lines)?;
         let mut backup_branch = default_branch.clone();
@@ -126,12 +131,12 @@ impl Task<()> for SyncTask {
             }
             match branch.status {
                 BranchStatus::Ahead => {
-                    rp.message(format!("Pushing {}", branch.name));
+                    rp.message(format!("Pushing {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push"])?;
                 }
                 BranchStatus::Behind => {
-                    rp.message(format!("Pulling {}", branch.name));
+                    rp.message(format!("Pulling {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["pull"])?;
                 }
@@ -142,7 +147,7 @@ impl Task<()> for SyncTask {
                     if branch.name == default_branch {
                         continue;
                     }
-                    rp.message(format!("Deleting {}", branch.name));
+                    rp.message(format!("Deleting {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &default_branch])?;
                     git.exec(&["branch", "-D", &branch.name])?;
                 }
@@ -150,7 +155,10 @@ impl Task<()> for SyncTask {
                     if !self.force {
                         continue;
                     }
-                    rp.message(format!("Force pushing {}", branch.name));
+                    rp.message(format!(
+                        "Force pushing {} for {}",
+                        branch.name, self.show_name
+                    ));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push", "-f"])?;
                 }
@@ -158,7 +166,10 @@ impl Task<()> for SyncTask {
                     if !self.add {
                         continue;
                     }
-                    rp.message(format!("Setupstream pushing {}", branch.name));
+                    rp.message(format!(
+                        "Setupstream pushing {} for {}",
+                        branch.name, self.show_name
+                    ));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push", "--set-upstream", "origin", &branch.name])?;
                 }
@@ -184,7 +195,18 @@ impl Task<()> for SyncTask {
 impl Run for SyncArgs {
     fn run(&self) -> Result<()> {
         let db = Database::read()?;
-        let repos = db.list_all();
+
+        let query = Query::from_args(&db, &self.remote, &self.query);
+        let (repos, level) = query.list_local(self.filter)?;
+        if repos.is_empty() {
+            info!("Nothing to sync");
+            return Ok(());
+        }
+
+        if !self.fire {
+            let items: Vec<String> = repos.iter().map(|repo| repo.as_string(&level)).collect();
+            utils::confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
+        }
 
         let add = if self.fire { true } else { self.add };
         let delete = if self.fire { true } else { self.delete };
@@ -215,7 +237,7 @@ impl Run for SyncArgs {
                 owner: format!("{}", repo.owner),
                 name: format!("{}", repo.name),
                 path: repo.get_path(),
-                show_name: repo.full_name(),
+                show_name: repo.as_string(&level),
                 branch_re: branch_re.clone(),
                 add,
                 delete,

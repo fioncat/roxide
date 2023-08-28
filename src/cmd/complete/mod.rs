@@ -35,20 +35,21 @@ macro_rules! build_handlers {
 impl CompleteArgs {
     fn handlers() -> HashMap<&'static str, fn(&[&str]) -> Result<Complete>> {
         build_handlers! {
-            "home" => handlers::repo,
             "attach" => handlers::owner,
             "branch" => handlers::branch,
-            "merge" => handlers::branch,
-            "remove" => handlers::repo,
             "config" => handlers::remote,
+            "gc" => handlers::owner,
             "get" => handlers::repo,
-            "rebase" => handlers::branch,
-            "reset" => handlers::branch,
+            "home" => handlers::repo,
             "import" => handlers::owner,
+            "merge" => handlers::branch,
+            "rebase" => handlers::branch,
+            "release" => handlers::release,
+            "remove" => handlers::repo,
+            "reset" => handlers::branch,
             "run" => handlers::run,
             "snapshot" => handlers::snapshot,
-            "release" => handlers::release,
-            "gc" => handlers::owner,
+            "sync" => handlers::repo,
             "tag" => handlers::tag,
         }
     }
