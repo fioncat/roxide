@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Args;
+use regex::Regex;
 
 use crate::batch::{self, Reporter, Task};
 use crate::cmd::Run;
@@ -13,11 +14,38 @@ use crate::config;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::Repo;
-use crate::shell::Shell;
+use crate::shell::{BranchStatus, GitBranch, GitTask, Shell};
 
 /// Sync database and workspace.
 #[derive(Args)]
-pub struct SyncArgs {}
+pub struct SyncArgs {
+    /// The remote name.
+    pub remote: Option<String>,
+
+    /// The repo query, format is `owner[/[name]]`.
+    pub query: Option<String>,
+
+    /// Delete gone branch in local.
+    #[clap(long, short)]
+    pub delete: bool,
+
+    /// Push detached branch to remote.
+    #[clap(long, short)]
+    pub add: bool,
+
+    /// Force push conflict branch to remote.
+    #[clap(long, short)]
+    pub force: bool,
+
+    /// Commit message if have uncommitted changes in current branch.
+    #[clap(long, short)]
+    pub message: Option<String>,
+
+    /// Enable all options, if you are in an emergency situation and need to sync
+    /// the remote quickly, use it. This also skips confirmation.
+    #[clap(long)]
+    pub fire: bool,
+}
 
 struct SyncTask {
     remote: Arc<Remote>,
@@ -28,6 +56,14 @@ struct SyncTask {
     path: PathBuf,
 
     show_name: String,
+
+    add: bool,
+    delete: bool,
+    force: bool,
+
+    branch_re: Arc<Regex>,
+
+    message: Arc<Option<String>>,
 }
 
 impl Task<()> for SyncTask {
@@ -43,28 +79,52 @@ impl Task<()> for SyncTask {
             }
         };
 
-        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         let path = format!("{}", self.path.display());
+        let git = GitTask::new(path.as_str());
+
+        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         if clone {
             rp.message(format!("Cloning {}...", self.show_name));
             Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
         } else {
             rp.message(format!("Fetching {}...", self.show_name));
-            Shell::exec_git_mute(&[
-                "-C",
-                path.as_str(),
-                "remote",
-                "set-url",
-                "origin",
-                url.as_str(),
-            ])?;
-            Shell::exec_git_mute(&["-C", path.as_str(), "fetch", "--all"])?;
+            git.exec(&["remote", "set-url", "origin", url.as_str()])?;
+            git.exec(&["fetch", "--all"])?;
         }
         if let Some(user) = &self.remote.user {
             Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.name", user.as_str()])?;
         }
         if let Some(email) = &self.remote.email {
             Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.email", email.as_str()])?;
+        }
+
+        rp.message(format!("Ensuring changes"));
+        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "status", "-s"])?;
+        let mut stash = false;
+        if !lines.is_empty() {
+            if let Some(msg) = self.message.as_ref() {
+                Shell::exec_git_mute(&["-C", path.as_str(), "commit", "-m", msg.as_str()])?;
+            } else {
+                Shell::exec_git_mute(&["-C", path.as_str(), "stash", "push"])?;
+                stash = true;
+            }
+        }
+
+        rp.message(format!("Getting default branch"));
+        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "remote", "show", "origin"])?;
+        let mut backup_branch = GitBranch::parse_default_branch(lines)?;
+
+        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "branch", "-vv"])?;
+        for line in lines {
+            let branch = GitBranch::parse(&self.branch_re, line.as_str())?;
+            match branch.status {
+                BranchStatus::Ahead => {}
+                _ => {}
+            }
+        }
+
+        if stash {
+            Shell::exec_git_mute(&["-C", path.as_str(), "stash", "pop"])?;
         }
         Ok(())
     }
@@ -81,6 +141,18 @@ impl Run for SyncArgs {
     fn run(&self) -> Result<()> {
         let db = Database::read()?;
         let repos = db.list_all();
+
+        let add = if self.fire { true } else { self.add };
+        let delete = if self.fire { true } else { self.delete };
+        let force = if self.fire { true } else { self.force };
+        let message = if self.fire {
+            Arc::new(Some(String::from("fire commit")))
+        } else {
+            Arc::new(self.message.clone())
+        };
+
+        let branch_re = Arc::new(GitBranch::get_regex());
+
         let mut tasks = Vec::with_capacity(repos.len());
         let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
         for repo in repos {
@@ -100,6 +172,11 @@ impl Run for SyncArgs {
                 name: format!("{}", repo.name),
                 path: repo.get_path(),
                 show_name: repo.full_name(),
+                branch_re: branch_re.clone(),
+                add,
+                delete,
+                force,
+                message: message.clone(),
             });
         }
         let _ = batch::run("Sync", tasks);
