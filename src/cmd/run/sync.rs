@@ -94,7 +94,7 @@ impl Task<()> for SyncTask {
         } else {
             rp.message(format!("Fetching {}...", self.show_name));
             git.exec(&["remote", "set-url", "origin", url.as_str()])?;
-            git.exec(&["fetch", "--all", "--prune"])?;
+            git.exec(&["fetch", "origin", "--prune"])?;
         }
         if let Some(user) = &self.remote.user {
             git.exec(&["config", "user.name", user.as_str()])?;
