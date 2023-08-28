@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args;
 use regex::Regex;
 
@@ -105,13 +105,11 @@ impl Task<()> for SyncTask {
 
         rp.message(format!("Ensuring changes for {}", self.show_name));
         let lines = git.lines(&["status", "-s"])?;
-        let mut stash = false;
         if !lines.is_empty() {
             if let Some(msg) = self.message.as_ref() {
                 git.exec(&["commit", "-m", msg.as_str()])?;
             } else {
-                git.exec(&["stash", "push"])?;
-                stash = true;
+                bail!("Have uncommitted change(s), skip synchronization");
             }
         }
 
@@ -178,9 +176,6 @@ impl Task<()> for SyncTask {
         }
 
         git.exec(&["checkout", &backup_branch])?;
-        if stash {
-            git.exec(&["stash", "pop"])?;
-        }
         Ok(())
     }
 
