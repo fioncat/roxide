@@ -85,7 +85,7 @@ impl Run for ImportArgs {
         let mut db = Database::read()?;
 
         let query = Query::new(&db, vec![self.remote.clone(), self.owner.clone()]);
-        let (remote, names) = query.list_remote(self.force, self.filter)?;
+        let (remote, owner, names) = query.list_remote(self.force, self.filter)?;
 
         if names.is_empty() {
             info!("Nothing to import");
@@ -93,7 +93,7 @@ impl Run for ImportArgs {
         }
 
         let remote_arc = Arc::new(remote);
-        let owner_arc = Arc::new(self.owner.clone());
+        let owner_arc = Arc::new(owner);
 
         let mut tasks = Vec::with_capacity(names.len());
         for name in names {

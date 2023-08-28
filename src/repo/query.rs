@@ -304,17 +304,17 @@ impl<'a> Query<'_> {
         Ok((vec![repo], NameLevel::Name))
     }
 
-    pub fn list_remote(&self, force: bool, filter: bool) -> Result<(Remote, Vec<String>)> {
-        let (remote, names) = self.list_remote_raw(force)?;
+    pub fn list_remote(&self, force: bool, filter: bool) -> Result<(Remote, String, Vec<String>)> {
+        let (remote, owner, names) = self.list_remote_raw(force)?;
         if filter {
             let names = utils::edit_items(names.clone())?;
-            return Ok((remote, names));
+            return Ok((remote, owner, names));
         }
 
-        Ok((remote, names))
+        Ok((remote, owner, names))
     }
 
-    fn list_remote_raw(&self, force: bool) -> Result<(Remote, Vec<String>)> {
+    fn list_remote_raw(&self, force: bool) -> Result<(Remote, String, Vec<String>)> {
         assert!(self.query.len() == 2);
 
         let remote_name = &self.query[0];
@@ -323,7 +323,7 @@ impl<'a> Query<'_> {
 
         let (owner, name) = parse_owner(&query);
         if !owner.is_empty() && !name.is_empty() {
-            return Ok((remote, vec![query.clone()]));
+            return Ok((remote, owner, vec![query.clone()]));
         }
         let owner = match query.strip_suffix("/") {
             Some(owner) => owner,
@@ -339,7 +339,7 @@ impl<'a> Query<'_> {
             .into_iter()
             .filter(|name| !attached_set.contains(name.as_str()))
             .collect();
-        Ok((remote, names))
+        Ok((remote, owner.to_string(), names))
     }
 }
 
