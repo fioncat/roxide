@@ -256,6 +256,27 @@ impl Shell {
     }
 }
 
+pub struct GitTask<'a> {
+    prefix: Vec<&'a str>,
+}
+
+impl<'a> GitTask<'a> {
+    pub fn new(path: &'a str) -> GitTask<'a> {
+        let prefix = vec!["-C", path];
+        GitTask { prefix }
+    }
+
+    pub fn exec(&self, args: &[&str]) -> Result<()> {
+        let args = [&self.prefix, args].concat();
+        Shell::exec_git_mute(&args)
+    }
+
+    pub fn lines(&self, args: &[&str]) -> Result<Vec<String>> {
+        let args = [&self.prefix, args].concat();
+        Shell::exec_git_mute_lines(&args)
+    }
+}
+
 pub fn search<S>(keys: &Vec<S>) -> Result<usize>
 where
     S: AsRef<str>,
@@ -333,8 +354,12 @@ impl GitBranch {
     const BRANCH_REGEX: &str = r"^(\*)*[ ]*([^ ]*)[ ]*([^ ]*)[ ]*(\[[^\]]*\])*[ ]*(.*)$";
     const HEAD_BRANCH_PREFIX: &str = "HEAD branch:";
 
+    pub fn get_regex() -> Regex {
+        Regex::new(Self::BRANCH_REGEX).expect("parse git branch regex")
+    }
+
     pub fn list() -> Result<Vec<GitBranch>> {
-        let re = Regex::new(Self::BRANCH_REGEX).expect("parse git branch regex");
+        let re = Self::get_regex();
         let lines = Shell::git(&["branch", "-vv"])
             .with_desc("List git branch info")
             .execute()?
@@ -422,6 +447,10 @@ impl GitBranch {
         // use "git show <remote>" instead to get default branch.
         let mut git = Shell::git(&["remote", "show", remote]);
         let lines = git.execute()?.checked_lines()?;
+        Self::parse_default_branch(lines)
+    }
+
+    pub fn parse_default_branch(lines: Vec<String>) -> Result<String> {
         for line in lines {
             if let Some(branch) = line.trim().strip_prefix(Self::HEAD_BRANCH_PREFIX) {
                 let branch = branch.trim();
@@ -442,7 +471,7 @@ impl GitBranch {
             .checked_read()
     }
 
-    fn parse(re: &Regex, line: impl AsRef<str>) -> Result<GitBranch> {
+    pub fn parse(re: &Regex, line: impl AsRef<str>) -> Result<GitBranch> {
         let parse_err = format!(
             "invalid branch description {}, please check your git command",
             style(line.as_ref()).yellow()
