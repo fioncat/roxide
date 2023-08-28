@@ -32,23 +32,20 @@ impl Run for AttachArgs {
             );
         }
 
-        let remote = config::must_get_remote(&self.remote)?;
-
         let query = Query::new(&db, vec![self.remote.clone(), self.query.clone()]);
-        let result = query.select_remote(
+        let (remote, repo, exists) = query.select_remote(
             SelectOptions::new()
                 .with_force(self.force)
                 .with_search(true)
                 .with_repo_path(format!("{}", config::current_dir().display())),
         )?;
-        if result.exists {
+        if exists {
             bail!(
                 "The repo {} has already been bound to {}, please detach it first",
-                result.repo.long_name(),
-                result.repo.get_path().display()
+                repo.long_name(),
+                repo.get_path().display()
             );
         }
-        let repo = result.repo;
 
         confirm!(
             "Do you want to attach current directory to {}",

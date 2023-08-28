@@ -33,19 +33,18 @@ impl Run for HomeArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
         let query = Query::new(&db, self.query.clone());
-        let result = query.select(
+        let (remote, repo, exists) = query.select(
             SelectOptions::new()
                 .with_force(self.force)
                 .with_search(self.search),
         )?;
-        if !result.exists {
+        if !exists {
             confirm!(
                 "Do you want to create {}/{}",
-                result.repo.owner.as_ref(),
-                result.repo.name.as_ref()
+                repo.owner.as_ref(),
+                repo.name.as_ref()
             );
         }
-        let (remote, repo) = result.as_repo();
 
         let dir = repo.get_path();
         match fs::read_dir(&dir) {
