@@ -92,39 +92,83 @@ impl Task<()> for SyncTask {
             git.exec(&["fetch", "--all"])?;
         }
         if let Some(user) = &self.remote.user {
-            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.name", user.as_str()])?;
+            git.exec(&["config", "user.name", user.as_str()])?;
         }
         if let Some(email) = &self.remote.email {
-            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.email", email.as_str()])?;
+            git.exec(&["config", "user.email", email.as_str()])?;
         }
 
         rp.message(format!("Ensuring changes"));
-        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "status", "-s"])?;
+        let lines = git.lines(&["status", "-s"])?;
         let mut stash = false;
         if !lines.is_empty() {
             if let Some(msg) = self.message.as_ref() {
-                Shell::exec_git_mute(&["-C", path.as_str(), "commit", "-m", msg.as_str()])?;
+                git.exec(&["commit", "-m", msg.as_str()])?;
             } else {
-                Shell::exec_git_mute(&["-C", path.as_str(), "stash", "push"])?;
+                git.exec(&["stash", "push"])?;
                 stash = true;
             }
         }
 
         rp.message(format!("Getting default branch"));
-        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "remote", "show", "origin"])?;
-        let mut backup_branch = GitBranch::parse_default_branch(lines)?;
+        let lines = git.lines(&["remote", "show", "origin"])?;
+        let default_branch = GitBranch::parse_default_branch(lines)?;
+        let mut backup_branch = default_branch.clone();
 
-        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "branch", "-vv"])?;
+        let lines = git.lines(&["branch", "-vv"])?;
         for line in lines {
             let branch = GitBranch::parse(&self.branch_re, line.as_str())?;
+            if branch.current {
+                match branch.status {
+                    BranchStatus::Gone => {}
+                    _ => backup_branch = branch.name.clone(),
+                }
+            }
             match branch.status {
-                BranchStatus::Ahead => {}
-                _ => {}
+                BranchStatus::Ahead => {
+                    rp.message(format!("Pushing {}", branch.name));
+                    git.exec(&["checkout", &branch.name])?;
+                    git.exec(&["push"])?;
+                }
+                BranchStatus::Behind => {
+                    rp.message(format!("Pulling {}", branch.name));
+                    git.exec(&["checkout", &branch.name])?;
+                    git.exec(&["pull"])?;
+                }
+                BranchStatus::Gone => {
+                    if !self.delete {
+                        continue;
+                    }
+                    if branch.name == default_branch {
+                        continue;
+                    }
+                    rp.message(format!("Deleting {}", branch.name));
+                    git.exec(&["checkout", &default_branch])?;
+                    git.exec(&["branch", "-D", &branch.name])?;
+                }
+                BranchStatus::Conflict => {
+                    if !self.force {
+                        continue;
+                    }
+                    rp.message(format!("Force pushing {}", branch.name));
+                    git.exec(&["checkout", &branch.name])?;
+                    git.exec(&["push", "-f"])?;
+                }
+                BranchStatus::Detached => {
+                    if !self.add {
+                        continue;
+                    }
+                    rp.message(format!("Setupstream pushing {}", branch.name));
+                    git.exec(&["checkout", &branch.name])?;
+                    git.exec(&["push", "--set-upstream", "origin", &branch.name])?;
+                }
+                BranchStatus::Sync => {}
             }
         }
 
+        git.exec(&["checkout", &backup_branch])?;
         if stash {
-            Shell::exec_git_mute(&["-C", path.as_str(), "stash", "pop"])?;
+            git.exec(&["stash", "pop"])?;
         }
         Ok(())
     }
