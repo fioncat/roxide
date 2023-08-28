@@ -48,18 +48,6 @@ impl SelectOptions {
     }
 }
 
-pub struct SelectResult {
-    pub remote: Remote,
-    pub repo: Rc<Repo>,
-    pub exists: bool,
-}
-
-impl SelectResult {
-    pub fn as_repo(self) -> (Remote, Rc<Repo>) {
-        (self.remote, self.repo)
-    }
-}
-
 pub struct Query<'a> {
     db: &'a Database,
 
@@ -86,7 +74,7 @@ impl<'a> Query<'_> {
         Query { db, query }
     }
 
-    pub fn select(&self, opts: SelectOptions) -> Result<SelectResult> {
+    pub fn select(&self, opts: SelectOptions) -> Result<(Remote, Rc<Repo>, bool)> {
         if self.query.is_empty() {
             let repo = if opts.search {
                 self.search_local(self.db.list_all(), NameLevel::Full)?
@@ -94,11 +82,7 @@ impl<'a> Query<'_> {
                 self.db.must_latest("")?
             };
             let remote = config::must_get_remote(repo.remote.as_str())?;
-            return Ok(SelectResult {
-                remote,
-                repo,
-                exists: true,
-            });
+            return Ok((remote, repo, true));
         }
 
         if self.query.len() == 1 {
@@ -111,20 +95,12 @@ impl<'a> Query<'_> {
                         self.db.must_latest(&remote.name)?
                     };
                     let remote = config::must_get_remote(repo.remote.as_str())?;
-                    Ok(SelectResult {
-                        remote,
-                        repo,
-                        exists: true,
-                    })
+                    Ok((remote, repo, true))
                 }
                 None => {
                     let repo = self.db.must_get_fuzzy("", maybe_remote)?;
                     let remote = config::must_get_remote(repo.remote.as_str())?;
-                    Ok(SelectResult {
-                        remote,
-                        repo,
-                        exists: true,
-                    })
+                    Ok((remote, repo, true))
                 }
             };
         }
@@ -144,11 +120,7 @@ impl<'a> Query<'_> {
                     self.db.list_by_owner(remote.name.as_str(), owner),
                     NameLevel::Name,
                 )?;
-                return Ok(SelectResult {
-                    remote,
-                    repo,
-                    exists: true,
-                });
+                return Ok((remote, repo, true));
             }
 
             let provider = api::init_provider(&remote, opts.force)?;
@@ -161,24 +133,20 @@ impl<'a> Query<'_> {
         let (owner, name) = parse_owner(query);
         if owner.is_empty() {
             let repo = self.db.must_get_fuzzy(&remote.name, &name)?;
-            return Ok(SelectResult {
-                remote,
-                repo,
-                exists: true,
-            });
+            return Ok((remote, repo, true));
         }
         return Ok(self.get_repo(remote, owner, name, &opts));
     }
 
     pub fn must_select(&self, opts: SelectOptions) -> Result<(Remote, Rc<Repo>)> {
-        let result = self.select(opts)?;
-        if !result.exists {
-            bail!("Could not find repo {}", result.repo.full_name());
+        let (remote, repo, exists) = self.select(opts)?;
+        if !exists {
+            bail!("Could not find repo {}", repo.full_name());
         }
-        Ok(result.as_repo())
+        Ok((remote, repo))
     }
 
-    pub fn select_remote(&self, opts: SelectOptions) -> Result<SelectResult> {
+    pub fn select_remote(&self, opts: SelectOptions) -> Result<(Remote, Rc<Repo>, bool)> {
         assert!(self.query.len() == 2);
         let remote_name = &self.query[0];
         let remote = config::must_get_remote(remote_name)?;
@@ -216,7 +184,13 @@ impl<'a> Query<'_> {
         Ok(repo)
     }
 
-    fn get_repo<S>(&self, remote: Remote, owner: S, name: S, opts: &SelectOptions) -> SelectResult
+    fn get_repo<S>(
+        &self,
+        remote: Remote,
+        owner: S,
+        name: S,
+        opts: &SelectOptions,
+    ) -> (Remote, Rc<Repo>, bool)
     where
         S: AsRef<str>,
     {
@@ -224,11 +198,7 @@ impl<'a> Query<'_> {
             .db
             .get(remote.name.as_str(), owner.as_ref(), name.as_ref())
         {
-            Some(repo) => SelectResult {
-                remote,
-                repo,
-                exists: true,
-            },
+            Some(repo) => (remote, repo, true),
             None => {
                 let remote_name = remote.name.clone();
                 let repo = Repo::new(
@@ -237,11 +207,7 @@ impl<'a> Query<'_> {
                     name.as_ref().to_string(),
                     opts.repo_path.clone(),
                 );
-                SelectResult {
-                    remote,
-                    repo,
-                    exists: false,
-                }
+                (remote, repo, false)
             }
         }
     }
