@@ -93,7 +93,7 @@ impl Run for ImportArgs {
         }
 
         let remote_arc = Arc::new(remote);
-        let owner_arc = Arc::new(owner);
+        let owner_arc = Arc::new(owner.clone());
 
         let mut tasks = Vec::with_capacity(names.len());
         for name in names {
@@ -114,7 +114,7 @@ impl Run for ImportArgs {
         utils::confirm_items(&items, "import", "import", "Repo", "Repos")?;
 
         let remote_rc = Rc::new(self.remote.clone());
-        let owner_rc = Rc::new(self.owner.clone());
+        let owner_rc = Rc::new(owner);
 
         let results = batch::run("Import", tasks);
         for result in results {
