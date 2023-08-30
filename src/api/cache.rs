@@ -160,7 +160,7 @@ mod tests {
             expire: Duration::from_secs(20),
             force: true,
             upstream,
-            _lock: Lock::acquire("test-roxide-cache-01").unwrap(),
+            _lock: Lock::acquire("test-cache-01").unwrap(),
         };
         assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
 
@@ -182,7 +182,7 @@ mod tests {
             expire: Duration::from_secs(1),
             force: true,
             upstream,
-            _lock: Lock::acquire("test-roxide-cache-02").unwrap(),
+            _lock: Lock::acquire("test-cache-02").unwrap(),
         };
         assert_eq!(cache.list_repos("kubernetes").unwrap(), expect_repos);
 
