@@ -214,3 +214,48 @@ fn cursor_up(n: usize) {
         print!("\x1b[K");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use serial_test::serial;
+
+    use super::*;
+
+    struct TestTask {
+        idx: usize,
+    }
+
+    impl Task<usize> for TestTask {
+        fn message_done(&self, _: &Result<usize>) -> String {
+            format!("Task {} done!", self.idx)
+        }
+
+        fn run(&self, rp: &Reporter<usize>) -> Result<usize> {
+            rp.message(format!("Handling task {}", self.idx));
+            thread::sleep(Duration::from_millis(100));
+            Ok(self.idx)
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_run() {
+        const COUNT: usize = 30;
+        let mut tasks = Vec::with_capacity(COUNT);
+        for i in 0..COUNT {
+            let task = TestTask { idx: i };
+            tasks.push(task);
+        }
+
+        let results: Vec<usize> = run("Test", tasks)
+            .into_iter()
+            .map(|result| result.unwrap())
+            .collect();
+        assert_eq!(results.len(), COUNT);
+        for i in 0..COUNT {
+            assert_eq!(i, results[i]);
+        }
+    }
+}

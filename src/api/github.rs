@@ -157,7 +157,7 @@ impl Provider for Github {
         Ok(Some(prs.remove(0).html_url))
     }
 
-    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
+    fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         let opts: PullRequestOptions = merge.into();
         let path = format!("repos/{}/{}/pulls", opts.owner, opts.name);
         let body = PullRequestBody {

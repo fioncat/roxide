@@ -32,7 +32,7 @@ impl Provider for Alias {
 
     fn get_merge(&self, mut merge: MergeOptions) -> Result<Option<String>> {
         let owner = self.alias_owner(&merge.owner);
-        let name = self.alias_repo(&merge.owner, &merge.name);
+        let name = self.alias_repo(owner, &merge.name);
 
         merge.owner = owner.to_string();
         merge.name = name.to_string();
@@ -40,9 +40,14 @@ impl Provider for Alias {
         self.upstream.get_merge(merge)
     }
 
-    fn create_merge(&self, mut merge: MergeOptions, title: String, body: String) -> Result<String> {
+    fn create_merge(
+        &mut self,
+        mut merge: MergeOptions,
+        title: String,
+        body: String,
+    ) -> Result<String> {
         let owner = self.alias_owner(&merge.owner);
-        let name = self.alias_repo(&merge.owner, &merge.name);
+        let name = self.alias_repo(owner, &merge.name);
 
         merge.owner = owner.to_string();
         merge.name = name.to_string();
@@ -99,5 +104,77 @@ impl Alias {
             }
         }
         name
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+
+    use crate::api::types::tests::StaticProvider;
+
+    use super::*;
+
+    #[test]
+    #[serial]
+    fn test_alias() {
+        let mut owner_map = HashMap::with_capacity(1);
+        owner_map.insert(String::from("test-alias"), String::from("fioncat"));
+        let mut repo_map = HashMap::with_capacity(2);
+        repo_map.insert(String::from("fioncat"), HashMap::new());
+        repo_map
+            .get_mut("fioncat")
+            .unwrap()
+            .insert(String::from("ro"), String::from("roxide"));
+        repo_map
+            .get_mut("fioncat")
+            .unwrap()
+            .insert(String::from("vim"), String::from("spacenvim"));
+        repo_map
+            .get_mut("fioncat")
+            .unwrap()
+            .insert(String::from("unknown"), String::from("zzz"));
+
+        repo_map.insert(String::from("kubernetes"), HashMap::new());
+        repo_map
+            .get_mut("kubernetes")
+            .unwrap()
+            .insert(String::from("k8s"), String::from("kubernetes"));
+
+        let upstream = StaticProvider::mock();
+
+        let mut alias = Alias::new(owner_map, repo_map, upstream);
+        let result = alias.list_repos("test-alias").unwrap();
+        let expect: Vec<String> = vec!["ro", "vim", "dotfiles", "fioncat"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(result, expect);
+
+        let result = alias.list_repos("kubernetes").unwrap();
+        let expect: Vec<String> = vec!["k8s", "kube-proxy", "kubelet", "kubectl"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(result, expect);
+
+        alias.get_repo("test-alias", "vim").unwrap();
+        alias.get_repo("test-alias", "ro").unwrap();
+        alias.get_repo("kubernetes", "k8s").unwrap();
+
+        let merge = MergeOptions {
+            owner: format!("test-alias"),
+            name: format!("ro"),
+            upstream: None,
+            source: format!("test"),
+            target: format!("main"),
+        };
+        let result = alias
+            .create_merge(merge.clone(), String::new(), String::new())
+            .unwrap();
+        assert_eq!(result, "fioncat/roxide");
+
+        let result = alias.get_merge(merge).unwrap().unwrap();
+        assert_eq!(result, "fioncat/roxide");
     }
 }

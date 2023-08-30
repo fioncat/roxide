@@ -21,8 +21,5 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
-      - name: Cargo check
-        run: cargo check
-
       - name: Cargo test
         run: cargo test

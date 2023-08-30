@@ -86,7 +86,7 @@ impl Provider for Gitlab {
         Ok(Some(mrs.remove(0).web_url))
     }
 
-    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
+    fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         if let Some(_) = merge.upstream {
             bail!("Gitlab now does not support upstream");
         }

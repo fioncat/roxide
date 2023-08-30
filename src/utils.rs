@@ -616,7 +616,7 @@ pub fn confirm_items_weak(
 
 pub fn walk_dir<F>(root: PathBuf, mut handle: F) -> Result<()>
 where
-    F: FnMut(PathBuf, Metadata) -> Result<bool>,
+    F: FnMut(&PathBuf, Metadata) -> Result<bool>,
 {
     let mut stack = vec![root];
     while !stack.is_empty() {
@@ -633,7 +633,7 @@ where
                 .metadata()
                 .with_context(|| format!("Read metadata for {}", sub.display()))?;
             let is_dir = meta.is_dir();
-            let next = handle(sub.clone(), meta)?;
+            let next = handle(&sub, meta)?;
             if next && is_dir {
                 stack.push(sub);
             }
@@ -650,4 +650,110 @@ pub fn show_json<T: Serialize>(value: T) -> Result<()> {
     let json = String::from_utf8(buf).context("UTF8 encode json")?;
     println!("{json}");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+
+    use super::*;
+
+    #[test]
+    #[serial]
+    fn test_format_since() {
+        let cases = [
+            (10, "now"),
+            (30, "30 seconds ago"),
+            (60, "last minute"),
+            (120, "2 minutes ago"),
+            (DAY, "last day"),
+            (3 * DAY, "3 days ago"),
+            (WEEK, "last week"),
+            (3 * WEEK, "3 weeks ago"),
+            (MONTH, "last month"),
+            (10 * MONTH, "10 months ago"),
+            (YEAR, "last year"),
+            (10 * YEAR, "10 years ago"),
+        ];
+
+        let now = config::now_secs();
+        for (secs, expect) in cases {
+            let time = now.saturating_sub(secs);
+            let format = format_since(time);
+            if expect != format.as_str() {
+                panic!("Expect {expect}, Found {format}");
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_format_time() {
+        let now = config::now_secs();
+        let time = format_time(now).unwrap();
+        println!("{time}");
+    }
+
+    #[test]
+    #[serial]
+    fn test_parse_duration() {
+        let cases = [
+            ("3s", 3),
+            ("120s", 120),
+            ("450s", 450),
+            ("3m", 3 * MINUTE),
+            ("120m", 120 * MINUTE),
+            ("12h", 12 * HOUR),
+            ("30d", 30 * DAY),
+        ];
+
+        for (str, expect) in cases {
+            let result = parse_duration_secs(str).unwrap();
+            if result != expect {
+                panic!("Expect {expect}, Found {result}");
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_remove_dir_recursively() {
+        const PATH: &str = "/tmp/test-roxide/sub01/sub02/sub03";
+        fs::create_dir_all(PATH).unwrap();
+        remove_dir_recursively(PathBuf::from(PATH)).unwrap();
+
+        match fs::read_dir(PATH) {
+            Ok(_) => panic!("Expect path {PATH} be deleted, but it is still exists"),
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => panic!("{err}"),
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_walk_dir() {
+        let root = config::current_dir().clone();
+        walk_dir(root, |_path, _meta| Ok(true)).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_show_json() {
+        #[derive(Debug, Serialize)]
+        struct TestInfo {
+            pub name: String,
+            pub age: i32,
+            pub emails: Vec<String>,
+        }
+
+        let info = TestInfo {
+            name: String::from("Rowlet"),
+            age: 25,
+            emails: vec![
+                String::from("lazycat7706@gmail.com"),
+                String::from("631029386@qq.com"),
+            ],
+        };
+        show_json(&info).unwrap();
+    }
 }
