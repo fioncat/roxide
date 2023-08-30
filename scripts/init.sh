@@ -25,5 +25,3 @@ _roxide_base() {
 	esac
 	return $?
 }
-
-compdef _roxide _roxide_base

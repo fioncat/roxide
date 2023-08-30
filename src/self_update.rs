@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::{env, fs};
 
 use anyhow::{bail, Context, Result};
-use console::style;
 
 use crate::api::github::Github;
 use crate::shell::Shell;
@@ -26,7 +25,7 @@ pub fn trigger() -> Result<()> {
 
     confirm!(
         "Found new version {} for roxide, do you want to update",
-        style(&latest).magenta()
+        latest
     );
 
     let update_script = include_bytes!("../install.sh");

@@ -14,3 +14,4 @@ _roxide() {
 }
 
 compdef _roxide roxide
+compdef _roxide _roxide_base

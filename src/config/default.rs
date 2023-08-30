@@ -12,8 +12,8 @@ pub fn metadir() -> String {
 
 pub fn command() -> Command {
     Command {
-        base: Some(String::from("z")),
-        home: Some(String::from("zz")),
+        base: Some(String::from("ro")),
+        home: Some(String::from("rh")),
         remotes: empty_map(),
     }
 }
