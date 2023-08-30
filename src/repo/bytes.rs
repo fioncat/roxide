@@ -195,3 +195,23 @@ impl From<Vec<Rc<Repo>>> for Bytes {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::repo::database::tests::list_repos;
+
+    use super::*;
+
+    #[test]
+    fn test_repo_bytes() {
+        let expect_repos = list_repos();
+
+        let bytes: Bytes = list_repos().into();
+        let bytes = bytes.encode().unwrap();
+
+        let expect_bytes = Bytes::decode(&bytes).unwrap();
+        let results: Vec<Rc<Repo>> = expect_bytes.into();
+
+        assert_eq!(results, expect_repos);
+    }
+}

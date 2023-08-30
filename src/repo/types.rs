@@ -6,7 +6,7 @@ use crate::config;
 use crate::config::types::Remote;
 use crate::utils;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Repo {
     pub remote: Rc<String>,
     pub owner: Rc<String>,

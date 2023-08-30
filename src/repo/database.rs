@@ -220,3 +220,82 @@ impl Database {
         pos
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    pub fn list_repos() -> Vec<Rc<Repo>> {
+        vec![
+            Repo::new("github", "fioncat", "roxide", None),
+            Repo::new(
+                "github",
+                "fioncat",
+                "spacenvim",
+                Some(String::from("/path/to/nvim-config")),
+            ),
+            Repo::new("github", "fioncat", "csync", None),
+            Repo::new("github", "fioncat", "fioncat", None),
+            Repo::new("github", "fioncat", "dotfiles", None),
+            Repo::new("github", "kubernetes", "kubernetes", None),
+            Repo::new("github", "kubernetes", "kube-proxy", None),
+            Repo::new("github", "kubernetes", "kubelet", None),
+            Repo::new("github", "kubernetes", "kubectl", None),
+            Repo::new("gitlab", "my-owner-01", "my-repo-01", None),
+            Repo::new("gitlab", "my-owner-01", "my-repo-02", None),
+            Repo::new("gitlab", "my-owner-01", "my-repo-03", None),
+            Repo::new("gitlab", "my-owner-02", "my-repo-01", None),
+            Repo::new("test", "rust", "hello", None),
+            Repo::new("test", "rust", "test-roxide", None),
+            Repo::new("test", "go", "hello", None),
+            Repo::new("test", "python", "hello", None),
+        ]
+    }
+
+    #[test]
+    fn test_database() {
+        let path = PathBuf::new();
+        let repos = list_repos();
+        let lock = Lock::acquire("test-database").unwrap();
+        let db = Database { repos, path, lock };
+
+        assert_eq!(
+            db.get("github", "fioncat", "dotfiles"),
+            Some(Repo::new("github", "fioncat", "dotfiles", None))
+        );
+        assert_eq!(
+            db.get("github", "fioncat", "spacenvim"),
+            Some(Repo::new(
+                "github",
+                "fioncat",
+                "spacenvim",
+                Some(String::from("/path/to/nvim-config"))
+            ))
+        );
+        assert_eq!(
+            db.get("test", "python", "hello"),
+            Some(Repo::new("test", "python", "hello", None))
+        );
+        assert_eq!(db.get("test", "python", "unknown"), None);
+        assert_eq!(db.get("github", "fioncat", "unknown"), None);
+        assert_eq!(db.get("", "", ""), None);
+        assert_eq!(
+            db.get_fuzzy("github", "dot"),
+            Some(Repo::new("github", "fioncat", "dotfiles", None))
+        );
+        assert_eq!(
+            db.get_fuzzy("", "kube"),
+            Some(Repo::new("github", "kubernetes", "kubernetes", None))
+        );
+        assert_eq!(
+            db.get_fuzzy("", "ro"),
+            Some(Repo::new("github", "fioncat", "roxide", None))
+        );
+        assert_eq!(
+            db.get_fuzzy("gitlab", "my"),
+            Some(Repo::new("gitlab", "my-owner-01", "my-repo-01", None))
+        );
+        assert_eq!(db.get_fuzzy("gitlab", "ro"), None);
+        assert_eq!(db.get_fuzzy("", "zzzzzzzzzzzzzzz"), None);
+    }
+}
