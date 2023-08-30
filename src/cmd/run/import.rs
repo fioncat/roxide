@@ -12,7 +12,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::Repo;
-use crate::shell::Shell;
+use crate::shell::{GitTask, Shell};
 use crate::{info, utils};
 
 /// Batch import repos
@@ -63,11 +63,12 @@ impl Task<Arc<String>> for ImportTask {
 
         Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
 
+        let git = GitTask::new(path.as_str());
         if let Some(user) = &self.remote.user {
-            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.name", user.as_str()])?;
+            git.exec(&["config", "user.name", user.as_str()])?;
         }
         if let Some(email) = &self.remote.email {
-            Shell::exec_git_mute(&["-C", path.as_str(), "config", "user.email", email.as_str()])?;
+            git.exec(&["config", "user.email", email.as_str()])?;
         }
         Ok(Arc::clone(&self.name))
     }
