@@ -51,6 +51,11 @@ pub fn now_secs() -> u64 {
     now().as_secs()
 }
 
+#[cfg(test)]
+pub fn set_now(now: Duration) {
+    unsafe { NOW = Some(now) }
+}
+
 static mut CURRENT_DIR: Option<PathBuf> = None;
 
 pub fn current_dir() -> &'static PathBuf {

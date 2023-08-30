@@ -40,7 +40,12 @@ impl Provider for Alias {
         self.upstream.get_merge(merge)
     }
 
-    fn create_merge(&self, mut merge: MergeOptions, title: String, body: String) -> Result<String> {
+    fn create_merge(
+        &mut self,
+        mut merge: MergeOptions,
+        title: String,
+        body: String,
+    ) -> Result<String> {
         let owner = self.alias_owner(&merge.owner);
         let name = self.alias_repo(&merge.owner, &merge.name);
 

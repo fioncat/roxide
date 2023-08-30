@@ -37,3 +37,6 @@ urlencoding = "2.1.2"
 [build-dependencies]
 simple-error = "0.3.0"
 vergen = { version = "8.2.4", features = [ "build", "rustc" ] }
+
+[dev-dependencies]
+serial_test = "2.0.0"

@@ -33,7 +33,7 @@ impl Run for MergeArgs {
         let repo = db.must_current()?;
 
         let remote = config::must_get_remote(repo.remote.as_str())?;
-        let provider = api::init_provider(&remote, self.force)?;
+        let mut provider = api::init_provider(&remote, self.force)?;
 
         info!("Get repo info from remote API");
         let mut api_repo = provider.get_repo(repo.owner.as_str(), repo.name.as_str())?;

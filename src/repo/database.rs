@@ -223,6 +223,8 @@ impl Database {
 
 #[cfg(test)]
 pub mod tests {
+    use serial_test::serial;
+
     use super::*;
 
     pub fn list_repos() -> Vec<Rc<Repo>> {
@@ -253,6 +255,7 @@ pub mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database() {
         let path = PathBuf::new();
         let repos = list_repos();

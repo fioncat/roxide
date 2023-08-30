@@ -219,6 +219,8 @@ fn cursor_up(n: usize) {
 mod tests {
     use std::time::Duration;
 
+    use serial_test::serial;
+
     use super::*;
 
     struct TestTask {
@@ -238,6 +240,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run() {
         const COUNT: usize = 30;
         let mut tasks = Vec::with_capacity(COUNT);

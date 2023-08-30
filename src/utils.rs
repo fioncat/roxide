@@ -654,9 +654,12 @@ pub fn show_json<T: Serialize>(value: T) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::*;
 
     #[test]
+    #[serial]
     fn test_format_since() {
         let cases = [
             (10, "now"),
@@ -684,6 +687,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_format_time() {
         let now = config::now_secs();
         let time = format_time(now).unwrap();
@@ -691,6 +695,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_parse_duration() {
         let cases = [
             ("3s", 3),
@@ -711,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_remove_dir_recursively() {
         const PATH: &str = "/tmp/test-roxide/sub01/sub02/sub03";
         fs::create_dir_all(PATH).unwrap();
@@ -724,21 +730,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_walk_dir() {
         let root = config::current_dir().clone();
-        walk_dir(root, |path, meta| {
-            println!(
-                "Iter path: {}, IsDir: {}, IsFile: {}",
-                path.display(),
-                meta.is_dir(),
-                meta.is_file()
-            );
-            Ok(true)
-        })
-        .unwrap();
+        walk_dir(root, |_path, _meta| Ok(true)).unwrap();
     }
 
     #[test]
+    #[serial]
     fn test_show_json() {
         #[derive(Debug, Serialize)]
         struct TestInfo {

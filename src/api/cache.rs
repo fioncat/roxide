@@ -9,12 +9,12 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::api::types::{ApiRepo, MergeOptions, Provider};
+use crate::config;
 use crate::utils::{self, Lock};
 
 pub struct Cache {
     dir: PathBuf,
 
-    now: Duration,
     expire: Duration,
 
     upstream: Box<dyn Provider>,
@@ -53,7 +53,7 @@ impl Provider for Cache {
         self.upstream.get_merge(merge)
     }
 
-    fn create_merge(&self, merge: MergeOptions, title: String, body: String) -> Result<String> {
+    fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         self.upstream.create_merge(merge, title, body)
     }
 }
@@ -66,13 +66,10 @@ impl Cache {
         force: bool,
     ) -> Result<Box<dyn Provider>> {
         let lock = Lock::acquire("cache")?;
-        let now = utils::current_time()?;
         let expire = Duration::from_secs(hours * 3600);
-
         Ok(Box::new(Cache {
             dir,
             expire,
-            now,
             upstream: p,
             force,
             _lock: lock,
@@ -114,7 +111,7 @@ impl Cache {
             .deserialize(update_time_data)
             .context("Decode cache last_updated data")?;
         let expire_duration = Duration::from_secs(update_time) + self.expire;
-        if self.now >= expire_duration {
+        if config::now() >= &expire_duration {
             fs::remove_file(path)
                 .with_context(|| format!("Remove cache file {}", path.display()))?;
             return Ok(None);
@@ -130,7 +127,7 @@ impl Cache {
     where
         T: Serialize + ?Sized,
     {
-        let now = self.now.as_secs();
+        let now = config::now_secs();
         let buffer_size =
             bincode::serialized_size(&now).unwrap() + bincode::serialized_size(value).unwrap();
         let mut buffer = Vec::with_capacity(buffer_size as usize);
@@ -139,5 +136,64 @@ impl Cache {
         bincode::serialize_into(&mut buffer, value).context("Encode cache data")?;
 
         utils::write_file(path, &buffer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+
+    use crate::api::types::tests::StaticProvider;
+
+    use super::*;
+
+    const CACHE_PATH: &str = "/tmp/test-roxide-cache";
+
+    #[test]
+    #[serial]
+    fn test_cache_normal() {
+        let upstream = StaticProvider::mock();
+        let expect_repos = upstream.list_repos("fioncat").unwrap();
+
+        let mut cache = Cache {
+            dir: PathBuf::from(CACHE_PATH),
+            expire: Duration::from_secs(20),
+            force: true,
+            upstream,
+            _lock: Lock::acquire("test-roxide-cache-01").unwrap(),
+        };
+        assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
+
+        let upstream = StaticProvider::new(vec![("fioncat", vec!["hello0", "hello1", "hello2"])]);
+        cache.upstream = upstream;
+        cache.force = false;
+
+        assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
+    }
+
+    #[test]
+    #[serial]
+    fn test_cache_expire() {
+        let upstream = StaticProvider::mock();
+        let expect_repos = upstream.list_repos("kubernetes").unwrap();
+
+        let mut cache = Cache {
+            dir: PathBuf::from(CACHE_PATH),
+            expire: Duration::from_secs(1),
+            force: true,
+            upstream,
+            _lock: Lock::acquire("test-roxide-cache-02").unwrap(),
+        };
+        assert_eq!(cache.list_repos("kubernetes").unwrap(), expect_repos);
+
+        let fake_now = utils::current_time().unwrap() + Duration::from_secs(200);
+        config::set_now(fake_now);
+
+        let expect_repos = vec!["hello0", "hello1", "hello2"];
+        let upstream = StaticProvider::new(vec![("kubernetes", expect_repos.clone())]);
+        cache.upstream = upstream;
+        cache.force = false;
+
+        assert_eq!(cache.list_repos("kubernetes").unwrap(), expect_repos);
     }
 }
