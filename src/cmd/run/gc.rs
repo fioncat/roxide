@@ -38,6 +38,7 @@ impl Run for GcArgs {
 
         info!("Scanning orphans under {}", root.display());
         utils::walk_dir(root.clone(), |path, meta| {
+            let path = path.clone();
             if !meta.is_dir() {
                 let rel_path = path.strip_prefix(&root).unwrap();
                 items.push(format!("{}", rel_path.display()));
