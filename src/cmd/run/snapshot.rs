@@ -15,7 +15,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::snapshot::{Item, Snapshot};
 use crate::repo::types::Repo;
-use crate::shell::Shell;
+use crate::shell::{GitTask, Shell};
 use crate::{config, info, utils};
 
 /// Snapshot operations for workspace
@@ -246,25 +246,21 @@ impl Task<String> for CheckSnapshotTask {
         rp.message(format!("Checking {}...", self.show_name));
 
         let path = format!("{}", self.path.display());
-        let lines = Shell::exec_git_mute_lines(&["-C", path.as_str(), "status", "-s"])?;
+        let git = GitTask::new(path.as_str());
+
+        let lines = git.lines(&["status", "-s"])?;
         if !lines.is_empty() {
             bail!("Found {}", utils::plural(&lines, "uncommitted change"));
         }
 
-        Shell::exec_git_mute(&["-C", path.as_str(), "fetch", "--all"])?;
-        let branch = Shell::exec_git_mute_read(&["-C", path.as_str(), "branch", "--show-current"])?;
+        git.exec(&["fetch", "--all"])?;
+        let branch = git.read(&["branch", "--show-current"])?;
         if branch.is_empty() {
             bail!("Please switch to an existing branch");
         }
         let origin_target = format!("origin/{branch}");
         let compare = format!("{origin_target}..HEAD");
-        let lines = Shell::exec_git_mute_lines(&[
-            "-C",
-            path.as_str(),
-            "log",
-            "--oneline",
-            compare.as_str(),
-        ])?;
+        let lines = git.lines(&["log", "--oneline", compare.as_str()])?;
         if !lines.is_empty() {
             bail!(
                 "Found {}",
@@ -294,10 +290,11 @@ struct RestoreSnapshotTask {
 impl Task<()> for RestoreSnapshotTask {
     fn run(&self, rp: &Reporter<()>) -> Result<()> {
         let path = format!("{}", self.path.display());
+        let git = GitTask::new(path.as_str());
         match fs::read_dir(&self.path) {
             Ok(_) => {
                 rp.message(format!("Fetching {}...", self.show_name));
-                Shell::exec_git_mute(&["-C", path.as_str(), "fetch", "--all"])?;
+                git.exec(&["fetch", "--all"])?;
             }
             Err(err) if err.kind() == ErrorKind::NotFound => {
                 rp.message(format!("Cloning {}...", self.show_name));
@@ -308,7 +305,7 @@ impl Task<()> for RestoreSnapshotTask {
             Err(err) => return Err(err).with_context(|| format!("Read dir {}", path)),
         }
         if let Some(branch) = self.branch.as_ref() {
-            Shell::exec_git_mute(&["-C", path.as_str(), "checkout", branch.as_str()])?;
+            git.exec(&["checkout", branch.as_str()])?;
         }
         Ok(())
     }
