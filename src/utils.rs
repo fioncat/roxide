@@ -475,8 +475,8 @@ impl Lock {
 
     pub fn acquire(name: impl AsRef<str>) -> Result<Lock> {
         let dir = PathBuf::from(config::base().metadir.as_str());
-        ensure_dir(&dir)?;
         let path = dir.join(format!("lock_{}", name.as_ref()));
+        ensure_dir(&path)?;
 
         let lock_opts = FileOptions::new().write(true).create(true).truncate(true);
         let mut file_lock = match FileLock::lock(&path, false, lock_opts) {

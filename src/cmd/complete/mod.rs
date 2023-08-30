@@ -42,6 +42,7 @@ impl CompleteArgs {
             "get" => handlers::repo,
             "home" => handlers::repo,
             "import" => handlers::owner,
+            "init" => handlers::shell,
             "merge" => handlers::branch,
             "rebase" => handlers::branch,
             "release" => handlers::release,

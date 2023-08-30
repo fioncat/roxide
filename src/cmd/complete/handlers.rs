@@ -1,5 +1,7 @@
 use anyhow::Result;
+use strum::VariantNames;
 
+use crate::cmd::run::init;
 use crate::config;
 use crate::repo::database::Database;
 use crate::repo::query::parse_owner;
@@ -186,4 +188,12 @@ pub fn remote(args: &[&str]) -> Result<Complete> {
         }
         _ => Ok(Complete::empty()),
     }
+}
+
+pub fn shell(_: &[&str]) -> Result<Complete> {
+    let items: Vec<String> = init::Shell::VARIANTS
+        .iter()
+        .map(|item| item.to_string())
+        .collect();
+    Ok(Complete::from(items))
 }
