@@ -4,9 +4,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Args;
-use console::style;
 
-use crate::batch::{self, Reporter, Task};
+use crate::batch::{self, Task};
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
@@ -37,7 +36,6 @@ pub struct RunArgs {
 
 struct RunTask {
     workflow: Arc<Workflow>,
-    name_level: Arc<NameLevel>,
     dir: PathBuf,
 
     remote: String,
@@ -48,25 +46,13 @@ struct RunTask {
 }
 
 impl Task<()> for RunTask {
-    fn run(&self, rp: &Reporter<()>) -> Result<()> {
-        self.workflow.execute_task(
-            &self.name_level,
-            rp,
-            &self.dir,
-            &self.remote,
-            &self.owner,
-            &self.name,
-        )
+    fn name(&self) -> String {
+        self.show_name.clone()
     }
 
-    fn message_done(&self, result: &Result<()>) -> String {
-        match result {
-            Ok(_) => format!("Run workflow for {} done", self.show_name),
-            Err(_) => {
-                let msg = format!("Run workflow for {} failed", self.show_name);
-                format!("{}", style(msg).red())
-            }
-        }
+    fn run(&self) -> Result<()> {
+        self.workflow
+            .execute_task(&self.dir, &self.remote, &self.owner, &self.name)
     }
 }
 
@@ -104,7 +90,6 @@ impl Run for RunArgs {
             let show_name = repo.as_string(&level);
             tasks.push(RunTask {
                 workflow: workflow.clone(),
-                name_level: level.clone(),
                 dir,
                 remote: format!("{}", repo.remote),
                 owner: format!("{}", repo.owner),
@@ -114,7 +99,7 @@ impl Run for RunArgs {
         }
 
         let desc = format!("Run workflow {}", self.workflow);
-        let _ = batch::run(desc.as_str(), tasks);
+        batch::must_run(desc.as_str(), tasks)?;
         Ok(())
     }
 }
