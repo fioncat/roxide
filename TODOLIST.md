@@ -1,5 +1,9 @@
 # TODOList
 
+## v0.8.0
+
+- [ ] Sync, allow use pre-defined rules.
+
 ## v0.7.0
 
 - [x] Rebuild code, add Repo Selector module for common usage.
