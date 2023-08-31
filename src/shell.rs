@@ -324,7 +324,7 @@ pub fn ensure_no_uncommitted() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BranchStatus {
     Sync,
     Gone,
@@ -347,7 +347,7 @@ impl BranchStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct GitBranch {
     pub name: String,
     pub status: BranchStatus,
@@ -834,5 +834,112 @@ impl Workflow {
             utils::write_file(&path, content.as_bytes())?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+
+    use super::*;
+
+    #[test]
+    #[serial]
+    fn test_parse_branch() {
+        let cases = vec![
+            (
+                "* main cf11adb [origin/main] My best commit since the project begin",
+                "main",
+                BranchStatus::Sync,
+                true,
+            ),
+            (
+                "release/1.6 dc07e7ec7 [origin/release/1.6] Merge pull request #9024 from akhilerm/cherry-pick-9021-release/1.6",
+                "release/1.6",
+                BranchStatus::Sync,
+                false
+            ),
+            (
+                "feat/update-version 3b0569d62 [origin/feat/update-version: ahead 1] chore: update cargo version",
+                "feat/update-version",
+                BranchStatus::Ahead,
+                false
+            ),
+            (
+                "* feat/tmp-dev 92bbd6e [origin/feat/tmp-dev: gone] Merge pull request #6 from fioncat/hello",
+                "feat/tmp-dev",
+                BranchStatus::Gone,
+                true
+            ),
+            (
+                "master       b4a40de [origin/master: ahead 1, behind 1] test commit",
+                "master",
+                BranchStatus::Conflict,
+                false
+            ),
+            (
+                "* dev        b4a40de test commit",
+                "dev",
+                BranchStatus::Detached,
+                true
+            ),
+        ];
+
+        let re = GitBranch::get_regex();
+        for (raw, name, status, current) in cases {
+            let result = GitBranch::parse(&re, raw).unwrap();
+            let expect = GitBranch {
+                name: String::from(name),
+                status,
+                current,
+            };
+            assert_eq!(result, expect);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_parse_default_branch() {
+        // Lines from `git remote show origin`
+        let lines = vec![
+            "  * remote origin",
+            "  Fetch URL: git@github.com:fioncat/roxide.git",
+            "  Push  URL: git@github.com:fioncat/roxide.git",
+            "  HEAD branch: main",
+            "  Remote branches:",
+            "    feat/test tracked",
+            "    main      tracked",
+            "  Local branches configured for 'git pull':",
+            "    feat/test merges with remote feat/test",
+            "    main      merges with remote main",
+            "  Local refs configured for 'git push':",
+            "    feat/test pushes to feat/test (up to date)",
+            "    main      pushes to main      (up to date)",
+        ];
+
+        let default_branch = GitBranch::parse_default_branch(
+            lines.into_iter().map(|line| line.to_string()).collect(),
+        )
+        .unwrap();
+        assert_eq!(default_branch, "main");
+    }
+
+    #[test]
+    #[serial]
+    fn test_apply_tag_rule() {
+        let cases = vec![
+            ("v0.1.0", "v{0}.{1+}.0", "v0.2.0"),
+            ("v12.1.0", "v{0+}.0.0", "v13.0.0"),
+            ("v0.8.13", "{0}.{1}.{2+}-rc1", "0.8.14-rc1"),
+            ("1.2.23", "{0}.{1}.{2+}-rc{3}", "1.2.24-rc0"),
+            ("1.2.23", "{0}.{1}.{2+}-rc{3+}", "1.2.24-rc1"),
+            ("1.2.20-rc4", "{0}.{1}.{2+}-rc{3+}", "1.2.21-rc5"),
+        ];
+
+        for (before, rule, expect) in cases {
+            let tag = GitTag(String::from(before));
+            let result = tag.apply_rule(rule).unwrap();
+            assert_eq!(result.as_str(), expect);
+        }
     }
 }
