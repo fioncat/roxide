@@ -222,7 +222,7 @@ impl Run for SyncArgs {
                 message: message.clone(),
             });
         }
-        let _ = batch::run("Sync", tasks);
+        batch::must_run("Sync", tasks)?;
 
         Ok(())
     }

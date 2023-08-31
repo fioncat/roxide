@@ -92,7 +92,7 @@ impl SnapshotArgs {
                 show_name: name,
             });
         }
-        let results = batch::run("Check", tasks);
+        let results = batch::run("Check", tasks, false);
         println!();
 
         let mut failed = Vec::new();
@@ -185,9 +185,7 @@ impl SnapshotArgs {
             });
         }
 
-        if !batch::is_ok(&batch::run("Restore", tasks)) {
-            bail!("Restore failed");
-        }
+        batch::must_run("Restore", tasks)?;
         println!();
 
         let mut skip_remote = HashSet::new();

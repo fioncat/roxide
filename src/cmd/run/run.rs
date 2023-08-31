@@ -99,7 +99,7 @@ impl Run for RunArgs {
         }
 
         let desc = format!("Run workflow {}", self.workflow);
-        let _ = batch::run(desc.as_str(), tasks);
+        batch::must_run(desc.as_str(), tasks)?;
         Ok(())
     }
 }

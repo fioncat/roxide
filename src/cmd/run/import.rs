@@ -112,20 +112,18 @@ impl Run for ImportArgs {
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(owner);
 
-        let results = batch::run("Import", tasks);
-        for result in results {
-            if let Ok(name) = result {
-                let name = Arc::try_unwrap(name).unwrap();
-                let repo = Repo {
-                    remote: remote_rc.clone(),
-                    owner: owner_rc.clone(),
-                    name: Rc::new(name),
-                    path: None,
-                    last_accessed: 0,
-                    accessed: 0.0,
-                };
-                db.update(Rc::new(repo));
-            }
+        let names = batch::must_run("Import", tasks)?;
+        for name in names {
+            let name = Arc::try_unwrap(name).unwrap();
+            let repo = Repo {
+                remote: remote_rc.clone(),
+                owner: owner_rc.clone(),
+                name: Rc::new(name),
+                path: None,
+                last_accessed: 0,
+                accessed: 0.0,
+            };
+            db.update(Rc::new(repo));
         }
         drop(remote_rc);
         drop(owner_rc);

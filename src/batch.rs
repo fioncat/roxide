@@ -1,8 +1,9 @@
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use console::{style, Term};
 
 pub trait Task<R: Send> {
@@ -24,6 +25,7 @@ struct Tracker<R> {
     done: Vec<(usize, Result<R>)>,
 
     desc: String,
+    desc_pure: String,
     desc_size: usize,
     desc_head: String,
 
@@ -32,6 +34,9 @@ struct Tracker<R> {
 
     ok_count: usize,
     fail_count: usize,
+
+    show_fail: bool,
+    fail_message: Option<Vec<(String, String)>>,
 }
 
 impl<R> Tracker<R> {
@@ -43,7 +48,8 @@ impl<R> Tracker<R> {
     const SEP_SIZE: usize = 2;
     const OMIT_SIZE: usize = 5;
 
-    fn new(desc: &str, total: usize) -> Tracker<R> {
+    fn new(desc: &str, total: usize, show_fail: bool) -> Tracker<R> {
+        let desc_pure = String::from(desc);
         let desc = style(desc).green().bold().to_string();
         let desc_size = Self::get_size(&desc);
 
@@ -61,42 +67,66 @@ impl<R> Tracker<R> {
             running: Vec::with_capacity(total),
             done: Vec::with_capacity(total),
             desc,
+            desc_pure,
             desc_size,
             desc_head: " ".repeat(desc_size),
             term_size,
             bar_size,
             ok_count: 0,
             fail_count: 0,
+            show_fail,
+            fail_message: None,
         }
     }
 
     fn wait(mut self, rx: Receiver<Report<R>>) -> Vec<Result<R>> {
-        println!();
+        let start = Instant::now();
         while self.done.len() < self.total {
             match rx.recv().unwrap() {
                 Report::Running(idx, name) => self.trace_running(idx, name),
                 Report::Done(idx, result, name) => self.trace_done(idx, name, result),
             }
         }
-        Self::cursor_up();
+        let end = Instant::now();
+        let elapsed_time = end - start;
+
         let result = if self.fail_count > 0 {
             style("failed").red().to_string()
         } else {
             style("ok").green().to_string()
         };
+
+        Self::cursor_up(1);
+        println!();
         println!(
-            "{} result: {}. {} ok; {} failed",
-            self.desc, result, self.ok_count, self.fail_count,
+            "{} result: {}. {} ok; {} failed; finished in {}",
+            self.desc_pure,
+            result,
+            self.ok_count,
+            self.fail_count,
+            Self::format_elapsed(elapsed_time),
         );
+        if let Some(fail_message) = self.fail_message.as_ref() {
+            println!();
+            println!("Error message:");
+            for (name, msg) in fail_message {
+                println!("  {name}: {msg}");
+            }
+            println!();
+        }
+
         self.done
             .sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
-        self.done.into_iter().map(|(_, result)| result).collect()
+
+        let results: Vec<_> = self.done.into_iter().map(|(_, result)| result).collect();
+
+        results
     }
 
     fn trace_running(&mut self, idx: usize, name: String) {
         self.running.push((idx, name));
         let line = self.render();
-        Self::cursor_up();
+        Self::cursor_up(1);
         println!("{line}");
     }
 
@@ -109,7 +139,7 @@ impl<R> Tracker<R> {
             self.running.remove(pos);
         }
 
-        Self::cursor_up();
+        Self::cursor_up(1);
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
@@ -117,7 +147,14 @@ impl<R> Tracker<R> {
             }
             Err(err) => {
                 self.fail_count += 1;
-                println!("{} {name} {}: {err}", self.desc_head, style("fail").red());
+                println!("{} {name} {}", self.desc_head, style("fail").red());
+                if self.show_fail {
+                    let item = (name, format!("{}", err));
+                    match self.fail_message.as_mut() {
+                        Some(msg) => msg.push(item),
+                        None => self.fail_message = Some(vec![item]),
+                    }
+                }
             }
         }
         self.done.push((idx, result));
@@ -183,7 +220,11 @@ impl<R> Tracker<R> {
                 current
             }
         };
-        let current = "#".repeat(current_count);
+        let current = match current_count {
+            0 => String::new(),
+            1 => String::from(">"),
+            _ => format!("{}>", "=".repeat(current_count - 1)),
+        };
         if current_count >= self.bar_size {
             return format!("[{current}]");
         }
@@ -231,13 +272,44 @@ impl<R> Tracker<R> {
         console::measure_text_width(s.as_ref())
     }
 
-    fn cursor_up() {
-        print!("\x1b[A");
-        print!("\x1b[K");
+    fn cursor_up(n: usize) {
+        for _ in 0..n {
+            print!("\x1b[A");
+            print!("\x1b[K");
+        }
+    }
+
+    fn format_elapsed(d: Duration) -> String {
+        let elapsed_time = d.as_secs_f64();
+
+        if elapsed_time >= 3600.0 {
+            let hours = elapsed_time / 3600.0;
+            format!("{:.2}h", hours)
+        } else if elapsed_time >= 60.0 {
+            let minutes = elapsed_time / 60.0;
+            format!("{:.2}min", minutes)
+        } else if elapsed_time >= 1.0 {
+            format!("{:.2}s", elapsed_time)
+        } else {
+            let milliseconds = elapsed_time * 1000.0;
+            format!("{:.2}ms", milliseconds)
+        }
     }
 }
 
-pub fn run<T, R>(desc: &str, tasks: Vec<T>) -> Vec<Result<R>>
+pub fn must_run<T, R>(desc: &str, tasks: Vec<T>) -> Result<Vec<R>>
+where
+    R: Send + 'static,
+    T: Task<R> + Send + 'static,
+{
+    let results = run(desc, tasks, true);
+    if !is_ok(&results) {
+        bail!("{desc} failed");
+    }
+    Ok(results.into_iter().map(|r| r.unwrap()).collect())
+}
+
+pub fn run<T, R>(desc: &str, tasks: Vec<T>, show_fail: bool) -> Vec<Result<R>>
 where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
@@ -266,7 +338,7 @@ where
     let (report_tx, report_rx) = mpsc::channel::<Report<R>>();
 
     println!(
-        "{} Starting {} workers",
+        "{} Starting {} workers\n",
         style("==>").green().bold(),
         worker_len
     );
@@ -311,7 +383,7 @@ where
     }
     drop(task_tx);
 
-    let tracker = Tracker::new(desc, task_len);
+    let tracker = Tracker::new(desc, task_len, show_fail);
     let results = tracker.wait(report_rx);
 
     // Wait for all workers done.
@@ -364,7 +436,7 @@ mod tests {
             tasks.push(task);
         }
 
-        let results: Vec<usize> = run("Test", tasks)
+        let results: Vec<usize> = run("Test", tasks, false)
             .into_iter()
             .map(|result| result.unwrap())
             .collect();
