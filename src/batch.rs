@@ -247,8 +247,10 @@ impl<R> Tracker<R> {
             } else {
                 Self::get_size(&name) + Self::SEP_SIZE
             };
+            let is_last = idx == self.running.len() - 1;
             let list_size = Self::get_size(&list);
-            if list_size + add_size > size {
+            let new_size = list_size + add_size;
+            if new_size > size || (!is_last && new_size == size) {
                 let delta = size - list_size;
                 if delta == 0 {
                     break;
