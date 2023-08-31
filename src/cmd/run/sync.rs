@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use clap::Args;
 use regex::Regex;
 
-use crate::batch::{self, Reporter, Task};
+use crate::batch::{self, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
@@ -72,7 +72,11 @@ struct SyncTask {
 }
 
 impl Task<()> for SyncTask {
-    fn run(&self, rp: &Reporter<()>) -> Result<()> {
+    fn name(&self) -> String {
+        self.show_name.clone()
+    }
+
+    fn run(&self) -> Result<()> {
         if let None = self.remote.clone.as_ref() {
             return Ok(());
         }
@@ -89,10 +93,8 @@ impl Task<()> for SyncTask {
 
         let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         if clone {
-            rp.message(format!("Cloning {}...", self.show_name));
             Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
         } else {
-            rp.message(format!("Fetching {}...", self.show_name));
             git.exec(&["remote", "set-url", "origin", url.as_str()])?;
             git.exec(&["fetch", "origin", "--prune"])?;
         }
@@ -103,7 +105,6 @@ impl Task<()> for SyncTask {
             git.exec(&["config", "user.email", email.as_str()])?;
         }
 
-        rp.message(format!("Ensuring changes for {}", self.show_name));
         let lines = git.lines(&["status", "-s"])?;
         if !lines.is_empty() {
             if let Some(msg) = self.message.as_ref() {
@@ -113,7 +114,6 @@ impl Task<()> for SyncTask {
             }
         }
 
-        rp.message(format!("Getting default branch for {}", self.show_name));
         let lines = git.lines(&["remote", "show", "origin"])?;
         let default_branch = GitBranch::parse_default_branch(lines)?;
         let mut backup_branch = default_branch.clone();
@@ -129,12 +129,10 @@ impl Task<()> for SyncTask {
             }
             match branch.status {
                 BranchStatus::Ahead => {
-                    rp.message(format!("Pushing {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push"])?;
                 }
                 BranchStatus::Behind => {
-                    rp.message(format!("Pulling {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["pull"])?;
                 }
@@ -145,7 +143,6 @@ impl Task<()> for SyncTask {
                     if branch.name == default_branch {
                         continue;
                     }
-                    rp.message(format!("Deleting {} for {}", branch.name, self.show_name));
                     git.exec(&["checkout", &default_branch])?;
                     git.exec(&["branch", "-D", &branch.name])?;
                 }
@@ -153,10 +150,6 @@ impl Task<()> for SyncTask {
                     if !self.force {
                         continue;
                     }
-                    rp.message(format!(
-                        "Force pushing {} for {}",
-                        branch.name, self.show_name
-                    ));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push", "-f"])?;
                 }
@@ -164,10 +157,6 @@ impl Task<()> for SyncTask {
                     if !self.add {
                         continue;
                     }
-                    rp.message(format!(
-                        "Setupstream pushing {} for {}",
-                        branch.name, self.show_name
-                    ));
                     git.exec(&["checkout", &branch.name])?;
                     git.exec(&["push", "--set-upstream", "origin", &branch.name])?;
                 }
@@ -177,13 +166,6 @@ impl Task<()> for SyncTask {
 
         git.exec(&["checkout", &backup_branch])?;
         Ok(())
-    }
-
-    fn message_done(&self, result: &Result<()>) -> String {
-        match result {
-            Ok(_) => format!("Sync {} done", self.show_name),
-            Err(err) => format!("Sync {} error: {}", self.show_name, err),
-        }
     }
 }
 

@@ -11,10 +11,9 @@ use console::{style, StyledObject};
 use regex::{Captures, Regex};
 
 use crate::api::types::Provider;
-use crate::batch::Reporter;
 use crate::config::types::{Remote, WorkflowStep};
 use crate::errors::SilentExit;
-use crate::repo::types::{NameLevel, Repo};
+use crate::repo::types::Repo;
 use crate::{config, utils};
 use crate::{confirm, exec, info};
 
@@ -775,25 +774,12 @@ impl Workflow {
         Ok(())
     }
 
-    pub fn execute_task<S, R>(
-        &self,
-        name_level: &NameLevel,
-        rp: &Reporter<R>,
-        dir: &PathBuf,
-        remote: S,
-        owner: S,
-        name: S,
-    ) -> Result<()>
+    pub fn execute_task<S>(&self, dir: &PathBuf, remote: S, owner: S, name: S) -> Result<()>
     where
         S: AsRef<str>,
     {
         let long_name = format!("{}/{}", owner.as_ref(), name.as_ref());
         let full_name = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
-        let show_name = match name_level {
-            NameLevel::Full => full_name.as_str(),
-            NameLevel::Owner => long_name.as_str(),
-            NameLevel::Name => name.as_ref(),
-        };
 
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
@@ -809,12 +795,6 @@ impl Workflow {
 
                 cmd.set_mute(true).piped_stderr();
 
-                rp.message(format!(
-                    "Running step {} for {}",
-                    style(&step.name).green(),
-                    style(show_name).cyan()
-                ));
-
                 cmd.execute()?.check()?;
                 continue;
             }
@@ -825,11 +805,6 @@ impl Workflow {
             let content = step.file.as_ref().unwrap();
             let content = content.replace("\\t", "\t");
 
-            rp.message(format!(
-                "Create file {} for {}",
-                style(&step.name).green(),
-                style(show_name).cyan()
-            ));
             let path = dir.join(&step.name);
             utils::write_file(&path, content.as_bytes())?;
         }

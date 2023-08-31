@@ -1,16 +1,14 @@
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
-use console::style;
-
-use crate::exec;
+use console::{style, Term};
 
 pub trait Task<R: Send> {
-    fn message_done(&self, result: &Result<R>) -> String;
+    fn name(&self) -> String;
 
-    fn run(&self, rp: &Reporter<R>) -> Result<R>;
+    fn run(&self) -> Result<R>;
 }
 
 enum Report<R> {
@@ -18,20 +16,224 @@ enum Report<R> {
     Done(usize, Result<R>, String),
 }
 
-pub struct Reporter<'a, R> {
-    idx: usize,
-    report_tx: &'a Sender<Report<R>>,
+struct Tracker<R> {
+    total: usize,
+    total_pad: usize,
+    running: Vec<(usize, String)>,
+
+    done: Vec<(usize, Result<R>)>,
+
+    desc: String,
+    desc_size: usize,
+    desc_head: String,
+
+    term_size: usize,
+    bar_size: usize,
+
+    ok_count: usize,
+    fail_count: usize,
 }
 
-impl<'a, R> Reporter<'_, R> {
-    pub fn message(&self, msg: String) {
-        self.report_tx.send(Report::Running(self.idx, msg)).unwrap();
+impl<R> Tracker<R> {
+    const SPACE: &str = " ";
+    const SEP: &str = ", ";
+    const OMIT: &str = ", ...";
+
+    const SPACE_SIZE: usize = 1;
+    const SEP_SIZE: usize = 2;
+    const OMIT_SIZE: usize = 5;
+
+    fn new(desc: &str, total: usize) -> Tracker<R> {
+        let desc = style(desc).green().bold().to_string();
+        let desc_size = Self::get_size(&desc);
+
+        let total_pad = total.to_string().chars().count();
+
+        let term = Term::stdout();
+        let (_, col_size) = term.size();
+        let term_size = col_size as usize;
+
+        let bar_size = if term_size <= 20 { 0 } else { term_size / 4 };
+
+        Tracker {
+            total,
+            total_pad,
+            running: Vec::with_capacity(total),
+            done: Vec::with_capacity(total),
+            desc,
+            desc_size,
+            desc_head: " ".repeat(desc_size),
+            term_size,
+            bar_size,
+            ok_count: 0,
+            fail_count: 0,
+        }
     }
 
-    fn done(&self, result: Result<R>, msg: String) {
-        self.report_tx
-            .send(Report::Done(self.idx, result, msg))
-            .unwrap();
+    fn wait(mut self, rx: Receiver<Report<R>>) -> Vec<Result<R>> {
+        println!();
+        while self.done.len() < self.total {
+            match rx.recv().unwrap() {
+                Report::Running(idx, name) => self.trace_running(idx, name),
+                Report::Done(idx, result, name) => self.trace_done(idx, name, result),
+            }
+        }
+        Self::cursor_up();
+        let result = if self.fail_count > 0 {
+            style("failed").red().to_string()
+        } else {
+            style("ok").green().to_string()
+        };
+        println!(
+            "{} result: {}. {} ok; {} failed",
+            self.desc, result, self.ok_count, self.fail_count,
+        );
+        self.done
+            .sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+        self.done.into_iter().map(|(_, result)| result).collect()
+    }
+
+    fn trace_running(&mut self, idx: usize, name: String) {
+        self.running.push((idx, name));
+        let line = self.render();
+        Self::cursor_up();
+        println!("{line}");
+    }
+
+    fn trace_done(&mut self, idx: usize, name: String, result: Result<R>) {
+        if let Some(pos) = self
+            .running
+            .iter()
+            .position(|(found_idx, _)| found_idx == &idx)
+        {
+            self.running.remove(pos);
+        }
+
+        Self::cursor_up();
+        match result.as_ref() {
+            Ok(_) => {
+                self.ok_count += 1;
+                println!("{} {name} {}", self.desc_head, style("ok").green());
+            }
+            Err(err) => {
+                self.fail_count += 1;
+                println!("{} {name} {}: {err}", self.desc_head, style("fail").red());
+            }
+        }
+        self.done.push((idx, result));
+        let line = self.render();
+        println!("{line}");
+    }
+
+    fn render(&self) -> String {
+        if self.desc_size > self.term_size {
+            return ".".repeat(self.term_size);
+        }
+
+        let mut line = self.desc.clone();
+        if self.desc_size + Self::SPACE_SIZE > self.term_size || self.bar_size == 0 {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let bar = self.render_bar();
+        let bar_size = Self::get_size(&bar);
+        if Self::get_size(&line) + bar_size > self.term_size {
+            return line;
+        }
+        line.push_str(&bar);
+
+        if Self::get_size(&line) + Self::SPACE_SIZE > self.term_size {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let tag = self.render_tag();
+        let tag_size = Self::get_size(&bar);
+        if Self::get_size(&line) + tag_size > self.term_size {
+            return line;
+        }
+        line.push_str(&tag);
+
+        if Self::get_size(&line) + Self::SPACE_SIZE > self.term_size {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let left = self.term_size - Self::get_size(&line);
+        if left == 0 {
+            return line;
+        }
+
+        let list = self.render_list(left);
+        line.push_str(&list);
+        line
+    }
+
+    fn render_bar(&self) -> String {
+        let current_count = if self.done.len() >= self.total {
+            self.bar_size
+        } else {
+            let percent = (self.done.len() as f64) / (self.total as f64);
+            let current_f64 = (self.bar_size as f64) * percent;
+            let current = current_f64 as u64 as usize;
+            if current >= self.bar_size {
+                self.bar_size
+            } else {
+                current
+            }
+        };
+        let current = "#".repeat(current_count);
+        if current_count >= self.bar_size {
+            return format!("[{current}]");
+        }
+
+        let pending = " ".repeat(self.bar_size - current_count);
+        format!("[{current}{pending}]")
+    }
+
+    fn render_tag(&self) -> String {
+        let pad = self.total_pad;
+        let current = format!("{:pad$}", self.done.len(), pad = pad);
+        format!("({current}/{})", self.total)
+    }
+
+    fn render_list(&self, size: usize) -> String {
+        let mut list = String::with_capacity(size);
+        for (idx, (_, name)) in self.running.iter().enumerate() {
+            let add_size = if idx == 0 {
+                Self::get_size(&name)
+            } else {
+                Self::get_size(&name) + Self::SEP_SIZE
+            };
+            let list_size = Self::get_size(&list);
+            if list_size + add_size > size {
+                let delta = size - list_size;
+                if delta == 0 {
+                    break;
+                }
+                if delta < Self::OMIT_SIZE {
+                    list.push_str(&".".repeat(delta));
+                } else {
+                    list.push_str(&Self::OMIT);
+                }
+                break;
+            }
+            if idx != 0 {
+                list.push_str(Self::SEP);
+            }
+            list.push_str(&name);
+        }
+        list
+    }
+
+    fn get_size(s: impl AsRef<str>) -> usize {
+        console::measure_text_width(s.as_ref())
+    }
+
+    fn cursor_up() {
+        print!("\x1b[A");
+        print!("\x1b[K");
     }
 }
 
@@ -63,7 +265,11 @@ where
     // execution progress and completion status.
     let (report_tx, report_rx) = mpsc::channel::<Report<R>>();
 
-    exec!("{}: Starting {} workers", desc, worker_len);
+    println!(
+        "{} Starting {} workers",
+        style("==>").green().bold(),
+        worker_len
+    );
     let mut handlers = Vec::with_capacity(worker_len);
     for _ in 0..worker_len {
         let task_shared_rx = Arc::clone(&task_shared_rx);
@@ -85,14 +291,11 @@ where
             drop(task_rx);
 
             if let Ok((idx, task)) = recv {
-                let rp = Reporter {
-                    idx,
-                    report_tx: &report_tx,
-                };
+                let name = task.name();
+                report_tx.send(Report::Running(idx, name.clone())).unwrap();
                 // Running message reporting will be done by task itself.
-                let result = task.run(&rp);
-                let msg = task.message_done(&result);
-                rp.done(result, msg);
+                let result = task.run();
+                report_tx.send(Report::Done(idx, result, name)).unwrap();
             } else {
                 // task_rx is closed, it means that all tasks have been processed.
                 // The worker can exit now.
@@ -108,70 +311,15 @@ where
     }
     drop(task_tx);
 
-    let mut suc_count = 0;
-    let mut fail_count = 0;
-    let mut running: Vec<(usize, String)> = Vec::with_capacity(task_len);
-    let mut results: Vec<(usize, Result<R>)> = Vec::with_capacity(task_len);
-    while results.len() < task_len {
-        match report_rx.recv().unwrap() {
-            Report::Running(idx, msg) => {
-                if let Some(_) = results.iter().position(|(task_idx, _)| *task_idx == idx) {
-                    // If the task is already done, we won't show its running
-                    // message.
-                    continue;
-                }
-                // Update or push.
-                if let Some(running_idx) = running.iter().position(|(task_idx, _)| *task_idx == idx)
-                {
-                    // Update running message.
-                    running[running_idx] = (idx, msg);
-                    cursor_up(running.len());
-                } else {
-                    // Add new running task.
-                    cursor_up(running.len());
-                    running.push((idx, msg));
-                }
-                show_runnings(&running);
-            }
-            Report::Done(idx, result, msg) => {
-                cursor_up(running.len());
-                let ok = match result {
-                    Ok(_) => {
-                        suc_count += 1;
-                        true
-                    }
-                    Err(_) => {
-                        fail_count += 1;
-                        false
-                    }
-                };
-                show_done(ok, msg, results.len(), task_len);
-                if let Some(running_idx) = running.iter().position(|(task_idx, _)| *task_idx == idx)
-                {
-                    running.remove(running_idx);
-                }
-                results.push((idx, result));
-                show_runnings(&running);
-            }
-        }
-    }
-    if !running.is_empty() {
-        cursor_up(running.len());
-    }
+    let tracker = Tracker::new(desc, task_len);
+    let results = tracker.wait(report_rx);
 
     // Wait for all workers done.
     for handler in handlers {
         handler.join().unwrap();
     }
 
-    println!();
-    println!(
-        "{desc} done, with {} successed, {} failed",
-        style(suc_count).green(),
-        style(fail_count).red()
-    );
-    results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
-    results.into_iter().map(|(_, result)| result).collect()
+    results
 }
 
 pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
@@ -181,38 +329,6 @@ pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
         }
     }
     true
-}
-
-fn show_done(ok: bool, msg: String, current: usize, total: usize) {
-    let pad_len = total.to_string().chars().count();
-    let current_pad = format!("{:pad_len$}", current + 1, pad_len = pad_len);
-    let prefix = format!("({current_pad}/{total})");
-    if ok {
-        println!("{} {} {msg}", style(prefix).bold(), style("==>").green());
-    } else {
-        println!("{} {} {msg}", style(prefix).bold(), style("==>").red());
-    }
-}
-
-fn show_running(msg: &String) {
-    println!("{} {msg}", style("==>").cyan());
-}
-
-fn show_runnings(running: &Vec<(usize, String)>) {
-    for (_, msg) in running {
-        show_running(&msg);
-    }
-}
-
-// UNIX only, terminal move cursor up for n line(s).
-fn cursor_up(n: usize) {
-    if n == 0 {
-        return;
-    }
-    for _ in 0..n {
-        print!("\x1b[A");
-        print!("\x1b[K");
-    }
 }
 
 #[cfg(test)]
@@ -228,12 +344,11 @@ mod tests {
     }
 
     impl Task<usize> for TestTask {
-        fn message_done(&self, _: &Result<usize>) -> String {
+        fn name(&self) -> String {
             format!("Task {} done!", self.idx)
         }
 
-        fn run(&self, rp: &Reporter<usize>) -> Result<usize> {
-            rp.message(format!("Handling task {}", self.idx));
+        fn run(&self) -> Result<usize> {
             thread::sleep(Duration::from_millis(100));
             Ok(self.idx)
         }

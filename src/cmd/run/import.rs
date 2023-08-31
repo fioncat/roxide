@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::Args;
 
-use crate::batch::{self, Reporter, Task};
+use crate::batch::{self, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
@@ -41,9 +41,11 @@ struct ImportTask {
 }
 
 impl Task<Arc<String>> for ImportTask {
-    fn run(&self, rp: &Reporter<Arc<String>>) -> Result<Arc<String>> {
-        rp.message(format!("Cloning {}...", self.name));
+    fn name(&self) -> String {
+        format!("{}", self.name)
+    }
 
+    fn run(&self) -> Result<Arc<String>> {
         let path = Repo::get_workspace_path(
             self.remote.name.as_str(),
             self.owner.as_str(),
@@ -71,13 +73,6 @@ impl Task<Arc<String>> for ImportTask {
             git.exec(&["config", "user.email", email.as_str()])?;
         }
         Ok(Arc::clone(&self.name))
-    }
-
-    fn message_done(&self, result: &Result<Arc<String>>) -> String {
-        match result {
-            Ok(_) => format!("Clone {} done", self.name),
-            Err(err) => format!("Clone {} error: {}", self.name, err),
-        }
     }
 }
 

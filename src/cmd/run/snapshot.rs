@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use clap::Args;
 use console::style;
 
-use crate::batch::{self, Reporter, Task};
+use crate::batch::{self, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
@@ -242,9 +242,11 @@ struct CheckSnapshotTask {
 }
 
 impl Task<String> for CheckSnapshotTask {
-    fn run(&self, rp: &Reporter<String>) -> Result<String> {
-        rp.message(format!("Checking {}...", self.show_name));
+    fn name(&self) -> String {
+        self.show_name.clone()
+    }
 
+    fn run(&self) -> Result<String> {
         let path = format!("{}", self.path.display());
         let git = GitTask::new(path.as_str());
 
@@ -270,10 +272,6 @@ impl Task<String> for CheckSnapshotTask {
 
         Ok(branch)
     }
-
-    fn message_done(&self, _result: &Result<String>) -> String {
-        format!("Check {} done", self.show_name)
-    }
 }
 
 struct RestoreSnapshotTask {
@@ -288,16 +286,16 @@ struct RestoreSnapshotTask {
 }
 
 impl Task<()> for RestoreSnapshotTask {
-    fn run(&self, rp: &Reporter<()>) -> Result<()> {
+    fn name(&self) -> String {
+        self.show_name.clone()
+    }
+
+    fn run(&self) -> Result<()> {
         let path = format!("{}", self.path.display());
         let git = GitTask::new(path.as_str());
         match fs::read_dir(&self.path) {
-            Ok(_) => {
-                rp.message(format!("Fetching {}...", self.show_name));
-                git.exec(&["fetch", "--all"])?;
-            }
+            Ok(_) => git.exec(&["fetch", "--all"])?,
             Err(err) if err.kind() == ErrorKind::NotFound => {
-                rp.message(format!("Cloning {}...", self.show_name));
                 let url =
                     Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
                 Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
@@ -308,12 +306,5 @@ impl Task<()> for RestoreSnapshotTask {
             git.exec(&["checkout", branch.as_str()])?;
         }
         Ok(())
-    }
-
-    fn message_done(&self, result: &Result<()>) -> String {
-        match result {
-            Ok(_) => format!("Restore {} done", self.name),
-            Err(err) => format!("Restore {} error: {}", self.name, err),
-        }
     }
 }
