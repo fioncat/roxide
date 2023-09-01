@@ -657,7 +657,7 @@ pub fn show_json<T: Serialize>(value: T) -> Result<()> {
 pub const CURSOR_UP_CHARS: &str = "\x1b[A\x1b[K";
 
 pub fn cursor_up_stderr() {
-    write_stderr(String::from(CURSOR_UP_CHARS));
+    _ = write!(std::io::stderr(), "{}", CURSOR_UP_CHARS);
 }
 
 pub fn render_bar(current: usize, total: usize, bar_size: usize) -> String {
