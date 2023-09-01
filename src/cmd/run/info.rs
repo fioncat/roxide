@@ -149,7 +149,7 @@ impl InfoArgs {
     }
 
     fn get_component_path(cmd: &str) -> Result<String> {
-        let path = Shell::with_args("which", &["git"])
+        let path = Shell::with_args("which", &[cmd])
             .set_mute(true)
             .piped_stderr()
             .execute()?
