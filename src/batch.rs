@@ -50,7 +50,7 @@ impl<R> Tracker<R> {
 
     fn new(desc: &str, total: usize, show_fail: bool) -> Tracker<R> {
         let desc_pure = String::from(desc);
-        let desc = style(desc).green().bold().to_string();
+        let desc = style(desc).cyan().bold().to_string();
         let desc_size = Self::get_size(&desc);
 
         let total_pad = total.to_string().chars().count();
@@ -339,11 +339,11 @@ where
     // execution progress and completion status.
     let (report_tx, report_rx) = mpsc::channel::<Report<R>>();
 
-    println!(
-        "{} Starting {} workers\n",
-        style("==>").green().bold(),
-        worker_len
-    );
+    let title = style(format!("{} with {} workers:", desc, worker_len))
+        .bold()
+        .cyan()
+        .underlined();
+    println!("{title}\n");
     let mut handlers = Vec::with_capacity(worker_len);
     for _ in 0..worker_len {
         let task_shared_rx = Arc::clone(&task_shared_rx);
