@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use console::{style, Term};
 
+use crate::utils;
+
 pub trait Task<R: Send> {
     fn name(&self) -> String;
 
@@ -208,29 +210,7 @@ impl<R> Tracker<R> {
     }
 
     fn render_bar(&self) -> String {
-        let current_count = if self.done.len() >= self.total {
-            self.bar_size
-        } else {
-            let percent = (self.done.len() as f64) / (self.total as f64);
-            let current_f64 = (self.bar_size as f64) * percent;
-            let current = current_f64 as u64 as usize;
-            if current >= self.bar_size {
-                self.bar_size
-            } else {
-                current
-            }
-        };
-        let current = match current_count {
-            0 => String::new(),
-            1 => String::from(">"),
-            _ => format!("{}>", "=".repeat(current_count - 1)),
-        };
-        if current_count >= self.bar_size {
-            return format!("[{current}]");
-        }
-
-        let pending = " ".repeat(self.bar_size - current_count);
-        format!("[{current}{pending}]")
+        utils::render_bar(self.done.len(), self.total, self.bar_size)
     }
 
     fn render_tag(&self) -> String {
