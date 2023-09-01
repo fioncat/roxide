@@ -90,24 +90,24 @@ impl Run for InfoArgs {
         }
 
         for (_, remote) in remotes.iter_mut() {
-            remote.size = Some(utils::human_bytes(remote.size_u64 as f64));
+            remote.size = Some(utils::human_bytes(remote.size_u64));
             remote.owner_count = remote.owners.len() as u32;
             for (_, owner) in remote.owners.iter_mut() {
-                owner.size = Some(utils::human_bytes(owner.size_u64 as f64));
+                owner.size = Some(utils::human_bytes(owner.size_u64));
             }
         }
 
         let info = Info {
             git,
             fzf,
-            total_repo_size: utils::human_bytes(total_size as f64),
+            total_repo_size: utils::human_bytes(total_size),
             workspace: RepoInfo {
                 count: workspace_count,
-                size: utils::human_bytes(workspace_size as f64),
+                size: utils::human_bytes(workspace_size),
             },
             standalone: RepoInfo {
                 count: standalone_count,
-                size: utils::human_bytes(standalone_size as f64),
+                size: utils::human_bytes(standalone_size),
             },
             config,
             remote_count: remotes.len() as u32,
@@ -180,12 +180,12 @@ impl InfoArgs {
 
         let db_path = PathBuf::from(&config::base().metadir).join("database");
         let db_meta = fs::metadata(&db_path)?;
-        let db_size = utils::human_bytes(db_meta.len() as f64);
+        let db_size = utils::human_bytes(db_meta.len());
 
         Ok(ConfigInfo {
             path: config_dir,
             meta_path: meta_dir,
-            meta_size: utils::human_bytes(meta_size as f64),
+            meta_size: utils::human_bytes(meta_size),
             database_size: db_size,
         })
     }

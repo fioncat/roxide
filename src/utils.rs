@@ -413,10 +413,11 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
     }
 }
 
-pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
+pub fn human_bytes<T: Into<u64>>(bytes: T) -> String {
     const BYTES_UNIT: f64 = 1000.0;
     const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
     let size = bytes.into();
+    let size = size as f64;
     if size <= 0.0 {
         return String::from("0B");
     }
@@ -731,7 +732,7 @@ impl<W: Write> ProgressWriter<W> {
         }
         line.push_str(Self::SPACE);
 
-        let info = human_bytes(self.current as f64);
+        let info = human_bytes(self.current as u64);
         let info_size = console::measure_text_width(&info);
         let line_size = console::measure_text_width(&line);
         if line_size + info_size > self.term_size {

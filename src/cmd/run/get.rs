@@ -65,7 +65,7 @@ impl RepoInfo {
             score,
             path,
             workspace,
-            size: utils::human_bytes(size as f64),
+            size: utils::human_bytes(size),
         })
     }
 }
@@ -122,7 +122,7 @@ impl Run for GetArgs {
 
             let mut row = vec![name, access, last_access, score];
             if let Some(size_vec) = size_vec.as_ref() {
-                let size = utils::human_bytes(size_vec[idx] as f64);
+                let size = utils::human_bytes(size_vec[idx]);
                 row.push(size);
             }
 
@@ -134,7 +134,7 @@ impl Run for GetArgs {
         if let Some(size_vec) = size_vec {
             let total: u64 = size_vec.into_iter().sum();
             println!();
-            println!("Total size: {}", utils::human_bytes(total as f64));
+            println!("Total size: {}", utils::human_bytes(total));
         }
 
         Ok(())
