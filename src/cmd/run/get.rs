@@ -130,6 +130,13 @@ impl Run for GetArgs {
         }
 
         table.show();
+
+        if let Some(size_vec) = size_vec {
+            let total: u64 = size_vec.into_iter().sum();
+            println!();
+            println!("Total size: {}", utils::human_bytes(total as f64));
+        }
+
         Ok(())
     }
 }

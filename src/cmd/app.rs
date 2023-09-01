@@ -11,6 +11,7 @@ use crate::cmd::run::gc::GcArgs;
 use crate::cmd::run::get::GetArgs;
 use crate::cmd::run::home::HomeArgs;
 use crate::cmd::run::import::ImportArgs;
+use crate::cmd::run::info::InfoArgs;
 use crate::cmd::run::init::InitArgs;
 use crate::cmd::run::merge::MergeArgs;
 use crate::cmd::run::open::OpenArgs;
@@ -48,6 +49,7 @@ pub enum Commands {
     Get(GetArgs),
     Home(HomeArgs),
     Import(ImportArgs),
+    Info(InfoArgs),
     Init(InitArgs),
     Merge(MergeArgs),
     Open(OpenArgs),
@@ -81,6 +83,7 @@ impl Run for App {
             Commands::Get(args) => args.run(),
             Commands::Home(args) => args.run(),
             Commands::Import(args) => args.run(),
+            Commands::Info(args) => args.run(),
             Commands::Init(args) => args.run(),
             Commands::Merge(args) => args.run(),
             Commands::Open(args) => args.run(),
