@@ -3,7 +3,7 @@ use std::fs::{self, Metadata, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
@@ -13,6 +13,8 @@ use dialoguer::Input;
 use file_lock::{FileLock, FileOptions};
 use pad::PadStr;
 use regex::Regex;
+use reqwest::blocking::Client;
+use reqwest::{Method, Url};
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
@@ -649,6 +651,189 @@ pub fn show_json<T: Serialize>(value: T) -> Result<()> {
     value.serialize(&mut ser).context("Serialize object")?;
     let json = String::from_utf8(buf).context("UTF8 encode json")?;
     println!("{json}");
+    Ok(())
+}
+
+pub const CURSOR_UP_CHARS: &str = "\x1b[A\x1b[K";
+
+pub fn cursor_up_stderr() {
+    _ = write!(std::io::stderr(), "{}", CURSOR_UP_CHARS);
+}
+
+pub fn render_bar(current: usize, total: usize, bar_size: usize) -> String {
+    let current_count = if current >= total {
+        bar_size
+    } else {
+        let percent = (current as f64) / (total as f64);
+        let current_f64 = (bar_size as f64) * percent;
+        let current = current_f64 as u64 as usize;
+        if current >= bar_size {
+            bar_size
+        } else {
+            current
+        }
+    };
+    let current = match current_count {
+        0 => String::new(),
+        1 => String::from(">"),
+        _ => format!("{}>", "=".repeat(current_count - 1)),
+    };
+    if current_count >= bar_size {
+        return format!("[{current}]");
+    }
+
+    let pending = " ".repeat(bar_size - current_count);
+    format!("[{current}{pending}]")
+}
+
+struct ProgressWriter<W: Write> {
+    desc: String,
+    desc_size: usize,
+
+    upstream: W,
+
+    term_size: usize,
+    bar_size: usize,
+
+    last_report: Instant,
+
+    current: usize,
+    total: usize,
+}
+
+impl<W: Write> ProgressWriter<W> {
+    const SPACE: &str = " ";
+    const SPACE_SIZE: usize = 1;
+
+    const REPORT_INTERVAL: Duration = Duration::from_millis(200);
+
+    pub fn new(desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
+        let desc_size = console::measure_text_width(&desc);
+
+        let term = Term::stdout();
+        let (_, col_size) = term.size();
+        let term_size = col_size as usize;
+
+        let bar_size = if term_size <= 20 { 0 } else { term_size / 4 };
+
+        let last_report = Instant::now();
+
+        let pw = ProgressWriter {
+            desc,
+            desc_size,
+            upstream,
+            term_size,
+            bar_size,
+            last_report,
+            current: 0,
+            total,
+        };
+        write_stderr(pw.render());
+        pw
+    }
+
+    fn render(&self) -> String {
+        if self.desc_size > self.term_size {
+            return ".".repeat(self.term_size);
+        }
+
+        let mut line = self.desc.clone();
+        if self.desc_size + Self::SPACE_SIZE > self.term_size || self.bar_size == 0 {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let bar = self.render_bar();
+        let bar_size = console::measure_text_width(&bar);
+        let line_size = console::measure_text_width(&line);
+        if line_size + bar_size > self.term_size {
+            return line;
+        }
+        line.push_str(&bar);
+
+        let line_size = console::measure_text_width(&line);
+        if line_size + Self::SPACE_SIZE > self.term_size {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let info = human_bytes(self.current as f64);
+        let info_size = console::measure_text_width(&info);
+        let line_size = console::measure_text_width(&line);
+        if line_size + info_size > self.term_size {
+            return line;
+        }
+        line.push_str(&info);
+        line
+    }
+
+    fn render_bar(&self) -> String {
+        render_bar(self.current, self.total, self.bar_size)
+    }
+}
+
+impl<W: Write> Write for ProgressWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let size = self.upstream.write(buf)?;
+        self.current += size;
+
+        if self.current >= self.total {
+            self.current = self.total;
+            cursor_up_stderr();
+            write_stderr(self.render());
+            return Ok(size);
+        }
+
+        let now = Instant::now();
+        let delta = now - self.last_report;
+        if delta >= Self::REPORT_INTERVAL {
+            cursor_up_stderr();
+            write_stderr(self.render());
+            self.last_report = now;
+        }
+
+        Ok(size)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.upstream.flush()
+    }
+}
+
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub fn download(name: &str, url: impl AsRef<str>, path: impl AsRef<str>) -> Result<()> {
+    let client = Client::builder().timeout(DOWNLOAD_TIMEOUT).build().unwrap();
+    let url = Url::parse(url.as_ref()).context("Parse download url")?;
+
+    let req = client
+        .request(Method::GET, url)
+        .build()
+        .context("Build download http request")?;
+
+    let mut resp = client.execute(req).context("Request http download")?;
+    let total = match resp.content_length() {
+        Some(size) => size,
+        None => bail!("Could not find content-length in http response"),
+    };
+
+    let path = PathBuf::from(path.as_ref());
+    ensure_dir(&path)?;
+
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("Open file {}", path.display()))?;
+    let desc = format!("Downloading {name}:");
+
+    let mut pw = ProgressWriter::new(desc, total as usize, file);
+    resp.copy_to(&mut pw).context("Download data")?;
+
+    cursor_up_stderr();
+    info!("Download {} done", name);
+
     Ok(())
 }
 

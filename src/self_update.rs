@@ -28,17 +28,40 @@ pub fn trigger() -> Result<()> {
         latest
     );
 
-    let update_script = include_bytes!("../install.sh");
-    let path = PathBuf::from(&config::base().metadir).join("update.sh");
-    utils::write_file(&path, update_script)?;
+    let file_name = target_filename()?;
+    let url = format!("https://github.com/fioncat/roxide/releases/latest/download/{file_name}");
+    let target_path = "/tmp/roxide-update/roxide.tar.gz";
+    utils::download("roxide", url, target_path)?;
 
-    let script = format!("sh {} {} true", path.display(), exec_dir.display());
-    let mut shell = Shell::sh(&script);
-    shell.with_desc("Execute update script");
-    shell.execute()?.check()?;
+    Shell::with_args("tar", &["-xzf", target_path, "-C", "/tmp/roxide-update"])
+        .with_desc("Unpack roxide")
+        .execute()?
+        .check()?;
+    let replace_path = format!("{}", exec_dir.join("roxide").display());
+    Shell::with_args("mv", &["/tmp/roxide-update/roxide", &replace_path])
+        .with_desc("Replace roxide binary")
+        .execute()?
+        .check()?;
 
+    fs::remove_dir_all("/tmp/roxide-update").context("Remove update tmp dir")?;
     info!("Update roxide to {} done", latest);
     Ok(())
+}
+
+fn target_filename() -> Result<String> {
+    let os = match env::consts::OS {
+        "linux" => "unknown-linux-musl",
+        "macos" => "apple-darwin",
+        _ => bail!("Downloading roxide for os {} from the release page is not supported. Please build roxide manually", env::consts::OS),
+    };
+
+    let arch = match env::consts::ARCH {
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        _ => bail!("Downloading roxide for arch {} from the release page is not supported. Please build roxide manually", env::consts::ARCH),
+    };
+
+    Ok(format!("roxide_{arch}-{os}.tar.gz"))
 }
 
 pub fn auto() -> Result<()> {
