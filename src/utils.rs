@@ -429,42 +429,16 @@ pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
     [&result, BYTES_SUFFIX[base.floor() as usize]].join("")
 }
 
-pub fn dir_size(dir: PathBuf) -> Result<String> {
-    let mut stack = vec![dir];
+pub fn dir_size(dir: PathBuf) -> Result<u64> {
     let mut total_size: u64 = 0;
-    loop {
-        let maybe_dir = stack.pop();
-        if let None = maybe_dir {
-            return Ok(human_bytes(total_size as f64));
+    walk_dir(dir, |_path, meta| {
+        if meta.is_file() {
+            total_size += meta.len();
         }
-        let current_dir = maybe_dir.unwrap();
+        Ok(true)
+    })?;
 
-        let read_dir = match fs::read_dir(&current_dir) {
-            Ok(read_dir) => read_dir,
-            Err(err) if err.kind() == ErrorKind::NotFound => continue,
-            Err(err) => {
-                return Err(err)
-                    .with_context(|| format!("Read directory {}", current_dir.display()))
-            }
-        };
-
-        for item in read_dir {
-            let item =
-                item.with_context(|| format!("Read directory item for {}", current_dir.display()))?;
-            let path = item.path();
-            let meta = item
-                .metadata()
-                .with_context(|| format!("Get metadata for {}", path.display()))?;
-            if meta.is_file() {
-                let size = meta.len();
-                total_size += size;
-                continue;
-            }
-            if meta.is_dir() {
-                stack.push(path);
-            }
-        }
-    }
+    Ok(total_size)
 }
 
 pub struct Lock {
