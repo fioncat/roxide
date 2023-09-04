@@ -41,10 +41,6 @@ struct ImportTask {
 }
 
 impl Task<Arc<String>> for ImportTask {
-    fn name(&self) -> String {
-        format!("{}", self.name)
-    }
-
     fn run(&self) -> Result<Arc<String>> {
         let path = Repo::get_workspace_path(
             self.remote.name.as_str(),
@@ -87,27 +83,24 @@ impl Run for ImportArgs {
             info!("Nothing to import");
             return Ok(());
         }
+        utils::confirm_items(&names, "import", "import", "Repo", "Repos")?;
 
         let remote_arc = Arc::new(remote);
         let owner_arc = Arc::new(owner.clone());
 
         let mut tasks = Vec::with_capacity(names.len());
         for name in names {
-            tasks.push(ImportTask {
-                remote: remote_arc.clone(),
-                owner: owner_arc.clone(),
-                name: Arc::new(name),
-            })
+            tasks.push((
+                name.clone(),
+                ImportTask {
+                    remote: remote_arc.clone(),
+                    owner: owner_arc.clone(),
+                    name: Arc::new(name),
+                },
+            ))
         }
         drop(remote_arc);
         drop(owner_arc);
-
-        if tasks.is_empty() {
-            info!("Nothing to import");
-            return Ok(());
-        }
-        let items: Vec<_> = tasks.iter().map(|task| format!("{}", task.name)).collect();
-        utils::confirm_items(&items, "import", "import", "Repo", "Repos")?;
 
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(owner);
