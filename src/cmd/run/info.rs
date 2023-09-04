@@ -33,8 +33,22 @@ impl Run for InfoArgs {
         let mut standalone_size: u64 = 0;
         let mut remotes: BTreeMap<String, RemoteInfo> = BTreeMap::new();
 
+        let mut scan_file: u64 = 0;
+        println!("Scan files: 0");
+
         for repo in repos {
-            let size = utils::dir_size(repo.get_path())?;
+            let path = repo.get_path();
+            let mut size: u64 = 0;
+            utils::walk_dir(path, |_file, meta| {
+                if meta.is_file() {
+                    scan_file += 1;
+                    utils::cursor_up_stdout();
+                    size += meta.len();
+                    println!("Scan files: {scan_file}");
+                }
+                Ok(true)
+            })?;
+
             total_size += size;
             match repo.path.as_ref() {
                 Some(_) => {
@@ -88,6 +102,7 @@ impl Run for InfoArgs {
             owner_info.repo_count += 1;
             owner_info.size_u64 += size;
         }
+        utils::cursor_up_stdout();
 
         for (_, remote) in remotes.iter_mut() {
             remote.size = Some(utils::human_bytes(remote.size_u64));
@@ -101,6 +116,7 @@ impl Run for InfoArgs {
             git,
             fzf,
             total_repo_size: utils::human_bytes(total_size),
+            files_count: scan_file,
             workspace: RepoInfo {
                 count: workspace_count,
                 size: utils::human_bytes(workspace_size),
@@ -196,6 +212,7 @@ struct Info {
     pub git: ComponentInfo,
     pub fzf: ComponentInfo,
     pub total_repo_size: String,
+    pub files_count: u64,
     pub workspace: RepoInfo,
     pub standalone: RepoInfo,
     pub config: ConfigInfo,

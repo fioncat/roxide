@@ -635,6 +635,10 @@ pub fn cursor_up_stderr() {
     _ = write!(std::io::stderr(), "{}", CURSOR_UP_CHARS);
 }
 
+pub fn cursor_up_stdout() {
+    print!("{CURSOR_UP_CHARS}");
+}
+
 pub fn render_bar(current: usize, total: usize, bar_size: usize) -> String {
     let current_count = if current >= total {
         bar_size
