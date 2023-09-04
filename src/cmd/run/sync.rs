@@ -136,7 +136,7 @@ impl Task<()> for SyncTask {
             if head.is_empty() {
                 bail!("HEAD commit is empty, please check your git command");
             }
-            git.exec(&["checkout", &default_branch])?;
+            git.checkout(&default_branch)?;
             Some(head)
         } else {
             None
@@ -156,14 +156,14 @@ impl Task<()> for SyncTask {
                     if !self.push {
                         continue;
                     }
-                    git.exec(&["checkout", &branch.name])?;
+                    git.checkout(&branch.name)?;
                     git.exec(&["push"])?;
                 }
                 BranchStatus::Behind => {
                     if !self.pull {
                         continue;
                     }
-                    git.exec(&["checkout", &branch.name])?;
+                    git.checkout(&branch.name)?;
                     git.exec(&["pull"])?;
                 }
                 BranchStatus::Gone => {
@@ -173,21 +173,21 @@ impl Task<()> for SyncTask {
                     if branch.name == default_branch {
                         continue;
                     }
-                    git.exec(&["checkout", &default_branch])?;
+                    git.checkout(&default_branch)?;
                     git.exec(&["branch", "-D", &branch.name])?;
                 }
                 BranchStatus::Conflict => {
                     if !self.force {
                         continue;
                     }
-                    git.exec(&["checkout", &branch.name])?;
+                    git.checkout(&branch.name)?;
                     git.exec(&["push", "-f"])?;
                 }
                 BranchStatus::Detached => {
                     if !self.add {
                         continue;
                     }
-                    git.exec(&["checkout", &branch.name])?;
+                    git.checkout(&branch.name)?;
                     git.exec(&["push", "--set-upstream", "origin", &branch.name])?;
                 }
                 BranchStatus::Sync => {}
@@ -198,7 +198,7 @@ impl Task<()> for SyncTask {
             Some(commit) => commit,
             None => &backup_branch,
         };
-        git.exec(&["checkout", target])?;
+        git.checkout(target)?;
 
         Ok(())
     }
