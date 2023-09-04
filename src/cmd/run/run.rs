@@ -41,15 +41,9 @@ struct RunTask {
     remote: String,
     owner: String,
     name: String,
-
-    show_name: String,
 }
 
 impl Task<()> for RunTask {
-    fn name(&self) -> String {
-        self.show_name.clone()
-    }
-
     fn run(&self) -> Result<()> {
         self.workflow
             .execute_task(&self.dir, &self.remote, &self.owner, &self.name)
@@ -88,18 +82,19 @@ impl Run for RunArgs {
         for repo in repos {
             let dir = repo.get_path();
             let show_name = repo.as_string(&level);
-            tasks.push(RunTask {
-                workflow: workflow.clone(),
-                dir,
-                remote: format!("{}", repo.remote),
-                owner: format!("{}", repo.owner),
-                name: format!("{}", repo.name),
+            tasks.push((
                 show_name,
-            })
+                RunTask {
+                    workflow: workflow.clone(),
+                    dir,
+                    remote: format!("{}", repo.remote),
+                    owner: format!("{}", repo.owner),
+                    name: format!("{}", repo.name),
+                },
+            ))
         }
 
-        let desc = format!("Run workflow {}", self.workflow);
-        batch::must_run(desc.as_str(), tasks)?;
+        batch::must_run("Run", tasks)?;
         Ok(())
     }
 }

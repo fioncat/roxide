@@ -60,8 +60,6 @@ struct SyncTask {
 
     path: PathBuf,
 
-    show_name: String,
-
     add: bool,
     delete: bool,
     force: bool,
@@ -72,10 +70,6 @@ struct SyncTask {
 }
 
 impl Task<()> for SyncTask {
-    fn name(&self) -> String {
-        self.show_name.clone()
-    }
-
     fn run(&self) -> Result<()> {
         if let None = self.remote.clone.as_ref() {
             return Ok(());
@@ -209,18 +203,20 @@ impl Run for SyncArgs {
                     ret
                 }
             };
-            tasks.push(SyncTask {
-                remote,
-                owner: format!("{}", repo.owner),
-                name: format!("{}", repo.name),
-                path: repo.get_path(),
-                show_name: repo.as_string(&level),
-                branch_re: branch_re.clone(),
-                add,
-                delete,
-                force,
-                message: message.clone(),
-            });
+            tasks.push((
+                repo.as_string(&level),
+                SyncTask {
+                    remote,
+                    owner: format!("{}", repo.owner),
+                    name: format!("{}", repo.name),
+                    path: repo.get_path(),
+                    branch_re: branch_re.clone(),
+                    add,
+                    delete,
+                    force,
+                    message: message.clone(),
+                },
+            ));
         }
         batch::must_run("Sync", tasks)?;
 

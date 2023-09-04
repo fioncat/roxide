@@ -83,14 +83,11 @@ impl SnapshotArgs {
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
         utils::confirm_items(&items, "take snapshot", "snapshot", "repo", "repos")?;
 
-        let mut tasks: Vec<CheckSnapshotTask> = Vec::with_capacity(repos.len());
+        let mut tasks = Vec::with_capacity(repos.len());
         for repo in repos.iter() {
             let path = repo.get_path();
             let name = repo.full_name();
-            tasks.push(CheckSnapshotTask {
-                path,
-                show_name: name,
-            });
+            tasks.push((name, CheckSnapshotTask { path }));
         }
         let results = batch::run("Check", tasks, false);
         println!();
@@ -171,18 +168,20 @@ impl SnapshotArgs {
                 None => Repo::get_workspace_path(&item.remote, &item.owner, &item.name),
             };
             let show_name = format!("{}:{}/{}", item.remote, item.owner, item.name);
-            tasks.push(RestoreSnapshotTask {
-                remote,
-                path,
-                branch: if self.skip_checkout {
-                    None
-                } else {
-                    Some(item.branch.clone())
-                },
-                name: item.name.clone(),
-                owner: item.owner.clone(),
+            tasks.push((
                 show_name,
-            });
+                RestoreSnapshotTask {
+                    remote,
+                    path,
+                    branch: if self.skip_checkout {
+                        None
+                    } else {
+                        Some(item.branch.clone())
+                    },
+                    name: item.name.clone(),
+                    owner: item.owner.clone(),
+                },
+            ));
         }
 
         batch::must_run("Restore", tasks)?;
@@ -236,14 +235,9 @@ impl SnapshotArgs {
 
 struct CheckSnapshotTask {
     path: PathBuf,
-    show_name: String,
 }
 
 impl Task<String> for CheckSnapshotTask {
-    fn name(&self) -> String {
-        self.show_name.clone()
-    }
-
     fn run(&self) -> Result<String> {
         let path = format!("{}", self.path.display());
         let git = GitTask::new(path.as_str());
@@ -279,15 +273,9 @@ struct RestoreSnapshotTask {
 
     owner: String,
     name: String,
-
-    show_name: String,
 }
 
 impl Task<()> for RestoreSnapshotTask {
-    fn name(&self) -> String {
-        self.show_name.clone()
-    }
-
     fn run(&self) -> Result<()> {
         let path = format!("{}", self.path.display());
         let git = GitTask::new(path.as_str());

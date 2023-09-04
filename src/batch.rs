@@ -9,14 +9,12 @@ use console::{style, Term};
 use crate::utils;
 
 pub trait Task<R: Send> {
-    fn name(&self) -> String;
-
     fn run(&self) -> Result<R>;
 }
 
 enum Report<R> {
     Running(usize, String),
-    Done(usize, Result<R>, String),
+    Done(usize, Result<R>),
 }
 
 struct Tracker<R> {
@@ -86,7 +84,7 @@ impl<R> Tracker<R> {
         while self.done.len() < self.total {
             match rx.recv().unwrap() {
                 Report::Running(idx, name) => self.trace_running(idx, name),
-                Report::Done(idx, result, name) => self.trace_done(idx, name, result),
+                Report::Done(idx, result) => self.trace_done(idx, result),
             }
         }
         let end = Instant::now();
@@ -132,14 +130,18 @@ impl<R> Tracker<R> {
         println!("{line}");
     }
 
-    fn trace_done(&mut self, idx: usize, name: String, result: Result<R>) {
-        if let Some(pos) = self
+    fn trace_done(&mut self, idx: usize, result: Result<R>) {
+        let name = match self
             .running
             .iter()
             .position(|(found_idx, _)| found_idx == &idx)
         {
-            self.running.remove(pos);
-        }
+            Some(idx) => {
+                let (_, name) = self.running.remove(idx);
+                name
+            }
+            None => return,
+        };
 
         Self::cursor_up(1);
         match result.as_ref() {
@@ -279,7 +281,7 @@ impl<R> Tracker<R> {
     }
 }
 
-pub fn must_run<T, R>(desc: &str, tasks: Vec<T>) -> Result<Vec<R>>
+pub fn must_run<T, R>(desc: &str, tasks: Vec<(String, T)>) -> Result<Vec<R>>
 where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
@@ -291,7 +293,7 @@ where
     Ok(results.into_iter().map(|r| r.unwrap()).collect())
 }
 
-pub fn run<T, R>(desc: &str, tasks: Vec<T>, show_fail: bool) -> Vec<Result<R>>
+pub fn run<T, R>(desc: &str, tasks: Vec<(String, T)>, show_fail: bool) -> Vec<Result<R>>
 where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
@@ -308,7 +310,7 @@ where
     let worker_len = num_cpus::get();
     assert_ne!(worker_len, 0);
 
-    let (task_tx, task_rx) = mpsc::channel::<(usize, T)>();
+    let (task_tx, task_rx) = mpsc::channel::<(usize, String, T)>();
     // By default, mpsc does not support multiple threads using the same consumer.
     // But our multiple workers need to preempt the task queue. Therefore, Arc+Mutex
     // is used here to allow the consumer of mpsc to be preempted by multiple threads
@@ -344,12 +346,11 @@ where
             // the task, cause tasks cannot be processed asynchronously.
             drop(task_rx);
 
-            if let Ok((idx, task)) = recv {
-                let name = task.name();
-                report_tx.send(Report::Running(idx, name.clone())).unwrap();
+            if let Ok((idx, name, task)) = recv {
+                report_tx.send(Report::Running(idx, name)).unwrap();
                 // Running message reporting will be done by task itself.
                 let result = task.run();
-                report_tx.send(Report::Done(idx, result, name)).unwrap();
+                report_tx.send(Report::Done(idx, result)).unwrap();
             } else {
                 // task_rx is closed, it means that all tasks have been processed.
                 // The worker can exit now.
@@ -360,8 +361,8 @@ where
     }
 
     // Produce all tasks to workers.
-    for (idx, task) in tasks.into_iter().enumerate() {
-        task_tx.send((idx, task)).unwrap();
+    for (idx, (name, task)) in tasks.into_iter().enumerate() {
+        task_tx.send((idx, name, task)).unwrap();
     }
     drop(task_tx);
 
@@ -398,10 +399,6 @@ mod tests {
     }
 
     impl Task<usize> for TestTask {
-        fn name(&self) -> String {
-            format!("Task {} done!", self.idx)
-        }
-
         fn run(&self) -> Result<usize> {
             thread::sleep(Duration::from_millis(100));
             Ok(self.idx)
@@ -415,7 +412,7 @@ mod tests {
         let mut tasks = Vec::with_capacity(COUNT);
         for i in 0..COUNT {
             let task = TestTask { idx: i };
-            tasks.push(task);
+            tasks.push((format!("Task-{i}"), task));
         }
 
         let results: Vec<usize> = run("Test", tasks, false)
