@@ -6,6 +6,7 @@ pub mod gc;
 pub mod get;
 pub mod home;
 pub mod import;
+pub mod info;
 pub mod init;
 pub mod merge;
 pub mod open;

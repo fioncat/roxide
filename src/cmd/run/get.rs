@@ -55,6 +55,7 @@ impl RepoInfo {
         let path = repo.get_path();
         let path = format!("{}", path.display());
         let score = format!("{:.2}", repo.score());
+        let size = utils::dir_size(repo.get_path())?;
         Ok(RepoInfo {
             remote: format!("{}", repo.remote),
             owner: format!("{}", repo.owner),
@@ -64,7 +65,7 @@ impl RepoInfo {
             score,
             path,
             workspace,
-            size: utils::dir_size(repo.get_path())?,
+            size: utils::human_bytes(size),
         })
     }
 }
@@ -79,7 +80,7 @@ impl Run for GetArgs {
         }
 
         let query = Query::from_args(&db, &self.remote, &self.query);
-        let (repos, level) = query.list_local(false)?;
+        let (mut repos, level) = query.list_local(false)?;
         if repos.is_empty() {
             info!("No repo to show");
             return Ok(());
@@ -97,26 +98,45 @@ impl Run for GetArgs {
             String::from("LAST_ACCESS"),
             String::from("SCORE"),
         ];
+
+        let mut size_vec: Option<Vec<u64>> = None;
         if self.size {
             titles.push(String::from("SIZE"));
+            let mut repos_with_size = Vec::with_capacity(repos.len());
+            for repo in repos {
+                let path = repo.get_path();
+                let size = utils::dir_size(path)?;
+                repos_with_size.push((size, repo));
+            }
+            repos_with_size.sort_unstable_by(|(size1, _), (size2, _)| size2.cmp(size1));
+            size_vec = Some(repos_with_size.iter().map(|(size, _)| *size).collect());
+            repos = repos_with_size.into_iter().map(|(_, repo)| repo).collect();
         }
         table.add(titles);
 
-        for repo in repos {
+        for (idx, repo) in repos.iter().enumerate() {
             let name = repo.as_string(&level);
             let access = format!("{}", repo.accessed as u64);
             let last_access = utils::format_since(repo.last_accessed);
             let score = format!("{:.2}", repo.score());
 
             let mut row = vec![name, access, last_access, score];
-            if self.size {
-                row.push(utils::dir_size(repo.get_path())?);
+            if let Some(size_vec) = size_vec.as_ref() {
+                let size = utils::human_bytes(size_vec[idx]);
+                row.push(size);
             }
 
             table.add(row);
         }
 
         table.show();
+
+        if let Some(size_vec) = size_vec {
+            let total: u64 = size_vec.into_iter().sum();
+            println!();
+            println!("Total size: {}", utils::human_bytes(total));
+        }
+
         Ok(())
     }
 }

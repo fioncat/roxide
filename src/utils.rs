@@ -413,10 +413,11 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
     }
 }
 
-pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
+pub fn human_bytes<T: Into<u64>>(bytes: T) -> String {
     const BYTES_UNIT: f64 = 1000.0;
     const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
     let size = bytes.into();
+    let size = size as f64;
     if size <= 0.0 {
         return String::from("0B");
     }
@@ -429,42 +430,16 @@ pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
     [&result, BYTES_SUFFIX[base.floor() as usize]].join("")
 }
 
-pub fn dir_size(dir: PathBuf) -> Result<String> {
-    let mut stack = vec![dir];
+pub fn dir_size(dir: PathBuf) -> Result<u64> {
     let mut total_size: u64 = 0;
-    loop {
-        let maybe_dir = stack.pop();
-        if let None = maybe_dir {
-            return Ok(human_bytes(total_size as f64));
+    walk_dir(dir, |_path, meta| {
+        if meta.is_file() {
+            total_size += meta.len();
         }
-        let current_dir = maybe_dir.unwrap();
+        Ok(true)
+    })?;
 
-        let read_dir = match fs::read_dir(&current_dir) {
-            Ok(read_dir) => read_dir,
-            Err(err) if err.kind() == ErrorKind::NotFound => continue,
-            Err(err) => {
-                return Err(err)
-                    .with_context(|| format!("Read directory {}", current_dir.display()))
-            }
-        };
-
-        for item in read_dir {
-            let item =
-                item.with_context(|| format!("Read directory item for {}", current_dir.display()))?;
-            let path = item.path();
-            let meta = item
-                .metadata()
-                .with_context(|| format!("Get metadata for {}", path.display()))?;
-            if meta.is_file() {
-                let size = meta.len();
-                total_size += size;
-                continue;
-            }
-            if meta.is_dir() {
-                stack.push(path);
-            }
-        }
-    }
+    Ok(total_size)
 }
 
 pub struct Lock {
@@ -660,6 +635,10 @@ pub fn cursor_up_stderr() {
     _ = write!(std::io::stderr(), "{}", CURSOR_UP_CHARS);
 }
 
+pub fn cursor_up_stdout() {
+    print!("{CURSOR_UP_CHARS}");
+}
+
 pub fn render_bar(current: usize, total: usize, bar_size: usize) -> String {
     let current_count = if current >= total {
         bar_size
@@ -757,7 +736,7 @@ impl<W: Write> ProgressWriter<W> {
         }
         line.push_str(Self::SPACE);
 
-        let info = human_bytes(self.current as f64);
+        let info = human_bytes(self.current as u64);
         let info_size = console::measure_text_width(&info);
         let line_size = console::measure_text_width(&line);
         if line_size + info_size > self.term_size {
