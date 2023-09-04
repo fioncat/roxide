@@ -197,3 +197,16 @@ pub fn shell(_: &[&str]) -> Result<Complete> {
         .collect();
     Ok(Complete::from(items))
 }
+
+pub fn sync_rule(args: &[&str]) -> Result<Complete> {
+    if args.len() == 1 {
+        let mut items: Vec<String> = config::base()
+            .sync
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
+        items.sort();
+        return Ok(Complete::from(items));
+    }
+    Ok(Complete::empty())
+}

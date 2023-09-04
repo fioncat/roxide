@@ -23,7 +23,7 @@ use crate::cmd::run::reset::ResetArgs;
 use crate::cmd::run::run::RunArgs;
 use crate::cmd::run::snapshot::SnapshotArgs;
 use crate::cmd::run::squash::SquashArgs;
-use crate::cmd::run::sync::SyncArgs;
+use crate::cmd::run::sync::{SyncArgs, SyncRuleArgs};
 use crate::cmd::run::tag::TagArgs;
 use crate::cmd::run::update::UpdateArgs;
 use crate::cmd::run::version::VersionArgs;
@@ -62,6 +62,7 @@ pub enum Commands {
     Snapshot(SnapshotArgs),
     Squash(SquashArgs),
     Sync(SyncArgs),
+    SyncRule(SyncRuleArgs),
     Tag(TagArgs),
     Update(UpdateArgs),
     Version(VersionArgs),
@@ -96,6 +97,7 @@ impl Run for App {
             Commands::Snapshot(args) => args.run(),
             Commands::Squash(args) => args.run(),
             Commands::Sync(args) => args.run(),
+            Commands::SyncRule(args) => args.run(),
             Commands::Tag(args) => args.run(),
             Commands::Update(args) => args.run(),
             Commands::Version(args) => args.run(),

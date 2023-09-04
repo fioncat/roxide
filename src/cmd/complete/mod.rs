@@ -51,6 +51,7 @@ impl CompleteArgs {
             "run" => handlers::run,
             "snapshot" => handlers::snapshot,
             "sync" => handlers::repo,
+            "sync-rule" => handlers::sync_rule,
             "tag" => handlers::tag,
         }
     }

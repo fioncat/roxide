@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::config::types::{Base, Command, Owner, WorkflowStep};
+use crate::config::types::{Base, Command};
 
 pub fn workspace() -> String {
     String::from("~/src")
@@ -18,12 +18,12 @@ pub fn command() -> Command {
     }
 }
 
-pub fn empty_map() -> HashMap<String, String> {
+pub fn empty_map<K, V>() -> HashMap<K, V> {
     HashMap::new()
 }
 
-pub fn workflows() -> HashMap<String, Vec<WorkflowStep>> {
-    HashMap::new()
+pub fn empty_set<K>() -> HashSet<K> {
+    HashSet::new()
 }
 
 pub fn release() -> HashMap<String, String> {
@@ -42,10 +42,6 @@ pub fn cache_hours() -> u32 {
     24
 }
 
-pub fn owners() -> HashMap<String, Owner> {
-    HashMap::new()
-}
-
 pub fn list_limit() -> u32 {
     200
 }
@@ -59,7 +55,8 @@ pub fn base() -> Base {
         workspace: workspace(),
         metadir: metadir(),
         command: command(),
-        workflows: workflows(),
+        sync: empty_map(),
+        workflows: empty_map(),
         release: release(),
     }
 }

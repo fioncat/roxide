@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::ErrorKind;
@@ -24,8 +24,11 @@ pub struct Base {
     #[serde(default = "default::command")]
     pub command: Command,
 
+    #[serde(default = "default::empty_map")]
+    pub sync: HashMap<String, SyncRule>,
+
     /// Workflow can execute some pre-defined scripts on the repo.
-    #[serde(default = "default::workflows")]
+    #[serde(default = "default::empty_map")]
     pub workflows: HashMap<String, Vec<WorkflowStep>>,
 
     /// The release rule
@@ -67,6 +70,29 @@ pub struct WorkflowStep {
     pub file: Option<String>,
     /// If not empty, it is the command to execute.
     pub run: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncRule {
+    #[serde(default = "default::empty_map")]
+    pub select: HashMap<String, String>,
+
+    #[serde(default = "default::empty_set")]
+    pub actions: HashSet<SyncAction>,
+}
+
+#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
+pub enum SyncAction {
+    #[serde(rename = "pull")]
+    Pull,
+    #[serde(rename = "push")]
+    Push,
+    #[serde(rename = "delete")]
+    Delete,
+    #[serde(rename = "add")]
+    Add,
+    #[serde(rename = "force")]
+    Force,
 }
 
 /// Remote is a Git remote repository. Typical examples are Github and Gitlab.
@@ -125,7 +151,7 @@ pub struct Remote {
     pub cache_hours: u32,
 
     /// Some personalized configurations for different owners.
-    #[serde(default = "default::owners")]
+    #[serde(default = "default::empty_map")]
     pub owners: HashMap<String, Owner>,
 
     /// The list limit when perform searching.
