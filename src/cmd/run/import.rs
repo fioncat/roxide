@@ -9,11 +9,11 @@ use clap::Args;
 use crate::batch::{self, Task};
 use crate::cmd::Run;
 use crate::config::types::Remote;
+use crate::info;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::Repo;
-use crate::shell::{GitTask, Shell};
-use crate::{info, utils};
+use crate::shell::{self, GitTask, Shell};
 
 /// Batch import repos
 #[derive(Args)]
@@ -83,7 +83,7 @@ impl Run for ImportArgs {
             info!("Nothing to import");
             return Ok(());
         }
-        utils::confirm_items(&names, "import", "import", "Repo", "Repos")?;
+        shell::must_confirm_items(&names, "import", "import", "Repo", "Repos")?;
 
         let remote_arc = Arc::new(remote);
         let owner_arc = Arc::new(owner.clone());

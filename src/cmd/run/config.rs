@@ -7,7 +7,7 @@ use clap::{Args, ValueEnum};
 
 use crate::cmd::Run;
 use crate::config::types::Config;
-use crate::utils;
+use crate::shell;
 
 /// Edit roxide config file in terminal.
 #[derive(Args)]
@@ -42,7 +42,7 @@ impl Run for ConfigArgs {
         let editor = self.get_editor()?;
         let path = self.get_path()?;
 
-        utils::edit_file(&editor, &path)
+        shell::edit_file(&editor, &path)
     }
 }
 
@@ -51,7 +51,7 @@ impl ConfigArgs {
         if let Some(editor) = &self.editor {
             return Ok(editor.to_string());
         }
-        utils::get_editor()
+        shell::get_editor()
     }
 
     fn get_path(&self) -> Result<PathBuf> {

@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
-use crate::shell::Shell;
+use crate::shell::{self, Shell};
 use crate::{config, utils};
 
 /// Show some global info
@@ -42,7 +42,7 @@ impl Run for InfoArgs {
             utils::walk_dir(path, |_file, meta| {
                 if meta.is_file() {
                     scan_file += 1;
-                    utils::cursor_up_stdout();
+                    shell::cursor_up_stdout();
                     size += meta.len();
                     println!("Scan files: {scan_file}");
                 }
@@ -102,7 +102,7 @@ impl Run for InfoArgs {
             owner_info.repo_count += 1;
             owner_info.size_u64 += size;
         }
-        utils::cursor_up_stdout();
+        shell::cursor_up_stdout();
 
         for (_, remote) in remotes.iter_mut() {
             remote.size = Some(utils::human_bytes(remote.size_u64));
@@ -130,7 +130,7 @@ impl Run for InfoArgs {
             remotes,
         };
 
-        utils::show_json(info)?;
+        shell::show_json(info)?;
         Ok(())
     }
 }

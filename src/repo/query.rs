@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
-use crate::{api, config, shell, utils};
+use crate::{api, config, shell};
 
 pub struct SelectOptions {
     pub search: bool,
@@ -216,7 +216,7 @@ impl<'a> Query<'_> {
         let (repos, level) = self.list_local_raw()?;
         if filter {
             let items: Vec<String> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-            let items = utils::edit_items(items)?;
+            let items = shell::edit_items(items)?;
             let items_set: HashSet<String> = items.into_iter().collect();
 
             let repos: Vec<Rc<Repo>> = repos
@@ -273,7 +273,7 @@ impl<'a> Query<'_> {
     pub fn list_remote(&self, force: bool, filter: bool) -> Result<(Remote, String, Vec<String>)> {
         let (remote, owner, names) = self.list_remote_raw(force)?;
         if filter {
-            let names = utils::edit_items(names.clone())?;
+            let names = shell::edit_items(names.clone())?;
             return Ok((remote, owner, names));
         }
 

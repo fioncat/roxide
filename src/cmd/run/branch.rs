@@ -3,8 +3,8 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Run;
+use crate::info;
 use crate::shell::{self, BranchStatus, GitBranch, Shell};
-use crate::{info, utils};
 
 /// Git branch operations
 #[derive(Args)]
@@ -149,7 +149,7 @@ impl BranchArgs {
             };
             items.push(msg);
         }
-        utils::confirm_items(&items, "sync", "synchronization", "Branch", "Branches")?;
+        shell::must_confirm_items(&items, "sync", "synchronization", "Branch", "Branches")?;
 
         for task in tasks {
             match task {

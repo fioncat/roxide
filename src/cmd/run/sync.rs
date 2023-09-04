@@ -15,8 +15,8 @@ use crate::config::types::{Remote, SyncAction, SyncRule};
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::{NameLevel, Repo};
-use crate::shell::{BranchStatus, GitBranch, GitTask, Shell};
-use crate::{config, info, utils};
+use crate::shell::{self, BranchStatus, GitBranch, GitTask, Shell};
+use crate::{config, info};
 
 struct SyncTask {
     remote: Arc<Remote>,
@@ -252,7 +252,7 @@ impl Run for SyncArgs {
 
         if !self.fire {
             let items: Vec<String> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-            utils::confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
+            shell::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
         }
 
         let add = if self.fire { true } else { self.add };
@@ -291,7 +291,7 @@ impl Run for SyncRuleArgs {
             .iter()
             .map(|repo| repo.as_string(&Self::LEVEL))
             .collect();
-        utils::confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
+        shell::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
 
         let mut pull = false;
         let mut push = false;
