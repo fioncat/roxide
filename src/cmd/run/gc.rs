@@ -7,7 +7,7 @@ use clap::Args;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
-use crate::{config, info, utils};
+use crate::{config, info, shell, utils};
 
 /// Remove unused path in workspace
 #[derive(Args)]
@@ -68,7 +68,7 @@ impl Run for GcArgs {
             return Ok(());
         }
 
-        utils::confirm_items(&items, "remove", "removal", "Orphan", "Orphans")?;
+        shell::must_confirm_items(&items, "remove", "removal", "Orphan", "Orphans")?;
         for file in files {
             info!("Remove file {}", file.display());
             fs::remove_file(&file).with_context(|| format!("Remove file {}", file.display()))?;

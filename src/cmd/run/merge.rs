@@ -100,9 +100,9 @@ impl Run for MergeArgs {
         println!("About to create merge: {}", merge.pretty_display());
         println!("With {commit_desc}");
         confirm!("Continue");
-        let title = utils::input("Please input title", true, init_title)?;
-        let body = if utils::confirm("Do you need body")? {
-            utils::edit_content("Please input your body (markdown)", "body.md", true)?
+        let title = shell::input("Please input title", true, init_title)?;
+        let body = if shell::confirm("Do you need body")? {
+            shell::edit_content("Please input your body (markdown)", "body.md", true)?
         } else {
             String::new()
         };

@@ -15,7 +15,7 @@ use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::snapshot::{Item, Snapshot};
 use crate::repo::types::Repo;
-use crate::shell::{GitTask, Shell};
+use crate::shell::{self, GitTask, Shell};
 use crate::{config, info, utils};
 
 /// Snapshot operations for workspace
@@ -81,7 +81,7 @@ impl SnapshotArgs {
             return Ok(());
         }
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
-        utils::confirm_items(&items, "take snapshot", "snapshot", "repo", "repos")?;
+        shell::must_confirm_items(&items, "take snapshot", "snapshot", "repo", "repos")?;
 
         let mut tasks = Vec::with_capacity(repos.len());
         for repo in repos.iter() {
@@ -147,7 +147,7 @@ impl SnapshotArgs {
             .iter()
             .map(|item| format!("{}:{}/{}", item.remote, item.owner, item.name))
             .collect();
-        utils::confirm_items(&show_items, "restore snapshot", "snapshot", "Item", "Items")?;
+        shell::must_confirm_items(&show_items, "restore snapshot", "snapshot", "Item", "Items")?;
         let items_set: HashSet<_> = show_items.into_iter().collect();
 
         let mut tasks = Vec::with_capacity(items.len());
@@ -205,7 +205,7 @@ impl SnapshotArgs {
 
         if !to_remove.is_empty() {
             let remove_items: Vec<_> = to_remove.iter().map(|repo| repo.long_name()).collect();
-            if utils::confirm_items_weak(&remove_items, "remove", "removal", "Repo", "Repos")? {
+            if shell::confirm_items(&remove_items, "remove", "removal", "Repo", "Repos")? {
                 for repo in to_remove {
                     let path = repo.get_path();
                     utils::remove_dir_recursively(path)?;

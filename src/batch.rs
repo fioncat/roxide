@@ -4,9 +4,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
-use console::{style, Term};
+use console::style;
 
-use crate::utils;
+use crate::shell;
 
 pub trait Task<R: Send> {
     fn run(&self) -> Result<R>;
@@ -29,9 +29,6 @@ struct Tracker<R> {
     desc_size: usize,
     desc_head: String,
 
-    term_size: usize,
-    bar_size: usize,
-
     ok_count: usize,
     fail_count: usize,
 
@@ -44,9 +41,9 @@ impl<R> Tracker<R> {
     const SEP: &str = ", ";
     const OMIT: &str = ", ...";
 
-    const SPACE_SIZE: usize = 1;
-    const SEP_SIZE: usize = 2;
-    const OMIT_SIZE: usize = 5;
+    const SPACE_SIZE: usize = Self::SPACE.len();
+    const SEP_SIZE: usize = Self::SEP.len();
+    const OMIT_SIZE: usize = Self::OMIT.len();
 
     fn new(desc: &str, total: usize, show_fail: bool) -> Tracker<R> {
         let desc_pure = String::from(desc);
@@ -54,12 +51,6 @@ impl<R> Tracker<R> {
         let desc_size = Self::get_size(&desc);
 
         let total_pad = total.to_string().chars().count();
-
-        let term = Term::stdout();
-        let (_, col_size) = term.size();
-        let term_size = col_size as usize;
-
-        let bar_size = if term_size <= 20 { 0 } else { term_size / 4 };
 
         Tracker {
             total,
@@ -70,8 +61,6 @@ impl<R> Tracker<R> {
             desc_pure,
             desc_size,
             desc_head: " ".repeat(desc_size),
-            term_size,
-            bar_size,
             ok_count: 0,
             fail_count: 0,
             show_fail,
@@ -96,7 +85,7 @@ impl<R> Tracker<R> {
             style("ok").green().to_string()
         };
 
-        Self::cursor_up(1);
+        shell::cursor_up_stdout();
         println!();
         println!(
             "{} result: {}. {} ok; {} failed; finished in {}",
@@ -126,7 +115,7 @@ impl<R> Tracker<R> {
     fn trace_running(&mut self, idx: usize, name: String) {
         self.running.push((idx, name));
         let line = self.render();
-        Self::cursor_up(1);
+        shell::cursor_up_stdout();
         println!("{line}");
     }
 
@@ -143,7 +132,7 @@ impl<R> Tracker<R> {
             None => return,
         };
 
-        Self::cursor_up(1);
+        shell::cursor_up_stdout();
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
@@ -167,41 +156,42 @@ impl<R> Tracker<R> {
     }
 
     fn render(&self) -> String {
-        if self.desc_size > self.term_size {
-            return ".".repeat(self.term_size);
+        let term_size = shell::size();
+        if self.desc_size > term_size {
+            return ".".repeat(term_size);
         }
 
         let mut line = self.desc.clone();
-        if self.desc_size + Self::SPACE_SIZE > self.term_size || self.bar_size == 0 {
+        if self.desc_size + Self::SPACE_SIZE > term_size || shell::bar_size() == 0 {
             return line;
         }
         line.push_str(Self::SPACE);
 
-        let bar = self.render_bar();
+        let bar = shell::render_bar(self.done.len(), self.total);
         let bar_size = Self::get_size(&bar);
-        if Self::get_size(&line) + bar_size > self.term_size {
+        if Self::get_size(&line) + bar_size > term_size {
             return line;
         }
         line.push_str(&bar);
 
-        if Self::get_size(&line) + Self::SPACE_SIZE > self.term_size {
+        if Self::get_size(&line) + Self::SPACE_SIZE > term_size {
             return line;
         }
         line.push_str(Self::SPACE);
 
         let tag = self.render_tag();
         let tag_size = Self::get_size(&bar);
-        if Self::get_size(&line) + tag_size > self.term_size {
+        if Self::get_size(&line) + tag_size > term_size {
             return line;
         }
         line.push_str(&tag);
 
-        if Self::get_size(&line) + Self::SPACE_SIZE > self.term_size {
+        if Self::get_size(&line) + Self::SPACE_SIZE > term_size {
             return line;
         }
         line.push_str(Self::SPACE);
 
-        let left = self.term_size - Self::get_size(&line);
+        let left = term_size - Self::get_size(&line);
         if left == 0 {
             return line;
         }
@@ -209,10 +199,6 @@ impl<R> Tracker<R> {
         let list = self.render_list(left);
         line.push_str(&list);
         line
-    }
-
-    fn render_bar(&self) -> String {
-        utils::render_bar(self.done.len(), self.total, self.bar_size)
     }
 
     fn render_tag(&self) -> String {
@@ -254,13 +240,6 @@ impl<R> Tracker<R> {
 
     fn get_size(s: impl AsRef<str>) -> usize {
         console::measure_text_width(s.as_ref())
-    }
-
-    fn cursor_up(n: usize) {
-        for _ in 0..n {
-            print!("\x1b[A");
-            print!("\x1b[K");
-        }
     }
 
     fn format_elapsed(d: Duration) -> String {

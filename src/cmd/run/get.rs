@@ -5,11 +5,12 @@ use clap::Args;
 use serde::Serialize;
 
 use crate::cmd::Run;
-use crate::info;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::Repo;
-use crate::utils::{self, Table};
+use crate::shell::Table;
+use crate::utils;
+use crate::{info, shell};
 
 /// Get or list repo info.
 #[derive(Args)]
@@ -76,7 +77,7 @@ impl Run for GetArgs {
         if self.current {
             let repo = db.must_current()?;
             let info = RepoInfo::from_repo(repo)?;
-            return utils::show_json(info);
+            return shell::show_json(info);
         }
 
         let query = Query::from_args(&db, &self.remote, &self.query);
@@ -89,7 +90,7 @@ impl Run for GetArgs {
         if repos.len() == 1 {
             let repo = repos.into_iter().next().unwrap();
             let info = RepoInfo::from_repo(repo)?;
-            return utils::show_json(info);
+            return shell::show_json(info);
         }
         let mut table = Table::with_capacity(1 + repos.len());
         let mut titles = vec![
