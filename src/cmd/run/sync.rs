@@ -130,6 +130,18 @@ impl Task<()> for SyncTask {
         let default_branch = GitBranch::parse_default_branch(lines)?;
         let mut backup_branch = default_branch.clone();
 
+        let current = git.read(&["branch", "--show-current"])?;
+        let head = if current.is_empty() {
+            let head = git.read(&["rev-parse", "HEAD"])?;
+            if head.is_empty() {
+                bail!("HEAD commit is empty, please check your git command");
+            }
+            git.exec(&["checkout", &default_branch])?;
+            Some(head)
+        } else {
+            None
+        };
+
         let lines = git.lines(&["branch", "-vv"])?;
         for line in lines {
             let branch = GitBranch::parse(&self.branch_re, line.as_str())?;
@@ -182,7 +194,12 @@ impl Task<()> for SyncTask {
             }
         }
 
-        git.exec(&["checkout", &backup_branch])?;
+        let target = match head.as_ref() {
+            Some(commit) => commit,
+            None => &backup_branch,
+        };
+        git.exec(&["checkout", target])?;
+
         Ok(())
     }
 }

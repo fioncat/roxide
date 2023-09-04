@@ -279,6 +279,10 @@ impl<'a> GitTask<'a> {
         let args = [&self.prefix, args].concat();
         Shell::exec_git_mute_read(&args)
     }
+
+    pub fn checkout(&self, arg: &str) -> Result<()> {
+        self.exec(&["checkout", arg])
+    }
 }
 
 pub fn search<S>(keys: &Vec<S>) -> Result<usize>
