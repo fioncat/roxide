@@ -5,6 +5,7 @@ use strum::EnumVariantNames;
 use crate::cmd::complete::CompleteArgs;
 use crate::cmd::run::attach::AttachArgs;
 use crate::cmd::run::branch::BranchArgs;
+use crate::cmd::run::check::CheckArgs;
 use crate::cmd::run::config::ConfigArgs;
 use crate::cmd::run::detach::DetachArgs;
 use crate::cmd::run::gc::GcArgs;
@@ -42,6 +43,7 @@ pub struct App {
 pub enum Commands {
     Attach(AttachArgs),
     Branch(BranchArgs),
+    Check(CheckArgs),
     Complete(CompleteArgs),
     Config(ConfigArgs),
     Detach(DetachArgs),
@@ -77,6 +79,7 @@ impl Run for App {
         match &self.command {
             Commands::Attach(args) => args.run(),
             Commands::Branch(args) => args.run(),
+            Commands::Check(args) => args.run(),
             Commands::Complete(args) => args.run(),
             Commands::Config(args) => args.run(),
             Commands::Detach(args) => args.run(),
