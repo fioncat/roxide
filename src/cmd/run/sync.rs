@@ -313,6 +313,7 @@ fn show_dry_run(results: Vec<Option<String>>) {
         }
     }
     if count == 0 {
+        println!();
         println!("Nothing to sync");
         return;
     }
