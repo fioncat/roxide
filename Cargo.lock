@@ -1054,6 +1054,7 @@ dependencies = [
  "regex",
  "reqwest",
  "scanf",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

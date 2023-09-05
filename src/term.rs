@@ -17,6 +17,7 @@ use pad::PadStr;
 use regex::{Captures, Regex};
 use reqwest::blocking::Client;
 use reqwest::{Method, Url};
+use semver::Version;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
@@ -308,6 +309,47 @@ pub fn get_editor() -> Result<String> {
         bail!("Could not get your default editor, please check env `EDITOR`");
     }
     Ok(editor)
+}
+
+pub fn git_version() -> Result<Version> {
+    let version = Cmd::exec_git_mute_read(&["version"])?;
+    let version = match version.trim().strip_prefix("git version") {
+        Some(v) => v.trim(),
+        None => bail!("Unknown git version output: {version}"),
+    };
+
+    match Version::parse(&version) {
+        Ok(ver) => Ok(ver),
+        Err(_) => bail!("git version {version} is bad format"),
+    }
+}
+
+pub fn fzf_version() -> Result<Version> {
+    let version = Cmd::exec_mute_read("fzf", &["--version"])?;
+    let mut fields = version.split(" ");
+    let version = match fields.next() {
+        Some(v) => v.trim(),
+        None => bail!("Unknown fzf version output: {version}"),
+    };
+    match Version::parse(&version) {
+        Ok(ver) => Ok(ver),
+        Err(_) => bail!("fzf version {version} is bad format"),
+    }
+}
+
+pub fn shell_type() -> Result<String> {
+    let shell = env::var("SHELL").context("Get SHELL env")?;
+    if shell.is_empty() {
+        bail!("env SHELL is empty");
+    }
+    let path = PathBuf::from(&shell);
+    match path.file_name() {
+        Some(name) => match name.to_str() {
+            Some(name) => Ok(String::from(name)),
+            None => bail!("Bad SHELL format: {shell}"),
+        },
+        None => bail!("Bad SHELL env: {shell}"),
+    }
 }
 
 pub struct Cmd {
