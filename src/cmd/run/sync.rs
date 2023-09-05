@@ -16,7 +16,7 @@ use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::{NameLevel, Repo};
 use crate::term::{self, BranchStatus, Cmd, GitBranch, GitTask};
-use crate::{config, info};
+use crate::{config, info, utils};
 
 struct SyncTask {
     remote: Arc<Remote>,
@@ -204,6 +204,135 @@ impl Task<()> for SyncTask {
     }
 }
 
+impl Task<Option<String>> for SyncTask {
+    fn run(&self) -> Result<Option<String>> {
+        match self.dry_run()? {
+            Some(msg) => Ok(Some(format!(
+                "{}:{}/{} => {}",
+                self.remote.name.as_str(),
+                self.owner,
+                self.name,
+                msg
+            ))),
+            None => Ok(None),
+        }
+    }
+}
+
+impl SyncTask {
+    fn dry_run(&self) -> Result<Option<String>> {
+        if let None = self.remote.clone.as_ref() {
+            return Ok(None);
+        }
+
+        match fs::read_dir(&self.path) {
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return Ok(Some(String::from("clone")))
+            }
+            Err(err) => {
+                return Err(err).with_context(|| format!("Read dir {}", self.path.display()))
+            }
+        }
+
+        let path = format!("{}", self.path.display());
+        let git = GitTask::new(path.as_str());
+
+        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
+        git.exec(&["remote", "set-url", "origin", url.as_str()])?;
+        git.exec(&["fetch", "origin", "--prune"])?;
+
+        let mut actions: Vec<String> = Vec::new();
+
+        let lines = git.lines(&["status", "-s"])?;
+        if !lines.is_empty() {
+            if let Some(_) = self.message.as_ref() {
+                actions.push(String::from("commit change(s)"));
+            } else {
+                return Ok(Some(String::from("skip due to uncommitted change(s)")));
+            }
+        }
+
+        let current = git.read(&["branch", "--show-current"])?;
+        let head_detached = current.is_empty();
+
+        let lines = git.lines(&["branch", "-vv"])?;
+        for line in lines {
+            if line.starts_with("*") && head_detached {
+                continue;
+            }
+            let branch = GitBranch::parse(&self.branch_re, line.as_str())?;
+            match branch.status {
+                BranchStatus::Ahead => {
+                    if !self.push {
+                        continue;
+                    }
+                    actions.push(format!("push {}", branch.name));
+                }
+                BranchStatus::Behind => {
+                    if !self.pull {
+                        continue;
+                    }
+                    actions.push(format!("pull {}", branch.name));
+                }
+                BranchStatus::Gone => {
+                    if !self.delete {
+                        continue;
+                    }
+                    actions.push(format!("delete {}", branch.name));
+                }
+                BranchStatus::Conflict => {
+                    if !self.force {
+                        continue;
+                    }
+                    actions.push(format!("force-push {}", branch.name));
+                }
+                BranchStatus::Detached => {
+                    if !self.add {
+                        continue;
+                    }
+                    actions.push(format!("push set-upstream {}", branch.name));
+                }
+                BranchStatus::Sync => {}
+            }
+        }
+
+        if actions.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(actions.join(", ")))
+    }
+}
+
+fn show_dry_run(results: Vec<Option<String>>) {
+    let mut count: usize = 0;
+    for result in results.iter() {
+        if let Some(_) = result {
+            count += 1;
+        }
+    }
+    if count == 0 {
+        println!("Nothing to sync");
+        return;
+    }
+
+    let items: Vec<_> = results
+        .into_iter()
+        .filter(|s| match s {
+            Some(_) => true,
+            None => false,
+        })
+        .map(|s| s.unwrap())
+        .collect();
+    println!();
+    println!("DryRun: {} to perform", utils::plural(&items, "repo"));
+
+    for item in items {
+        println!("  {item}");
+    }
+}
+
 /// Sync repos git branches.
 #[derive(Args)]
 pub struct SyncArgs {
@@ -237,6 +366,10 @@ pub struct SyncArgs {
     /// Filter repo
     #[clap(long)]
     pub filter: bool,
+
+    /// Only show effects, skip running
+    #[clap(long)]
+    pub dry_run: bool,
 }
 
 impl Run for SyncArgs {
@@ -265,8 +398,13 @@ impl Run for SyncArgs {
         };
 
         let tasks = SyncTask::from_repos(repos, add, true, true, delete, force, message, &level)?;
-        batch::must_run("Sync", tasks)?;
+        if self.dry_run {
+            let results = batch::must_run::<_, Option<String>>("DryRun", tasks)?;
+            show_dry_run(results);
+            return Ok(());
+        }
 
+        batch::must_run::<_, ()>("Sync", tasks)?;
         Ok(())
     }
 }
@@ -276,6 +414,10 @@ impl Run for SyncArgs {
 pub struct SyncRuleArgs {
     /// The sync rule name. If empty, use "default".
     pub name: Option<String>,
+
+    /// Only show effects, skip running
+    #[clap(long, short)]
+    pub dry_run: bool,
 }
 
 impl Run for SyncRuleArgs {
@@ -310,8 +452,13 @@ impl Run for SyncRuleArgs {
 
         let tasks =
             SyncTask::from_repos(repos, add, push, pull, delete, force, None, &Self::LEVEL)?;
-        batch::must_run("Sync", tasks)?;
+        if self.dry_run {
+            let results = batch::must_run::<_, Option<String>>("DryRun", tasks)?;
+            show_dry_run(results);
+            return Ok(());
+        }
 
+        batch::must_run::<_, ()>("Sync", tasks)?;
         Ok(())
     }
 }
