@@ -5,7 +5,7 @@ use clap::Args;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
-use crate::shell::GitBranch;
+use crate::term::GitBranch;
 use crate::{api, config, utils};
 
 /// Open current repository in default browser

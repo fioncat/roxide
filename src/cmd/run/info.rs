@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::cmd::Run;
 use crate::repo::database::Database;
-use crate::shell::{self, Shell};
+use crate::term::{self, Cmd};
 use crate::{config, utils};
 
 /// Show some global info
@@ -42,7 +42,7 @@ impl Run for InfoArgs {
             utils::walk_dir(path, |_file, meta| {
                 if meta.is_file() {
                     scan_file += 1;
-                    shell::cursor_up_stdout();
+                    term::cursor_up_stdout();
                     size += meta.len();
                     println!("Scan files: {scan_file}");
                 }
@@ -102,7 +102,7 @@ impl Run for InfoArgs {
             owner_info.repo_count += 1;
             owner_info.size_u64 += size;
         }
-        shell::cursor_up_stdout();
+        term::cursor_up_stdout();
 
         for (_, remote) in remotes.iter_mut() {
             remote.size = Some(utils::human_bytes(remote.size_u64));
@@ -130,7 +130,7 @@ impl Run for InfoArgs {
             remotes,
         };
 
-        shell::show_json(info)?;
+        term::show_json(info)?;
         Ok(())
     }
 }
@@ -138,7 +138,7 @@ impl Run for InfoArgs {
 impl InfoArgs {
     fn git_info() -> Result<ComponentInfo> {
         let path = Self::get_component_path("git")?;
-        let version = Shell::exec_git_mute_read(&["version"])?;
+        let version = Cmd::exec_git_mute_read(&["version"])?;
         let version = match version.trim().strip_prefix("git version") {
             Some(v) => v.trim(),
             None => version.as_str(),
@@ -152,7 +152,7 @@ impl InfoArgs {
 
     fn fzf_info() -> Result<ComponentInfo> {
         let path = Self::get_component_path("fzf")?;
-        let version = Shell::with_args("fzf", &["--version"])
+        let version = Cmd::with_args("fzf", &["--version"])
             .set_mute(true)
             .piped_stderr()
             .execute()?
@@ -165,7 +165,7 @@ impl InfoArgs {
     }
 
     fn get_component_path(cmd: &str) -> Result<String> {
-        let path = Shell::with_args("which", &[cmd])
+        let path = Cmd::with_args("which", &[cmd])
             .set_mute(true)
             .piped_stderr()
             .execute()?

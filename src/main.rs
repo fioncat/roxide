@@ -5,7 +5,7 @@ mod config;
 mod errors;
 mod repo;
 mod self_update;
-mod shell;
+mod term;
 mod utils;
 
 use clap::Parser;

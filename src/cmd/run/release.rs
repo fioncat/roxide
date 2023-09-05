@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 
 use crate::cmd::Run;
-use crate::shell::{GitTag, Shell};
+use crate::term::{Cmd, GitTag};
 use crate::{config, confirm};
 
 /// Create a release tag use given rule
@@ -27,8 +27,8 @@ impl Run for ReleaseArgs {
             new_tag.as_str()
         );
 
-        Shell::git(&["tag", new_tag.as_str()]).execute()?.check()?;
-        Shell::git(&["push", "origin", "tag", new_tag.as_str()])
+        Cmd::git(&["tag", new_tag.as_str()]).execute()?.check()?;
+        Cmd::git(&["push", "origin", "tag", new_tag.as_str()])
             .execute()?
             .check()?;
 

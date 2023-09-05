@@ -6,7 +6,7 @@ use crate::config;
 use crate::repo::database::Database;
 use crate::repo::query::parse_owner;
 use crate::repo::snapshot::Snapshot;
-use crate::shell::{GitBranch, GitTag};
+use crate::term::{GitBranch, GitTag};
 
 pub struct Complete {
     pub items: Vec<String>,

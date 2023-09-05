@@ -31,11 +31,11 @@ use crate::{confirm, exec, info};
 #[macro_export]
 macro_rules! confirm {
     ($dst:expr $(,)?) => {
-        $crate::shell::must_confirm($dst)?;
+        $crate::term::must_confirm($dst)?;
     };
     ($fmt:expr, $($arg:tt)*) => {
         let msg = format!($fmt, $($arg)*);
-        $crate::shell::must_confirm(msg.as_str())?;
+        $crate::term::must_confirm(msg.as_str())?;
     };
 }
 
@@ -43,13 +43,13 @@ macro_rules! confirm {
 macro_rules! exec {
     ($dst:expr $(,)?) => {
         {
-            $crate::shell::show_exec($dst);
+            $crate::term::show_exec($dst);
         }
     };
     ($fmt:expr, $($arg:tt)*) => {
         {
             let msg = format!($fmt, $($arg)*);
-            $crate::shell::show_exec(msg.as_str());
+            $crate::term::show_exec(msg.as_str());
         }
     };
 }
@@ -58,13 +58,13 @@ macro_rules! exec {
 macro_rules! info {
     ($dst:expr $(,)?) => {
         {
-            $crate::shell::show_info($dst);
+            $crate::term::show_info($dst);
         }
     };
     ($fmt:expr, $($arg:tt)*) => {
         {
             let msg = format!($fmt, $($arg)*);
-            $crate::shell::show_info(msg.as_str());
+            $crate::term::show_info(msg.as_str());
         }
     };
 }
@@ -310,7 +310,7 @@ pub fn get_editor() -> Result<String> {
     Ok(editor)
 }
 
-pub struct Shell {
+pub struct Cmd {
     cmd: Command,
     desc: Option<String>,
     input: Option<String>,
@@ -318,13 +318,13 @@ pub struct Shell {
     mute: bool,
 }
 
-pub struct ShellResult {
+pub struct CmdResult {
     pub code: Option<i32>,
 
     pub stdout: ChildStdout,
 }
 
-impl ShellResult {
+impl CmdResult {
     pub fn read(&mut self) -> Result<String> {
         let mut output = String::new();
         self.stdout
@@ -360,24 +360,24 @@ impl ShellResult {
     }
 }
 
-impl Shell {
-    pub fn new(program: &str) -> Shell {
+impl Cmd {
+    pub fn new(program: &str) -> Cmd {
         Self::with_args(program, &[])
     }
 
-    pub fn with_args(program: &str, args: &[&str]) -> Shell {
+    pub fn with_args(program: &str, args: &[&str]) -> Cmd {
         let mut cmd = Command::new(program);
         if !args.is_empty() {
             cmd.args(args);
         }
         // The stdout will be captured anyway to protected roxide's own output.
-        // If shell fails, the caller should handle its stdout manually.
+        // If cmd fails, the caller should handle its stdout manually.
         cmd.stdout(Stdio::piped());
         // We rediect command's stderr to roxide's. So that user can view command's
         // error output directly.
         cmd.stderr(Stdio::inherit());
 
-        Shell {
+        Cmd {
             cmd,
             desc: None,
             input: None,
@@ -385,7 +385,7 @@ impl Shell {
         }
     }
 
-    pub fn git(args: &[&str]) -> Shell {
+    pub fn git(args: &[&str]) -> Cmd {
         Self::with_args("git", args)
     }
 
@@ -446,7 +446,7 @@ impl Shell {
         Self::exec_mute("git", args)
     }
 
-    pub fn sh(script: &str) -> Shell {
+    pub fn sh(script: &str) -> Cmd {
         // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
         // the script does not output any content to stdout. This method is not
         // applicable to Windows and a more universal method is needed.
@@ -489,7 +489,7 @@ impl Shell {
         self
     }
 
-    pub fn execute(&mut self) -> Result<ShellResult> {
+    pub fn execute(&mut self) -> Result<CmdResult> {
         self.show_desc();
 
         let mut child = match self.cmd.spawn() {
@@ -522,7 +522,7 @@ impl Shell {
         let stdout = child.stdout.take().unwrap();
         let status = child.wait().context("Wait command done")?;
 
-        Ok(ShellResult {
+        Ok(CmdResult {
             code: status.code(),
             stdout,
         })
@@ -560,17 +560,17 @@ impl<'a> GitTask<'a> {
 
     pub fn exec(&self, args: &[&str]) -> Result<()> {
         let args = [&self.prefix, args].concat();
-        Shell::exec_git_mute(&args)
+        Cmd::exec_git_mute(&args)
     }
 
     pub fn lines(&self, args: &[&str]) -> Result<Vec<String>> {
         let args = [&self.prefix, args].concat();
-        Shell::exec_git_mute_lines(&args)
+        Cmd::exec_git_mute_lines(&args)
     }
 
     pub fn read(&self, args: &[&str]) -> Result<String> {
         let args = [&self.prefix, args].concat();
-        Shell::exec_git_mute_read(&args)
+        Cmd::exec_git_mute_read(&args)
     }
 
     pub fn checkout(&self, arg: &str) -> Result<()> {
@@ -588,7 +588,7 @@ where
         input.push_str("\n");
     }
 
-    let mut fzf = Shell::new("fzf");
+    let mut fzf = Cmd::new("fzf");
     fzf.set_mute(true).with_input(input);
 
     let mut result = fzf.execute()?;
@@ -609,7 +609,7 @@ where
 }
 
 pub fn ensure_no_uncommitted() -> Result<()> {
-    let mut git = Shell::git(&["status", "-s"]);
+    let mut git = Cmd::git(&["status", "-s"]);
     let lines = git.execute()?.checked_lines()?;
     if !lines.is_empty() {
         bail!(
@@ -661,7 +661,7 @@ impl GitBranch {
 
     pub fn list() -> Result<Vec<GitBranch>> {
         let re = Self::get_regex();
-        let lines = Shell::git(&["branch", "-vv"])
+        let lines = Cmd::git(&["branch", "-vv"])
             .with_desc("List git branch info")
             .execute()?
             .checked_lines()?;
@@ -675,7 +675,7 @@ impl GitBranch {
     }
 
     pub fn list_remote(remote: &str) -> Result<Vec<String>> {
-        let lines = Shell::git(&["branch", "-al"])
+        let lines = Cmd::git(&["branch", "-al"])
             .with_desc("List remote git branch")
             .execute()?
             .checked_lines()?;
@@ -703,7 +703,7 @@ impl GitBranch {
             items.push(item.to_string());
         }
 
-        let lines = Shell::git(&["branch"])
+        let lines = Cmd::git(&["branch"])
             .with_desc("List local git branch")
             .execute()?
             .checked_lines()?;
@@ -734,7 +734,7 @@ impl GitBranch {
         let head_ref = format!("refs/remotes/{}/HEAD", remote);
         let remote_ref = format!("refs/remotes/{}/", remote);
 
-        let mut git = Shell::git(&["symbolic-ref", &head_ref]);
+        let mut git = Cmd::git(&["symbolic-ref", &head_ref]);
         if let Ok(out) = git.execute()?.checked_read() {
             if out.is_empty() {
                 bail!("default branch is empty")
@@ -746,7 +746,7 @@ impl GitBranch {
         }
         // If failed, user might not switch to this branch yet, let's
         // use "git show <remote>" instead to get default branch.
-        let mut git = Shell::git(&["remote", "show", remote]);
+        let mut git = Cmd::git(&["remote", "show", remote]);
         let lines = git.execute()?.checked_lines()?;
         Self::parse_default_branch(lines)
     }
@@ -766,7 +766,7 @@ impl GitBranch {
     }
 
     pub fn current() -> Result<String> {
-        Shell::git(&["branch", "--show-current"])
+        Cmd::git(&["branch", "--show-current"])
             .with_desc("Get current branch info")
             .execute()?
             .checked_read()
@@ -835,7 +835,7 @@ pub struct GitRemote(String);
 
 impl GitRemote {
     pub fn list() -> Result<Vec<GitRemote>> {
-        let lines = Shell::git(&["remote"])
+        let lines = Cmd::git(&["remote"])
             .with_desc("List git remotes")
             .execute()?
             .checked_lines()?;
@@ -877,7 +877,7 @@ impl GitRemote {
             url
         );
 
-        Shell::git(&["remote", "add", "upstream", url.as_str()])
+        Cmd::git(&["remote", "add", "upstream", url.as_str()])
             .execute()?
             .check()?;
         Ok(GitRemote(String::from("upstream")))
@@ -891,7 +891,7 @@ impl GitRemote {
                 (format!("{}/{}", self.0, branch), branch)
             }
         };
-        Shell::git(&["fetch", self.0.as_str(), branch.as_str()])
+        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()])
             .execute()?
             .check()?;
         Ok(target)
@@ -900,7 +900,7 @@ impl GitRemote {
     pub fn commits_between(&self, branch: Option<&str>) -> Result<Vec<String>> {
         let target = self.target(branch)?;
         let compare = format!("HEAD...{}", target);
-        let lines = Shell::git(&[
+        let lines = Cmd::git(&[
             "log",
             "--left-right",
             "--cherry-pick",
@@ -951,7 +951,7 @@ impl GitTag {
     }
 
     pub fn list() -> Result<Vec<GitTag>> {
-        let tags: Vec<_> = Shell::git(&["tag"])
+        let tags: Vec<_> = Cmd::git(&["tag"])
             .with_desc("Get git tags")
             .execute()?
             .checked_lines()?
@@ -963,11 +963,11 @@ impl GitTag {
     }
 
     pub fn latest() -> Result<GitTag> {
-        Shell::git(&["fetch", "origin", "--prune-tags"])
+        Cmd::git(&["fetch", "origin", "--prune-tags"])
             .with_desc("Fetch tags")
             .execute()?
             .check()?;
-        let output = Shell::git(&["describe", "--tags", "--abbrev=0"])
+        let output = Cmd::git(&["describe", "--tags", "--abbrev=0"])
             .with_desc("Get latest tag")
             .execute()?
             .checked_read()?;
@@ -1043,7 +1043,7 @@ impl Workflow {
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
                 let script = run.replace("\n", ";");
-                let mut cmd = Shell::sh(&script);
+                let mut cmd = Cmd::sh(&script);
                 cmd.with_path(&dir);
 
                 cmd.with_env("REPO_NAME", repo.name.as_str());
@@ -1081,7 +1081,7 @@ impl Workflow {
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
                 let script = run.replace("\n", ";");
-                let mut cmd = Shell::sh(&script);
+                let mut cmd = Cmd::sh(&script);
                 cmd.with_path(&dir);
 
                 cmd.with_env("REPO_NAME", name.as_ref());

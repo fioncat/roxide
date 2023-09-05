@@ -10,7 +10,7 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query;
 use crate::repo::types::Repo;
-use crate::{config, info, shell, utils};
+use crate::{config, info, term, utils};
 
 /// Use workspace to recover database
 #[derive(Args)]
@@ -40,7 +40,7 @@ impl Run for RecoverArgs {
             return Ok(());
         }
         let items: Vec<_> = to_add.iter().map(|repo| repo.full_name()).collect();
-        shell::must_confirm_items(&items, "add", "addition", "Repo", "Repos")?;
+        term::must_confirm_items(&items, "add", "addition", "Repo", "Repos")?;
         info!("Add {} to database done", utils::plural(&to_add, "repo"));
         for repo in to_add {
             db.update(repo);

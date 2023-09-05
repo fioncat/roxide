@@ -13,7 +13,7 @@ use crate::info;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::Repo;
-use crate::shell::{self, GitTask, Shell};
+use crate::term::{self, Cmd, GitTask};
 
 /// Batch import repos
 #[derive(Args)]
@@ -59,7 +59,7 @@ impl Task<Arc<String>> for ImportTask {
         let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         let path = format!("{}", path.display());
 
-        Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
+        Cmd::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
 
         let git = GitTask::new(path.as_str());
         if let Some(user) = &self.remote.user {
@@ -83,7 +83,7 @@ impl Run for ImportArgs {
             info!("Nothing to import");
             return Ok(());
         }
-        shell::must_confirm_items(&names, "import", "import", "Repo", "Repos")?;
+        term::must_confirm_items(&names, "import", "import", "Repo", "Repos")?;
 
         let remote_arc = Arc::new(remote);
         let owner_arc = Arc::new(owner.clone());

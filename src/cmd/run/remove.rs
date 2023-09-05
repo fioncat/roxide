@@ -7,7 +7,7 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::{Query, SelectOptions};
 use crate::repo::types::Repo;
-use crate::{config, confirm, info, shell, utils};
+use crate::{config, confirm, info, term, utils};
 
 /// Remove a repo from database and disk.
 #[derive(Args)]
@@ -75,7 +75,7 @@ impl RemoveArgs {
         }
 
         let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
-        shell::must_confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
+        term::must_confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
 
         for repo in repos.into_iter() {
             let path = repo.get_path();

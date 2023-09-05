@@ -15,7 +15,7 @@ use crate::config::types::{Remote, SyncAction, SyncRule};
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::{NameLevel, Repo};
-use crate::shell::{self, BranchStatus, GitBranch, GitTask, Shell};
+use crate::term::{self, BranchStatus, Cmd, GitBranch, GitTask};
 use crate::{config, info};
 
 struct SyncTask {
@@ -105,7 +105,7 @@ impl Task<()> for SyncTask {
 
         let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
         if clone {
-            Shell::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
+            Cmd::exec_git_mute(&["clone", url.as_str(), path.as_str()])?;
         } else {
             git.exec(&["remote", "set-url", "origin", url.as_str()])?;
             git.exec(&["fetch", "origin", "--prune"])?;
@@ -252,7 +252,7 @@ impl Run for SyncArgs {
 
         if !self.fire {
             let items: Vec<String> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-            shell::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
+            term::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
         }
 
         let add = if self.fire { true } else { self.add };
@@ -291,7 +291,7 @@ impl Run for SyncRuleArgs {
             .iter()
             .map(|repo| repo.as_string(&Self::LEVEL))
             .collect();
-        shell::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
+        term::must_confirm_items(&items, "sync", "synchronization", "Repo", "Repos")?;
 
         let mut pull = false;
         let mut push = false;
