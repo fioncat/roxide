@@ -5,7 +5,7 @@ use crate::api;
 use crate::cmd::Run;
 use crate::config;
 use crate::repo::database::Database;
-use crate::shell::{self, GitRemote, Shell};
+use crate::term::{self, Cmd, GitRemote};
 
 /// Rebase current branch
 #[derive(Args)]
@@ -24,7 +24,7 @@ pub struct RebaseArgs {
 
 impl Run for RebaseArgs {
     fn run(&self) -> Result<()> {
-        shell::ensure_no_uncommitted()?;
+        term::ensure_no_uncommitted()?;
         let remote = if self.upstream {
             let db = Database::read()?;
             let repo = db.must_current()?;
@@ -43,9 +43,7 @@ impl Run for RebaseArgs {
 
         let target = remote.target(branch)?;
 
-        Shell::git(&["rebase", target.as_str()])
-            .execute()?
-            .check()?;
+        Cmd::git(&["rebase", target.as_str()]).execute()?.check()?;
 
         Ok(())
     }

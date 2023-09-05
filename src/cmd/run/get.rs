@@ -8,9 +8,9 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::Repo;
-use crate::shell::Table;
+use crate::term::Table;
 use crate::utils;
-use crate::{info, shell};
+use crate::{info, term};
 
 /// Get or list repo info.
 #[derive(Args)]
@@ -77,7 +77,7 @@ impl Run for GetArgs {
         if self.current {
             let repo = db.must_current()?;
             let info = RepoInfo::from_repo(repo)?;
-            return shell::show_json(info);
+            return term::show_json(info);
         }
 
         let query = Query::from_args(&db, &self.remote, &self.query);
@@ -90,7 +90,7 @@ impl Run for GetArgs {
         if repos.len() == 1 {
             let repo = repos.into_iter().next().unwrap();
             let info = RepoInfo::from_repo(repo)?;
-            return shell::show_json(info);
+            return term::show_json(info);
         }
         let mut table = Table::with_capacity(1 + repos.len());
         let mut titles = vec![

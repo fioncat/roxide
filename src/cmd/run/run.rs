@@ -10,7 +10,7 @@ use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
 use crate::repo::types::{NameLevel, Repo};
-use crate::shell::{self, Workflow};
+use crate::term::{self, Workflow};
 use crate::{confirm, info};
 
 /// Run workflow
@@ -75,7 +75,7 @@ impl Run for RunArgs {
             return Ok(());
         }
         let items: Vec<_> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-        shell::must_confirm_items(&items, "run workflow", "workflow", "Repo", "Repos")?;
+        term::must_confirm_items(&items, "run workflow", "workflow", "Repo", "Repos")?;
 
         let level = Arc::new(level);
         let mut tasks = Vec::with_capacity(repos.len());

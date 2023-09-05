@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::types::{NameLevel, Repo};
-use crate::{api, config, shell};
+use crate::{api, config, term};
 
 pub struct SelectOptions {
     pub search: bool,
@@ -125,7 +125,7 @@ impl<'a> Query<'_> {
 
             let provider = api::init_provider(&remote, opts.force)?;
             let api_repos = provider.list_repos(owner)?;
-            let idx = shell::search(&api_repos)?;
+            let idx = term::search(&api_repos)?;
             let name = &api_repos[idx];
             return Ok(self.get_repo(remote, owner, name.as_str(), &opts));
         }
@@ -165,7 +165,7 @@ impl<'a> Query<'_> {
                 .into_iter()
                 .filter(|name| !attached_set.contains(name.as_str()))
                 .collect();
-            let idx = shell::search(&items)?;
+            let idx = term::search(&items)?;
             let name = items.remove(idx);
             return Ok(self.get_repo(remote, owner, name.as_str(), &opts));
         }
@@ -179,7 +179,7 @@ impl<'a> Query<'_> {
 
     fn search_local(&self, vec: Vec<Rc<Repo>>, level: NameLevel) -> Result<Rc<Repo>> {
         let items: Vec<_> = vec.iter().map(|repo| repo.as_string(&level)).collect();
-        let idx = shell::search(&items)?;
+        let idx = term::search(&items)?;
         let repo = Rc::clone(&vec[idx]);
         Ok(repo)
     }
@@ -216,7 +216,7 @@ impl<'a> Query<'_> {
         let (repos, level) = self.list_local_raw()?;
         if filter {
             let items: Vec<String> = repos.iter().map(|repo| repo.as_string(&level)).collect();
-            let items = shell::edit_items(items)?;
+            let items = term::edit_items(items)?;
             let items_set: HashSet<String> = items.into_iter().collect();
 
             let repos: Vec<Rc<Repo>> = repos
@@ -273,7 +273,7 @@ impl<'a> Query<'_> {
     pub fn list_remote(&self, force: bool, filter: bool) -> Result<(Remote, String, Vec<String>)> {
         let (remote, owner, names) = self.list_remote_raw(force)?;
         if filter {
-            let names = shell::edit_items(names.clone())?;
+            let names = term::edit_items(names.clone())?;
             return Ok((remote, owner, names));
         }
 

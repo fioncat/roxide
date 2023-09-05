@@ -12,7 +12,7 @@ use crate::confirm;
 use crate::repo::database::Database;
 use crate::repo::query::{Query, SelectOptions};
 use crate::repo::types::Repo;
-use crate::shell::{Shell, Workflow};
+use crate::term::{Cmd, Workflow};
 
 /// Print the home path of a repo, recommand to use `zz` command instead.
 #[derive(Args)]
@@ -72,7 +72,7 @@ impl HomeArgs {
         fs::create_dir_all(dir)
             .with_context(|| format!("Create repo directory {}", dir.display()))?;
         let path = format!("{}", dir.display());
-        Shell::git(&["-C", path.as_str(), "init"])
+        Cmd::git(&["-C", path.as_str(), "init"])
             .with_desc("Git init")
             .execute()?
             .check()?;
@@ -91,19 +91,19 @@ impl HomeArgs {
     fn clone(&self, remote: &Remote, repo: &Rc<Repo>, dir: &PathBuf) -> Result<()> {
         let url = repo.clone_url(&remote);
         let path = format!("{}", dir.display());
-        Shell::git(&["clone", url.as_str(), path.as_str()])
+        Cmd::git(&["clone", url.as_str(), path.as_str()])
             .with_desc(format!("Clone {}", repo.full_name()))
             .execute()?
             .check()?;
 
         if let Some(user) = &remote.user {
-            Shell::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
+            Cmd::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
                 .with_desc(format!("Set user to {}", user))
                 .execute()?
                 .check()?;
         }
         if let Some(email) = &remote.email {
-            Shell::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
+            Cmd::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
                 .with_desc(format!("Set email to {}", email))
                 .execute()?
                 .check()?;

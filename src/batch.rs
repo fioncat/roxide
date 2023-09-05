@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use console::style;
 
-use crate::shell;
+use crate::term;
 
 pub trait Task<R: Send> {
     fn run(&self) -> Result<R>;
@@ -85,7 +85,7 @@ impl<R> Tracker<R> {
             style("ok").green().to_string()
         };
 
-        shell::cursor_up_stdout();
+        term::cursor_up_stdout();
         println!();
         println!(
             "{} result: {}. {} ok; {} failed; finished in {}",
@@ -115,7 +115,7 @@ impl<R> Tracker<R> {
     fn trace_running(&mut self, idx: usize, name: String) {
         self.running.push((idx, name));
         let line = self.render();
-        shell::cursor_up_stdout();
+        term::cursor_up_stdout();
         println!("{line}");
     }
 
@@ -132,7 +132,7 @@ impl<R> Tracker<R> {
             None => return,
         };
 
-        shell::cursor_up_stdout();
+        term::cursor_up_stdout();
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
@@ -156,18 +156,18 @@ impl<R> Tracker<R> {
     }
 
     fn render(&self) -> String {
-        let term_size = shell::size();
+        let term_size = term::size();
         if self.desc_size > term_size {
             return ".".repeat(term_size);
         }
 
         let mut line = self.desc.clone();
-        if self.desc_size + Self::SPACE_SIZE > term_size || shell::bar_size() == 0 {
+        if self.desc_size + Self::SPACE_SIZE > term_size || term::bar_size() == 0 {
             return line;
         }
         line.push_str(Self::SPACE);
 
-        let bar = shell::render_bar(self.done.len(), self.total);
+        let bar = term::render_bar(self.done.len(), self.total);
         let bar_size = Self::get_size(&bar);
         if Self::get_size(&line) + bar_size > term_size {
             return line;

@@ -5,7 +5,7 @@ use crate::cmd::Run;
 use crate::config;
 use crate::repo::database::Database;
 use crate::repo::query::{Query, SelectOptions};
-use crate::shell::Shell;
+use crate::term::Cmd;
 use crate::{confirm, info};
 
 /// Attach current directory to a repo.
@@ -52,13 +52,13 @@ impl Run for AttachArgs {
             repo.long_name()
         );
         if let Some(user) = &remote.user {
-            Shell::git(&["config", "user.name", user.as_str()])
+            Cmd::git(&["config", "user.name", user.as_str()])
                 .with_desc(format!("Set user to {}", user))
                 .execute()?
                 .check()?;
         }
         if let Some(email) = &remote.email {
-            Shell::git(&["config", "user.email", email.as_str()])
+            Cmd::git(&["config", "user.email", email.as_str()])
                 .with_desc(format!("Set email to {}", email))
                 .execute()?
                 .check()?;

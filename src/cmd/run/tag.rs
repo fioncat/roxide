@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 
 use crate::cmd::Run;
-use crate::shell::{GitTag, Shell};
+use crate::term::{Cmd, GitTag};
 
 /// Git tag operations
 #[derive(Args)]
@@ -35,10 +35,10 @@ impl Run for TagArgs {
                 }
             }
             if !found {
-                Shell::git(&["tag", self.tag.as_str()]).execute()?.check()?;
+                Cmd::git(&["tag", self.tag.as_str()]).execute()?.check()?;
             }
             if self.push {
-                Shell::git(&["push", "origin", "tag", self.tag.as_str()])
+                Cmd::git(&["push", "origin", "tag", self.tag.as_str()])
                     .execute()?
                     .check()?;
             }
@@ -51,19 +51,19 @@ impl Run for TagArgs {
                 }
             }
             if found {
-                Shell::git(&["tag", "-d", self.tag.as_str()])
+                Cmd::git(&["tag", "-d", self.tag.as_str()])
                     .execute()?
                     .check()?;
             }
             if self.push {
-                Shell::git(&["push", "--delete", "origin", self.tag.as_str()])
+                Cmd::git(&["push", "--delete", "origin", self.tag.as_str()])
                     .execute()?
                     .check()?;
             }
         } else {
             for tag in tags.iter() {
                 if tag.as_str() == self.tag.as_str() {
-                    Shell::git(&["checkout", self.tag.as_str()])
+                    Cmd::git(&["checkout", self.tag.as_str()])
                         .execute()?
                         .check()?;
                     return Ok(());

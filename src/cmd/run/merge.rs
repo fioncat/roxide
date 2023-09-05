@@ -7,7 +7,7 @@ use crate::api::types::MergeOptions;
 use crate::cmd::Run;
 use crate::config;
 use crate::repo::database::Database;
-use crate::shell::{self, GitBranch, GitRemote};
+use crate::term::{self, GitBranch, GitRemote};
 use crate::utils;
 use crate::{confirm, info};
 
@@ -28,7 +28,7 @@ pub struct MergeArgs {
 
 impl Run for MergeArgs {
     fn run(&self) -> Result<()> {
-        shell::ensure_no_uncommitted()?;
+        term::ensure_no_uncommitted()?;
         let db = Database::read()?;
         let repo = db.must_current()?;
 
@@ -100,9 +100,9 @@ impl Run for MergeArgs {
         println!("About to create merge: {}", merge.pretty_display());
         println!("With {commit_desc}");
         confirm!("Continue");
-        let title = shell::input("Please input title", true, init_title)?;
-        let body = if shell::confirm("Do you need body")? {
-            shell::edit_content("Please input your body (markdown)", "body.md", true)?
+        let title = term::input("Please input title", true, init_title)?;
+        let body = if term::confirm("Do you need body")? {
+            term::edit_content("Please input your body (markdown)", "body.md", true)?
         } else {
             String::new()
         };

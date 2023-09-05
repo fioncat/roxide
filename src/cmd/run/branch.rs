@@ -4,7 +4,7 @@ use console::style;
 
 use crate::cmd::Run;
 use crate::info;
-use crate::shell::{self, BranchStatus, GitBranch, Shell};
+use crate::term::{self, BranchStatus, Cmd, GitBranch};
 
 /// Git branch operations
 #[derive(Args)]
@@ -45,7 +45,7 @@ enum SyncBranchTask<'a> {
 impl Run for BranchArgs {
     fn run(&self) -> Result<()> {
         if self.sync {
-            shell::ensure_no_uncommitted()?;
+            term::ensure_no_uncommitted()?;
             self.fetch()?;
         }
         if self.remote {
@@ -67,16 +67,14 @@ impl Run for BranchArgs {
         }
         let name = self.name.as_ref().unwrap();
         if self.create {
-            Shell::git(&["checkout", "-b", name.as_str()])
+            Cmd::git(&["checkout", "-b", name.as_str()])
                 .execute()?
                 .check()?;
         } else {
-            Shell::git(&["checkout", name.as_str()])
-                .execute()?
-                .check()?;
+            Cmd::git(&["checkout", name.as_str()]).execute()?.check()?;
         }
         if self.push {
-            Shell::git(&["push", "--set-upstream", "origin", name.as_str()])
+            Cmd::git(&["push", "--set-upstream", "origin", name.as_str()])
                 .execute()?
                 .check()?;
         }
@@ -149,39 +147,39 @@ impl BranchArgs {
             };
             items.push(msg);
         }
-        shell::must_confirm_items(&items, "sync", "synchronization", "Branch", "Branches")?;
+        term::must_confirm_items(&items, "sync", "synchronization", "Branch", "Branches")?;
 
         for task in tasks {
             match task {
                 SyncBranchTask::Sync(op, branch) => {
                     if current != branch {
                         // checkout to this branch to perform push/pull
-                        Shell::git(&["checkout", branch]).execute()?.check()?;
+                        Cmd::git(&["checkout", branch]).execute()?.check()?;
                         current = branch;
                     }
-                    Shell::git(&[op]).execute()?.check()?;
+                    Cmd::git(&[op]).execute()?.check()?;
                 }
                 SyncBranchTask::Delete(branch) => {
                     if current == branch {
                         // we cannot delete branch when we are inside it, checkout
                         // to default branch first.
                         let default = default.as_str();
-                        Shell::git(&["checkout", default]).execute()?.check()?;
+                        Cmd::git(&["checkout", default]).execute()?.check()?;
                         current = default;
                     }
-                    Shell::git(&["branch", "-D", branch]).execute()?.check()?;
+                    Cmd::git(&["branch", "-D", branch]).execute()?.check()?;
                 }
             }
         }
         if current != back {
-            Shell::git(&["checkout", back]).execute()?.check()?;
+            Cmd::git(&["checkout", back]).execute()?.check()?;
         }
 
         Ok(())
     }
 
     fn fetch(&self) -> Result<()> {
-        let mut git = Shell::git(&["fetch", "origin", "--prune"]);
+        let mut git = Cmd::git(&["fetch", "origin", "--prune"]);
         git.execute()?.check()?;
         Ok(())
     }
@@ -190,21 +188,21 @@ impl BranchArgs {
         let branch = self.get_branch_or_current(branches)?;
 
         if branch.current {
-            shell::ensure_no_uncommitted()?;
+            term::ensure_no_uncommitted()?;
             let default = GitBranch::default()?;
             if branch.name.eq(&default) {
                 bail!("Could not delete default branch");
             }
-            Shell::git(&["checkout", default.as_str()])
+            Cmd::git(&["checkout", default.as_str()])
                 .execute()?
                 .check()?;
         }
 
-        Shell::git(&["branch", "-D", &branch.name])
+        Cmd::git(&["branch", "-D", &branch.name])
             .execute()?
             .check()?;
         if self.push {
-            Shell::git(&["push", "origin", "--delete", &branch.name])
+            Cmd::git(&["push", "origin", "--delete", &branch.name])
                 .execute()?
                 .check()?;
         }
@@ -213,7 +211,7 @@ impl BranchArgs {
 
     fn push(&self, branches: &Vec<GitBranch>) -> Result<()> {
         let branch = self.get_branch_or_current(branches)?;
-        Shell::git(&["push", "--set-upstream", "origin", branch.name.as_ref()])
+        Cmd::git(&["push", "--set-upstream", "origin", branch.name.as_ref()])
             .execute()?
             .check()?;
         Ok(())
@@ -244,9 +242,9 @@ impl BranchArgs {
             return Ok(());
         }
 
-        let idx = shell::search(&branches)?;
+        let idx = term::search(&branches)?;
         let target = branches[idx].as_str();
 
-        Shell::git(&["checkout", target]).execute()?.check()
+        Cmd::git(&["checkout", target]).execute()?.check()
     }
 }

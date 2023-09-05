@@ -5,7 +5,7 @@ use std::{env, fs};
 use anyhow::{bail, Context, Result};
 
 use crate::api::github::Github;
-use crate::shell::{self, Shell};
+use crate::term::{self, Cmd};
 use crate::{config, confirm, info, utils};
 
 pub fn trigger() -> Result<()> {
@@ -31,14 +31,14 @@ pub fn trigger() -> Result<()> {
     let file_name = target_filename()?;
     let url = format!("https://github.com/fioncat/roxide/releases/latest/download/{file_name}");
     let target_path = "/tmp/roxide-update/roxide.tar.gz";
-    shell::download("roxide", url, target_path)?;
+    term::download("roxide", url, target_path)?;
 
-    Shell::with_args("tar", &["-xzf", target_path, "-C", "/tmp/roxide-update"])
+    Cmd::with_args("tar", &["-xzf", target_path, "-C", "/tmp/roxide-update"])
         .with_desc("Unpack roxide")
         .execute()?
         .check()?;
     let replace_path = format!("{}", exec_dir.join("roxide").display());
-    Shell::with_args("mv", &["/tmp/roxide-update/roxide", &replace_path])
+    Cmd::with_args("mv", &["/tmp/roxide-update/roxide", &replace_path])
         .with_desc("Replace roxide binary")
         .execute()?
         .check()?;

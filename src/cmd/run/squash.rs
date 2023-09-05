@@ -7,7 +7,7 @@ use console::style;
 use crate::cmd::Run;
 use crate::errors::SilentExit;
 use crate::repo::database::Database;
-use crate::shell::{self, GitRemote, Shell};
+use crate::term::{self, Cmd, GitRemote};
 use crate::{api, confirm};
 use crate::{config, exec};
 
@@ -32,7 +32,7 @@ pub struct SquashArgs {
 
 impl Run for SquashArgs {
     fn run(&self) -> Result<()> {
-        shell::ensure_no_uncommitted()?;
+        term::ensure_no_uncommitted()?;
         let remote = if self.upstream {
             let db = Database::read()?;
             let repo = db.must_current()?;
@@ -66,7 +66,7 @@ impl Run for SquashArgs {
         confirm!("Continue");
 
         let set = format!("HEAD~{}", commits.len());
-        Shell::git(&["reset", "--soft", set.as_str()])
+        Cmd::git(&["reset", "--soft", set.as_str()])
             .execute()?
             .check()?;
 
