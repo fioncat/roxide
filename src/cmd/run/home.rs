@@ -11,6 +11,7 @@ use crate::cmd::Run;
 use crate::config::types::Remote;
 use crate::repo::database::Database;
 use crate::repo::query::{parse_owner, Query, SelectOptions};
+use crate::repo::tmp_mark::TmpMark;
 use crate::repo::types::Repo;
 use crate::term::{Cmd, Workflow};
 use crate::{config, confirm};
@@ -32,6 +33,10 @@ pub struct HomeArgs {
     /// Use url to locate repo.
     #[clap(long, short)]
     pub url: Option<String>,
+
+    /// Mark repo as tmp.
+    #[clap(long, short)]
+    pub tmp: bool,
 }
 
 impl Run for HomeArgs {
@@ -56,6 +61,11 @@ impl Run for HomeArgs {
                 repo.owner.as_ref(),
                 repo.name.as_ref()
             );
+        }
+        if self.tmp {
+            let mut tmp_mark = TmpMark::read()?;
+            tmp_mark.mark(&repo);
+            tmp_mark.save()?;
         }
 
         let dir = repo.get_path();

@@ -6,6 +6,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::{Query, SelectOptions};
+use crate::repo::tmp_mark::TmpMark;
 use crate::repo::types::Repo;
 use crate::{config, confirm, info, term, utils};
 
@@ -34,12 +35,16 @@ pub struct RemoveArgs {
     /// Filter items.
     #[clap(long)]
     pub filter: bool,
+
+    /// Remove tmp repo.
+    #[clap(long, short)]
+    pub tmp: bool,
 }
 
 impl Run for RemoveArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
-        if self.recursive {
+        if self.recursive || self.tmp {
             self.remove_many(&mut db)?;
         } else {
             self.remove_one(&mut db)?;
@@ -65,22 +70,33 @@ impl RemoveArgs {
     }
 
     fn remove_many(&self, db: &mut Database) -> Result<()> {
-        let query = Query::from_args(&db, &self.remote, &self.query);
-        let (repos, _) = query.list_local(self.filter)?;
-        let repos = self.filter_many(repos)?;
+        let (repos, level, tmp_mark) = if self.tmp {
+            let mut tmp_mark = TmpMark::read()?;
+            let (repos, level) = tmp_mark.query_remove(&db, &self.remote, &self.query)?;
+            (repos, level, Some(tmp_mark))
+        } else {
+            let query = Query::from_args(&db, &self.remote, &self.query);
+            let (repos, level) = query.list_local(self.filter)?;
+            let repos = self.filter_many(repos)?;
+            (repos, level, None)
+        };
 
         if repos.is_empty() {
             info!("Nothing to remove");
             return Ok(());
         }
 
-        let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
+        let items: Vec<_> = repos.iter().map(|repo| repo.as_string(&level)).collect();
         term::must_confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
 
         for repo in repos.into_iter() {
             let path = repo.get_path();
             utils::remove_dir_recursively(path)?;
             db.remove(repo);
+        }
+
+        if let Some(tmp_mark) = tmp_mark {
+            tmp_mark.save()?;
         }
 
         Ok(())
