@@ -12,6 +12,7 @@ use crate::config::types::Remote;
 use crate::info;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
+use crate::repo::tmp_mark::TmpMark;
 use crate::repo::types::Repo;
 use crate::term::{self, Cmd, GitTask};
 
@@ -31,6 +32,10 @@ pub struct ImportArgs {
     /// If true, filter import repos.
     #[clap(long)]
     pub filter: bool,
+
+    /// Mark repo as tmp.
+    #[clap(long, short)]
+    pub tmp: bool,
 }
 
 struct ImportTask {
@@ -105,21 +110,34 @@ impl Run for ImportArgs {
         let remote_rc = Rc::new(self.remote.clone());
         let owner_rc = Rc::new(owner);
 
+        let mut tmp_mark = if self.tmp {
+            Some(TmpMark::read()?)
+        } else {
+            None
+        };
+
         let names = batch::must_run("Import", tasks)?;
         for name in names {
             let name = Arc::try_unwrap(name).unwrap();
-            let repo = Repo {
+            let repo = Rc::new(Repo {
                 remote: remote_rc.clone(),
                 owner: owner_rc.clone(),
                 name: Rc::new(name),
                 path: None,
                 last_accessed: 0,
                 accessed: 0.0,
-            };
-            db.update(Rc::new(repo));
+            });
+            if let Some(tmp_mark) = tmp_mark.as_mut() {
+                tmp_mark.mark(&repo);
+            }
+            db.update(repo);
         }
         drop(remote_rc);
         drop(owner_rc);
+
+        if let Some(tmp_mark) = tmp_mark.as_mut() {
+            tmp_mark.save()?;
+        }
 
         db.close()
     }

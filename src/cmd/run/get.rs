@@ -7,6 +7,7 @@ use serde::Serialize;
 use crate::cmd::Run;
 use crate::repo::database::Database;
 use crate::repo::query::Query;
+use crate::repo::tmp_mark::TmpMark;
 use crate::repo::types::Repo;
 use crate::term::Table;
 use crate::utils;
@@ -29,6 +30,10 @@ pub struct GetArgs {
     /// Show current repo info.
     #[clap(long, short)]
     pub current: bool,
+
+    /// Show tmp repo.
+    #[clap(long, short)]
+    pub tmp: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,8 +85,14 @@ impl Run for GetArgs {
             return term::show_json(info);
         }
 
-        let query = Query::from_args(&db, &self.remote, &self.query);
-        let (mut repos, level) = query.list_local(false)?;
+        let (mut repos, level) = if self.tmp {
+            let mut tmp_mark = TmpMark::read()?;
+            tmp_mark.query_remove(&db, &self.remote, &self.query)?
+        } else {
+            let query = Query::from_args(&db, &self.remote, &self.query);
+            query.list_local(false)?
+        };
+
         if repos.is_empty() {
             info!("No repo to show");
             return Ok(());

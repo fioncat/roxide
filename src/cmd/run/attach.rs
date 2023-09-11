@@ -5,6 +5,7 @@ use crate::cmd::Run;
 use crate::config;
 use crate::repo::database::Database;
 use crate::repo::query::{Query, SelectOptions};
+use crate::repo::tmp_mark::TmpMark;
 use crate::term::Cmd;
 use crate::{confirm, info};
 
@@ -19,6 +20,10 @@ pub struct AttachArgs {
     /// If true, the cache will not be used when calling the API search.
     #[clap(long, short)]
     pub force: bool,
+
+    /// Mark repo as tmp.
+    #[clap(long, short)]
+    pub tmp: bool,
 }
 
 impl Run for AttachArgs {
@@ -51,6 +56,11 @@ impl Run for AttachArgs {
             "Do you want to attach current directory to {}",
             repo.long_name()
         );
+        if self.tmp {
+            let mut tmp_mark = TmpMark::read()?;
+            tmp_mark.mark(&repo);
+            tmp_mark.save()?;
+        }
         if let Some(user) = &remote.user {
             Cmd::git(&["config", "user.name", user.as_str()])
                 .with_desc(format!("Set user to {}", user))
