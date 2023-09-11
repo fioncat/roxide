@@ -70,15 +70,15 @@ impl RemoveArgs {
     }
 
     fn remove_many(&self, db: &mut Database) -> Result<()> {
-        let (repos, tmp_mark) = if self.tmp {
+        let (repos, level, tmp_mark) = if self.tmp {
             let mut tmp_mark = TmpMark::read()?;
-            let (repos, _) = tmp_mark.query_remove(&db, &self.remote, &self.query)?;
-            (repos, Some(tmp_mark))
+            let (repos, level) = tmp_mark.query_remove(&db, &self.remote, &self.query)?;
+            (repos, level, Some(tmp_mark))
         } else {
             let query = Query::from_args(&db, &self.remote, &self.query);
-            let (repos, _) = query.list_local(self.filter)?;
+            let (repos, level) = query.list_local(self.filter)?;
             let repos = self.filter_many(repos)?;
-            (repos, None)
+            (repos, level, None)
         };
 
         if repos.is_empty() {
@@ -86,7 +86,7 @@ impl RemoveArgs {
             return Ok(());
         }
 
-        let items: Vec<_> = repos.iter().map(|repo| repo.full_name()).collect();
+        let items: Vec<_> = repos.iter().map(|repo| repo.as_string(&level)).collect();
         term::must_confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
 
         for repo in repos.into_iter() {
