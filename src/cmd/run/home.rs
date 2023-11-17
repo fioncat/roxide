@@ -30,10 +30,6 @@ pub struct HomeArgs {
     #[clap(long, short)]
     pub force: bool,
 
-    /// Use url to locate repo.
-    #[clap(long, short)]
-    pub url: Option<String>,
-
     /// Mark repo as tmp.
     #[clap(long, short)]
     pub tmp: bool,
@@ -43,7 +39,17 @@ impl Run for HomeArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
 
-        let (remote, repo, exists) = match self.url.as_ref() {
+        let url = if self.query.len() == 1 {
+            let maybe_url = self.query.get(0).unwrap();
+            match Url::parse(&maybe_url) {
+                Ok(url) => Some(url),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let (remote, repo, exists) = match url {
             Some(url) => self.select_from_url(&db, url)?,
             None => {
                 let query = Query::new(&db, self.query.clone());
@@ -135,8 +141,7 @@ impl HomeArgs {
         Ok(())
     }
 
-    fn select_from_url(&self, db: &Database, url: &String) -> Result<(Remote, Rc<Repo>, bool)> {
-        let url = Url::parse(url).with_context(|| format!("Invalid url {url}"))?;
+    fn select_from_url(&self, db: &Database, url: Url) -> Result<(Remote, Rc<Repo>, bool)> {
         let domain = match url.domain() {
             Some(domain) => domain,
             None => bail!("Missing domain in url"),
