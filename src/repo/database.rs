@@ -86,8 +86,18 @@ impl Database {
         let mut max_time = 0;
         let mut pos = None;
         for (idx, repo) in self.repos.iter().enumerate() {
-            if repo.get_path().eq(dir) {
+            let repo_path = repo.get_path();
+            if repo_path.eq(dir) {
+                // If we are currently in the root directory of a repo, the latest method
+                // should return another repo, so the current repo will be skipped here.
                 continue;
+            }
+            if dir.starts_with(&repo_path) {
+                // If we are currently in a subdirectory of a repo, latest will directly
+                // return this repo.
+                if remote.as_ref().is_empty() || repo.remote.as_str().eq(remote.as_ref()) {
+                    return Some(Rc::clone(repo));
+                }
             }
             if !remote.as_ref().is_empty() && repo.remote.as_str().ne(remote.as_ref()) {
                 continue;
