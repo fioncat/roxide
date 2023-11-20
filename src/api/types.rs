@@ -72,6 +72,8 @@ pub trait Provider {
 
     // Create merge request (or PR for Github), and return its URL.
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String>;
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>>;
 }
 
 #[cfg(test)]
@@ -160,6 +162,10 @@ pub mod tests {
             let merge = merge.to_string();
             self.merges.insert(merge.clone());
             Ok(merge)
+        }
+
+        fn search_repos(&self, _query: &str) -> Result<Vec<String>> {
+            Ok(Vec::new())
         }
     }
 }

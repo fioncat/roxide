@@ -56,6 +56,10 @@ impl Provider for Cache {
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         self.upstream.create_merge(merge, title, body)
     }
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>> {
+        self.upstream.search_repos(query)
+    }
 }
 
 impl Cache {
