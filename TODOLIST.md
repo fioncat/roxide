@@ -1,5 +1,11 @@
 # TODOList
 
+## v0.9.0
+
+- [ ] `copy` command, copy current repo to another remote/group.
+- [ ] `home` support clone url (both HTTPS and SSH).
+- [ ] `search` command, use keywork to do fuzzy seaching on remote, we can clone or open it.
+
 ## v0.8.0
 
 - [x] `info` command, show global info.
