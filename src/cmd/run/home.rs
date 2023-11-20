@@ -35,23 +35,46 @@ pub struct HomeArgs {
     pub tmp: bool,
 }
 
+enum SelectType {
+    Url(Url),
+    Ssh(String),
+    Direct,
+}
+
 impl Run for HomeArgs {
     fn run(&self) -> Result<()> {
         let mut db = Database::read()?;
 
-        let url = if self.query.len() == 1 {
-            let maybe_url = self.query.get(0).unwrap();
-            match Url::parse(&maybe_url) {
-                Ok(url) => Some(url),
-                Err(_) => None,
+        let select_type = if self.query.len() == 1 {
+            let query = self.query.get(0).unwrap();
+            if query.ends_with(".git") {
+                if query.starts_with("http") {
+                    let query = query.strip_suffix(".git").unwrap();
+                    SelectType::Url(
+                        Url::parse(&query).with_context(|| format!("Parse clone url {}", query))?,
+                    )
+                } else if query.starts_with("git@") {
+                    SelectType::Ssh(query.clone())
+                } else {
+                    match Url::parse(&query) {
+                        Ok(url) => SelectType::Url(url),
+                        Err(_) => SelectType::Direct,
+                    }
+                }
+            } else {
+                match Url::parse(&query) {
+                    Ok(url) => SelectType::Url(url),
+                    Err(_) => SelectType::Direct,
+                }
             }
         } else {
-            None
+            SelectType::Direct
         };
 
-        let (remote, repo, exists) = match url {
-            Some(url) => self.select_from_url(&db, url)?,
-            None => {
+        let (remote, repo, exists) = match select_type {
+            SelectType::Url(url) => self.select_from_url(&db, url)?,
+            SelectType::Ssh(ssh) => self.select_from_ssh(&db, ssh)?,
+            SelectType::Direct => {
                 let query = Query::new(&db, self.query.clone());
                 query.select(
                     SelectOptions::new()
@@ -208,5 +231,25 @@ impl HomeArgs {
                 Ok((remote, repo, false))
             }
         }
+    }
+
+    fn select_from_ssh(&self, db: &Database, ssh: String) -> Result<(Remote, Rc<Repo>, bool)> {
+        let full_name = ssh
+            .strip_prefix("git@")
+            .unwrap()
+            .strip_suffix(".git")
+            .unwrap();
+        let full_name = full_name.replacen(":", "/", 1);
+
+        let convert_url = format!("http://{full_name}");
+        let url = Url::parse(&convert_url)
+            .with_context(|| format!("Parse url {} converted from ssh {}", convert_url, ssh))?;
+
+        self.select_from_url(db, url).with_context(|| {
+            format!(
+                "Select repo from url {} converted from ssh {}",
+                convert_url, ssh
+            )
+        })
     }
 }
