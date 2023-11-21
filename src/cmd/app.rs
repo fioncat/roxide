@@ -7,6 +7,7 @@ use crate::cmd::run::attach::AttachArgs;
 use crate::cmd::run::branch::BranchArgs;
 use crate::cmd::run::check::CheckArgs;
 use crate::cmd::run::config::ConfigArgs;
+use crate::cmd::run::copy::CopyArgs;
 use crate::cmd::run::detach::DetachArgs;
 use crate::cmd::run::gc::GcArgs;
 use crate::cmd::run::get::GetArgs;
@@ -46,6 +47,7 @@ pub enum Commands {
     Check(CheckArgs),
     Complete(CompleteArgs),
     Config(ConfigArgs),
+    Copy(CopyArgs),
     Detach(DetachArgs),
     Gc(GcArgs),
     Get(GetArgs),
@@ -82,6 +84,7 @@ impl Run for App {
             Commands::Check(args) => args.run(),
             Commands::Complete(args) => args.run(),
             Commands::Config(args) => args.run(),
+            Commands::Copy(args) => args.run(),
             Commands::Detach(args) => args.run(),
             Commands::Gc(args) => args.run(),
             Commands::Get(args) => args.run(),

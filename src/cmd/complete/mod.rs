@@ -53,6 +53,7 @@ impl CompleteArgs {
             "sync" => handlers::repo,
             "sync-rule" => handlers::sync_rule,
             "tag" => handlers::tag,
+            "copy" => handlers::owner,
         }
     }
 
