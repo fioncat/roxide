@@ -2,9 +2,9 @@
 
 ## v0.9.0
 
-- [ ] `copy` command, copy current repo to another remote/group.
+- [x] `copy` command, copy current repo to another remote/group.
 - [x] `home` support clone url (both HTTPS and SSH).
-- [ ] `home` support use keywork to do fuzzy seaching on remote, usage: `ro home github xxx -s`
+- [x] `home` support use keywork to do fuzzy seaching on remote, usage: `ro home github xxx -s`
 
 ## v0.8.0
 
