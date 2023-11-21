@@ -14,7 +14,7 @@ use crate::repo::query::{parse_owner, Query, SelectOptions};
 use crate::repo::tmp_mark::TmpMark;
 use crate::repo::types::Repo;
 use crate::term::{Cmd, Workflow};
-use crate::{config, confirm};
+use crate::{api, config, confirm, utils};
 
 /// Print the home path of a repo, recommand to use `zz` command instead.
 #[derive(Args)]
@@ -33,6 +33,10 @@ pub struct HomeArgs {
     /// Mark repo as tmp.
     #[clap(long, short)]
     pub tmp: bool,
+
+    /// Open repo in default browser rather than clone it.
+    #[clap(long, short)]
+    pub open: bool,
 }
 
 enum SelectType {
@@ -83,6 +87,12 @@ impl Run for HomeArgs {
                 )?
             }
         };
+
+        if self.open {
+            let provider = api::init_provider(&remote, self.force)?;
+            let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
+            return utils::open_url(&api_repo.web_url);
+        }
 
         if !exists {
             confirm!(

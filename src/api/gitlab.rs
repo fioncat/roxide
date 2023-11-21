@@ -5,12 +5,17 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::api::types::{ApiRepo, MergeOptions, Provider};
+use crate::config::default;
 use crate::config::types::Remote;
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
     pub path: String,
+    pub path_with_namespace: String,
+
+    #[serde(default = "default::empty_string")]
     pub default_branch: String,
+
     pub web_url: String,
 }
 
@@ -102,6 +107,16 @@ impl Provider for Gitlab {
         };
         let mr = self.execute_post::<CreateMergeRequest, MergeRequest>(&path, create)?;
         Ok(mr.web_url)
+    }
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>> {
+        let path = format!("search?scope=projects&search={}", query);
+        let gitlab_repos = self.execute_get::<Vec<GitlabRepo>>(&path)?;
+        let repos: Vec<String> = gitlab_repos
+            .into_iter()
+            .map(|repo| repo.path_with_namespace)
+            .collect();
+        Ok(repos)
     }
 }
 

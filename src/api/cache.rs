@@ -56,6 +56,18 @@ impl Provider for Cache {
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         self.upstream.create_merge(merge, title, body)
     }
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>> {
+        let path = self.search_repo_path(query);
+        if !self.force {
+            if let Some(repos) = self.read(&path)? {
+                return Ok(repos);
+            }
+        }
+        let repos = self.upstream.search_repos(query)?;
+        self.write(&repos, &path)?;
+        Ok(repos)
+    }
 }
 
 impl Cache {
@@ -85,6 +97,11 @@ impl Cache {
         let owner = owner.replace("/", ".");
         let name = name.replace("/", ".");
         self.dir.join(format!("repo.{owner}.{name}"))
+    }
+
+    fn search_repo_path(&self, query: &str) -> PathBuf {
+        let query = query.replace("/", ".");
+        self.dir.join(format!("search.{query}"))
     }
 
     fn read<T>(&self, path: &PathBuf) -> Result<Option<T>>

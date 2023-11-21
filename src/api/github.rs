@@ -12,11 +12,17 @@ use crate::config::types::Remote;
 #[derive(Debug, Deserialize)]
 struct Repo {
     pub name: String,
+    pub full_name: String,
     pub html_url: String,
 
     pub source: Option<Source>,
 
     pub default_branch: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchRepoResult {
+    pub items: Vec<Repo>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +52,7 @@ impl Repo {
         let Repo {
             name: _,
             html_url,
+            full_name: _,
             source,
             default_branch,
         } = self;
@@ -168,6 +175,18 @@ impl Provider for Github {
         };
         let pr = self.execute_post::<PullRequestBody, PullRequest>(&path, body)?;
         Ok(pr.html_url)
+    }
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>> {
+        let path = format!("search/repositories?q={}", query);
+        let result = self.execute_get::<SearchRepoResult>(&path)?;
+        let repos: Vec<String> = result
+            .items
+            .into_iter()
+            .map(|item| item.full_name)
+            .collect();
+
+        Ok(repos)
     }
 }
 

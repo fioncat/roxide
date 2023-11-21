@@ -1,10 +1,13 @@
 _roxide_home() {
 	if ret_path=$(roxide $@); then
+		if [ -z $ret_path ]; then
+			return
+		fi
 		if [ -d $ret_path ]; then
 			cd $ret_path
 			return
 		fi
-		if [ ! -z $ret_path ]; then
+		if [ -n $ret_path ]; then
 			echo $ret_path
 		fi
 		return

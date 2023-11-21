@@ -132,6 +132,9 @@ impl<'a> Query<'_> {
 
         let (owner, name) = parse_owner(query);
         if owner.is_empty() {
+            if opts.search {
+                return self.search_remote(remote, query.clone(), &opts);
+            }
             let repo = self.db.must_get_fuzzy(&remote.name, &name)?;
             return Ok((remote, repo, true));
         }
@@ -182,6 +185,30 @@ impl<'a> Query<'_> {
         let idx = term::search(&items)?;
         let repo = Rc::clone(&vec[idx]);
         Ok(repo)
+    }
+
+    fn search_remote(
+        &self,
+        remote: Remote,
+        query: String,
+        opts: &SelectOptions,
+    ) -> Result<(Remote, Rc<Repo>, bool)> {
+        let provider = api::init_provider(&remote, opts.force)?;
+        let items = provider.search_repos(&query)?;
+        if items.is_empty() {
+            bail!("Could not find anything from remote");
+        }
+
+        let idx = term::search(&items)?;
+
+        let result = &items[idx];
+
+        let (owner, name) = parse_owner(result);
+        if owner.is_empty() || name.is_empty() {
+            bail!("Invalid repo name {} from remote", result);
+        }
+
+        return Ok(self.get_repo(remote, owner, name, opts));
     }
 
     fn get_repo<S>(

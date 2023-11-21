@@ -54,6 +54,10 @@ impl Provider for Alias {
 
         self.upstream.create_merge(merge, title, body)
     }
+
+    fn search_repos(&self, query: &str) -> Result<Vec<String>> {
+        self.upstream.search_repos(query)
+    }
 }
 
 impl Alias {

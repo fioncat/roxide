@@ -64,3 +64,7 @@ pub fn base() -> Base {
 pub fn disable() -> bool {
     false
 }
+
+pub fn empty_string() -> String {
+    String::new()
+}
