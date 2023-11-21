@@ -18,7 +18,7 @@ _roxide_home() {
 _roxide_base() {
 	action=$1
 	case "${action}" in
-		home)
+		home | copy)
 			_roxide_home "$@"
 			;;
 

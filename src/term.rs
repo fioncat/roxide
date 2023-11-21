@@ -974,6 +974,14 @@ impl GitRemote {
             .collect();
         Ok(commits)
     }
+
+    pub fn get_url(&self) -> Result<String> {
+        let url = Cmd::git(&["remote", "get-url", &self.0])
+            .with_desc(format!("Get url for remote {}", self.0))
+            .execute()?
+            .checked_read()?;
+        Ok(url)
+    }
 }
 
 pub struct GitTag(String);

@@ -2,6 +2,7 @@ pub mod attach;
 pub mod branch;
 pub mod check;
 pub mod config;
+pub mod copy;
 pub mod detach;
 pub mod gc;
 pub mod get;
