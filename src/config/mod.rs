@@ -1,4 +1,4 @@
-mod default;
+pub mod default;
 pub mod types;
 
 use std::path::PathBuf;

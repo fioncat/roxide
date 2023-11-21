@@ -5,13 +5,17 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::api::types::{ApiRepo, MergeOptions, Provider};
+use crate::config::default;
 use crate::config::types::Remote;
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
     pub path: String,
     pub path_with_namespace: String,
+
+    #[serde(default = "default::empty_string")]
     pub default_branch: String,
+
     pub web_url: String,
 }
 
