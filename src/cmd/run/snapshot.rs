@@ -224,6 +224,7 @@ impl SnapshotArgs {
                 accessed: item.acceseed,
                 last_accessed: item.last_accessed,
                 path: item.path,
+                labels: None,
             });
             info!("Restore repo {} storage", repo.full_name());
             db.add(repo);

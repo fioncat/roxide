@@ -126,6 +126,7 @@ impl Run for ImportArgs {
                 path: None,
                 last_accessed: 0,
                 accessed: 0.0,
+                labels: None,
             });
             if let Some(tmp_mark) = tmp_mark.as_mut() {
                 tmp_mark.mark(&repo);

@@ -249,7 +249,7 @@ pub mod tests {
             Repo::new("github", "fioncat", "csync", None),
             Repo::new("github", "fioncat", "fioncat", None),
             Repo::new("github", "fioncat", "dotfiles", None),
-            Repo::new("github", "kubernetes", "kubernetes", None),
+            Repo::new("github", "kubernetes", "kubernetes", None).with_labels(&["tmp", "huge"]),
             Repo::new("github", "kubernetes", "kube-proxy", None),
             Repo::new("github", "kubernetes", "kubelet", None),
             Repo::new("github", "kubernetes", "kubectl", None),
@@ -257,10 +257,10 @@ pub mod tests {
             Repo::new("gitlab", "my-owner-01", "my-repo-02", None),
             Repo::new("gitlab", "my-owner-01", "my-repo-03", None),
             Repo::new("gitlab", "my-owner-02", "my-repo-01", None),
-            Repo::new("test", "rust", "hello", None),
-            Repo::new("test", "rust", "test-roxide", None),
-            Repo::new("test", "go", "hello", None),
-            Repo::new("test", "python", "hello", None),
+            Repo::new("test", "rust", "hello", None).with_labels(&["tmp"]),
+            Repo::new("test", "rust", "test-roxide", None).with_labels(&["tmp"]),
+            Repo::new("test", "go", "hello", None).with_labels(&["tmp"]),
+            Repo::new("test", "python", "hello", None).with_labels(&["tmp"]),
         ]
     }
 
@@ -287,7 +287,7 @@ pub mod tests {
         );
         assert_eq!(
             db.get("test", "python", "hello"),
-            Some(Repo::new("test", "python", "hello", None))
+            Some(Repo::new("test", "python", "hello", None).with_labels(&["tmp"]))
         );
         assert_eq!(db.get("test", "python", "unknown"), None);
         assert_eq!(db.get("github", "fioncat", "unknown"), None);
@@ -298,7 +298,9 @@ pub mod tests {
         );
         assert_eq!(
             db.get_fuzzy("", "kube"),
-            Some(Repo::new("github", "kubernetes", "kubernetes", None))
+            Some(
+                Repo::new("github", "kubernetes", "kubernetes", None).with_labels(&["huge", "tmp"])
+            )
         );
         assert_eq!(
             db.get_fuzzy("", "ro"),

@@ -108,6 +108,7 @@ impl RecoverArgs {
                 path: None,
                 last_accessed: 0,
                 accessed: 0.0,
+                labels: None,
             }));
 
             Ok(false)

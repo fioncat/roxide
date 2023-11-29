@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -16,6 +17,8 @@ pub struct Repo {
 
     pub last_accessed: u64,
     pub accessed: f64,
+
+    pub labels: Option<HashSet<Rc<String>>>,
 }
 
 #[derive(Clone)]
@@ -34,6 +37,9 @@ impl PartialEq for Repo {
             return false;
         }
         if self.name.ne(&other.name) {
+            return false;
+        }
+        if self.labels.ne(&other.labels) {
             return false;
         }
         true
@@ -56,6 +62,26 @@ impl Repo {
             path,
             last_accessed: config::now_secs(),
             accessed: 0.0,
+            labels: None,
+        })
+    }
+
+    pub fn with_labels<S>(&self, labels: &[S]) -> Rc<Repo>
+    where
+        S: AsRef<str>,
+    {
+        let labels: HashSet<Rc<String>> = labels
+            .iter()
+            .map(|label| Rc::new(label.as_ref().to_string()))
+            .collect();
+        Rc::new(Repo {
+            remote: Rc::clone(&self.remote),
+            owner: Rc::clone(&self.owner),
+            name: Rc::clone(&self.name),
+            path: self.path.clone(),
+            last_accessed: self.last_accessed,
+            accessed: self.accessed,
+            labels: Some(labels),
         })
     }
 
@@ -67,6 +93,10 @@ impl Repo {
     }
 
     pub fn update(&self) -> Rc<Repo> {
+        let mut labels = None;
+        if let Some(current_labels) = self.labels.as_ref() {
+            labels = Some(current_labels.iter().map(|l| Rc::clone(l)).collect());
+        }
         Rc::new(Repo {
             remote: Rc::clone(&self.remote),
             owner: Rc::clone(&self.owner),
@@ -74,6 +104,7 @@ impl Repo {
             path: self.path.clone(),
             last_accessed: config::now_secs(),
             accessed: self.accessed + 1.0,
+            labels,
         })
     }
 
