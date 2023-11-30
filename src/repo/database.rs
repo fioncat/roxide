@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::{fs, io};
 
 use anyhow::{bail, Context, Result};
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 
-use crate::config;
+use crate::config::{self, Config};
 use crate::repo::{Owner, Remote, Repo};
+use crate::utils::{self, FileLock};
 
 /// The Bucket is repositories data structure stored on disk that can be directly
 /// serialized and deserialized.
@@ -51,7 +54,16 @@ impl Bucket {
         }
     }
 
-    /// Decode json data to Bucket.
+    /// Read and decode database file.
+    pub fn read(path: &PathBuf) -> Result<Bucket> {
+        match fs::read(path) {
+            Ok(data) => Self::decode(&data),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Bucket::empty()),
+            Err(err) => Err(err).with_context(|| format!("read database file {}", path.display())),
+        }
+    }
+
+    /// Decode binary data to Bucket.
     fn decode(data: &[u8]) -> Result<Bucket> {
         let decoder = &mut bincode::options()
             .with_fixint_encoding()
@@ -71,6 +83,24 @@ impl Bucket {
         }
 
         Ok(decoder.deserialize(data).context("decode repo data")?)
+    }
+
+    /// Encode and write binary data to a file.
+    pub fn save(&self, path: &PathBuf) -> Result<()> {
+        let data = self.encode()?;
+        utils::write_file(path, &data)
+    }
+
+    /// Encode bucket to binary data.
+    fn encode(&self) -> Result<Vec<u8>> {
+        let buffer_size =
+            bincode::serialized_size(&Self::VERSION)? + bincode::serialized_size(self)?;
+        let mut buffer = Vec::with_capacity(buffer_size as usize);
+
+        bincode::serialize_into(&mut buffer, &Self::VERSION).context("Encode version")?;
+        bincode::serialize_into(&mut buffer, self).context("Encode repos")?;
+
+        Ok(buffer)
     }
 
     /// To save metadata storage space, transform the list of repositories
@@ -224,14 +254,23 @@ impl Bucket {
         for repo_bucket in all_buckets {
             let remote = match remote_index.get(&repo_bucket.remote) {
                 Some(remote) => Rc::clone(remote),
+                // If the remote recorded in the repository does not exist in the
+                // index, it indicates that this is dirty data (manually generated?
+                // or there is a bug). Skip processing here.
+                // FIXME: If this is caused by a bug, should we panic or report an
+                // error here to expose the issue better?
                 None => continue,
             };
 
             let owner_name = match owner_name_index.get(&repo_bucket.owner) {
                 Some(owner_name) => owner_name,
+                // The same as remote, may have bug
                 None => continue,
             };
 
+            // If the owner already exists in the cache, reuse it using Rc. If it
+            // doesn't exist, construct and cache it using a combination of coordination
+            // and indexing.
             let owner = match owner_index.get(&remote.name) {
                 Some(m) => match m.get(owner_name) {
                     Some(owner) => Some(Rc::clone(owner)),
@@ -242,6 +281,7 @@ impl Bucket {
             let owner = match owner {
                 Some(o) => o,
                 None => {
+                    // Build the owner object
                     let owner_name = owner_name.clone();
                     let owner_remote = Rc::clone(&remote);
                     let owner_cfg = cfg.get_owner(&remote.name, &owner_name);
@@ -295,8 +335,324 @@ impl Bucket {
     }
 }
 
+/// The Database provides basic functions for querying the repository, enabling
+/// location identification and listing. It also supports updating and deleting
+/// repository data. However, changes made need to be written to disk by calling
+/// the `save` function after the operations.
+pub struct Database<'a> {
+    repos: Vec<Rc<Repo>>,
+    path: PathBuf,
+
+    /// The Database can only be operated by one process at a time, so file lock
+    /// here are used here to provide protection.
+    lock: FileLock,
+
+    cfg: &'a Config,
+}
+
+impl Database<'_> {
+    /// Load the database.
+    /// The database file is located at the path `{metadir}/database`.
+    /// This function will attempt to acquire the file lock for the database file.
+    /// If the database file does not exist, the load function will return an empty
+    /// database, suitable for handling the initial condition.
+    pub fn load(cfg: &Config) -> Result<Database> {
+        let lock = FileLock::acquire(cfg, "database")?;
+        let path = PathBuf::from(&cfg.metadir).join("database");
+        let bucket = Bucket::read(&path)?;
+        let repos = bucket.build_repos(cfg)?;
+
+        Ok(Database {
+            repos,
+            path,
+            lock,
+            cfg,
+        })
+    }
+
+    /// Locate a repository based on its name.
+    pub fn get<R, O, N>(&self, remote_name: R, owner_name: O, name: N) -> Option<Rc<Repo>>
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        self.repos.iter().find_map(|repo| {
+            if repo.remote.name.as_str() != remote_name.as_ref() {
+                return None;
+            }
+            if repo.owner.name.as_str() != owner_name.as_ref() {
+                return None;
+            }
+            if repo.name.as_str() == name.as_ref() {
+                return Some(Rc::clone(repo));
+            }
+            None
+        })
+    }
+
+    /// Similar to `get_repo`, but returns error if the repository is not found.
+    pub fn must_get<R, O, N>(&self, remote_name: R, owner_name: O, name: N) -> Result<Rc<Repo>>
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        match self.get(remote_name.as_ref(), owner_name.as_ref(), name.as_ref()) {
+            Some(repo) => Ok(repo),
+            None => bail!(
+                "repo '{}:{}/{}' not found",
+                remote_name.as_ref(),
+                owner_name.as_ref(),
+                name.as_ref()
+            ),
+        }
+    }
+
+    /// Locate a repository using a keyword. As long as the repository name contains
+    /// the keyword, it is considered a successful match. The function prioritizes
+    /// matches based on the repository's score.
+    pub fn get_fuzzy<R, K>(&self, remote_name: R, keyword: K) -> Option<Rc<Repo>>
+    where
+        R: AsRef<str>,
+        K: AsRef<str>,
+    {
+        self.repos.iter().find_map(|repo| {
+            if !remote_name.as_ref().is_empty() && remote_name.as_ref() != repo.remote.name.as_str()
+            {
+                return None;
+            }
+            if repo.name.as_str().contains(keyword.as_ref()) {
+                return Some(Rc::clone(repo));
+            }
+            None
+        })
+    }
+
+    /// Similar to `get_fuzzy`, but returns error if the repository is not found.
+    pub fn must_get_fuzzy<R, K>(&self, remote_name: R, keyword: K) -> Result<Rc<Repo>>
+    where
+        R: AsRef<str>,
+        K: AsRef<str>,
+    {
+        match self.get_fuzzy(remote_name.as_ref(), keyword.as_ref()) {
+            Some(repo) => Ok(repo),
+            None => {
+                if remote_name.as_ref().is_empty() {
+                    bail!(
+                        "cannot find repo that contains keyword '{}'",
+                        keyword.as_ref()
+                    );
+                }
+                bail!(
+                    "cannot find repo that contains keyword '{}' in remote '{}'",
+                    keyword.as_ref(),
+                    remote_name.as_ref()
+                );
+            }
+        }
+    }
+
+    /// Retrieve the most recently accessed repository. This function follows
+    /// certain rules:
+    ///
+    /// 1. If the current position is exactly at the most recently accessed
+    /// repository, the function will not return the current repository.
+    /// 2. If the current position is within a subdirectory of a repository,
+    /// it will directly return the current repository.
+    ///
+    /// This design is intended to make the `get_latest` function more flexible,
+    /// allowing it to achieve effects similar to `cd -` in Linux.
+    pub fn get_latest<S>(&self, remote_name: S) -> Option<Rc<Repo>>
+    where
+        S: AsRef<str>,
+    {
+        let mut max_time = 0;
+        let mut pos = None;
+
+        for (idx, repo) in self.repos.iter().enumerate() {
+            let repo_path = repo.get_path(self.cfg);
+            if repo_path.eq(self.cfg.get_current_dir()) {
+                // If we are currently in the root directory of a repo, the latest
+                // method should return another repo, so the current repo will be
+                // skipped here.
+                continue;
+            }
+            if self.cfg.get_current_dir().starts_with(&repo_path) {
+                // If we are currently in a subdirectory of a repo, latest will
+                // directly return this repo.
+                if remote_name.as_ref().is_empty()
+                    || repo.remote.name.as_str() == remote_name.as_ref()
+                {
+                    return Some(Rc::clone(repo));
+                }
+            }
+
+            if !remote_name.as_ref().is_empty() && repo.remote.name.as_str() != remote_name.as_ref()
+            {
+                continue;
+            }
+
+            if repo.last_accessed > max_time {
+                pos = Some(idx);
+                max_time = repo.last_accessed;
+            }
+        }
+        match pos {
+            Some(idx) => Some(Rc::clone(&self.repos[idx])),
+            None => None,
+        }
+    }
+
+    /// Similar to `get_latest`, but returns error if the repository is not found.
+    pub fn must_get_latest<S>(&self, remote_name: S) -> Result<Rc<Repo>>
+    where
+        S: AsRef<str>,
+    {
+        match self.get_latest(remote_name.as_ref()) {
+            Some(repo) => Ok(repo),
+            None => {
+                if remote_name.as_ref().is_empty() {
+                    bail!("no latest repo");
+                }
+                bail!("no latest repo in remote '{}'", remote_name.as_ref());
+            }
+        }
+    }
+
+    /// Return the repository currently being accessed.
+    pub fn get_current(&self) -> Option<Rc<Repo>> {
+        self.repos.iter().find_map(|repo| {
+            let repo_path = repo.get_path(self.cfg);
+            if repo_path.eq(self.cfg.get_current_dir()) {
+                return Some(Rc::clone(repo));
+            }
+            None
+        })
+    }
+
+    /// Return the repository currently being accessed. If not within any
+    /// repository, return an error.
+    pub fn must_get_current(&self) -> Result<Rc<Repo>> {
+        match self.get_current() {
+            Some(repo) => Ok(repo),
+            None => bail!("you are not in a repository"),
+        }
+    }
+
+    /// List all repositories.
+    pub fn list_all(&self, filter_labels: &Option<HashSet<String>>) -> Vec<Rc<Repo>> {
+        let mut vec = Vec::with_capacity(self.repos.len());
+        for repo in self.repos.iter() {
+            if !repo.has_labels(filter_labels) {
+                continue;
+            }
+            vec.push(Rc::clone(repo));
+        }
+        vec
+    }
+
+    /// List all repositories under a remote.
+    pub fn list_by_remote<S>(
+        &self,
+        remote_name: S,
+        filter_labels: &Option<HashSet<String>>,
+    ) -> Vec<Rc<Repo>>
+    where
+        S: AsRef<str>,
+    {
+        let mut vec = Vec::with_capacity(self.repos.len());
+        for repo in self.repos.iter() {
+            if !repo.has_labels(filter_labels) {
+                continue;
+            }
+            if repo.remote.name.as_str() == remote_name.as_ref() {
+                vec.push(Rc::clone(repo));
+            }
+        }
+        vec
+    }
+
+    /// List all repositories under an owner.
+    pub fn list_by_owner<R, O>(
+        &self,
+        remote_name: R,
+        owner_name: O,
+        filter_labels: &Option<HashSet<String>>,
+    ) -> Vec<Rc<Repo>>
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+    {
+        let mut vec = Vec::with_capacity(self.repos.len());
+        for repo in self.repos.iter() {
+            if !repo.has_labels(filter_labels) {
+                continue;
+            }
+            if repo.remote.name.as_str() != remote_name.as_ref() {
+                continue;
+            }
+            if repo.owner.name.as_str() != owner_name.as_ref() {
+                continue;
+            }
+
+            vec.push(Rc::clone(repo));
+        }
+        vec
+    }
+
+    /// Update the repository data in the database. Call this after accessing a
+    /// repository to update its access time and count. Additionally, you can
+    /// update the repository's labels using the `labels` parameter.
+    ///
+    /// # Arguements
+    ///
+    /// * `repo` - The repository to update.
+    /// * `labels` - If None, do not update labels, else, replace the labels with
+    /// the given labels. If `labels` is not None but has no elements (where
+    /// `is_empty` returns `true`), it will remove all the labels of the repository.
+    pub fn update(&mut self, repo: Rc<Repo>, labels: Option<HashSet<String>>) {
+        let pos = self.position(&repo);
+        let new_repo = repo.update(self.cfg, labels);
+        match pos {
+            Some(idx) => self.repos[idx] = new_repo,
+            None => self.repos.push(new_repo),
+        }
+    }
+
+    /// Get the position of a repository.
+    pub fn position(&self, repo: &Rc<Repo>) -> Option<usize> {
+        let mut pos = None;
+        for (idx, item) in self.repos.iter().enumerate() {
+            if item.name.as_str() == repo.name.as_str()
+                && item.remote.name.as_str() == repo.remote.name.as_str()
+                && item.owner.name.as_str() == repo.owner.name.as_str()
+            {
+                pos = Some(idx);
+                break;
+            }
+        }
+        pos
+    }
+
+    /// Save the database changes to the disk file.
+    pub fn save(self) -> Result<()> {
+        let Database {
+            repos,
+            path,
+            lock,
+            cfg: _,
+        } = self;
+        let bucket = Bucket::from_repos(repos);
+        bucket.save(&path)?;
+        // Drop lock to release file lock after write done.
+        drop(lock);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
-mod tests {
+mod bucket_tests {
     use crate::config::tests as config_tests;
     use crate::repo::database::*;
     use crate::{hash_set, vec_strings};

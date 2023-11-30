@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use serde::Deserialize;
 
@@ -13,6 +16,10 @@ pub struct Config {
     pub remotes: HashMap<String, Remote>,
 
     pub release: HashMap<String, String>,
+
+    current_dir: Option<PathBuf>,
+
+    now: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +107,14 @@ impl Config {
             None => None,
         }
     }
+
+    pub fn get_current_dir<'a>(&'a self) -> &'a PathBuf {
+        self.current_dir.as_ref().unwrap()
+    }
+
+    pub fn now(&self) -> u64 {
+        self.now
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +183,8 @@ pub mod tests {
             cmd: String::from("ro"),
             remotes,
             release: HashMap::new(),
+            current_dir: None,
+            now: 0,
         }
     }
 }
