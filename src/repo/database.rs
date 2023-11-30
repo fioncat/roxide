@@ -1,316 +1,419 @@
-use std::collections::HashSet;
-use std::path::PathBuf;
+#![allow(dead_code)]
+
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use bincode::Options;
+use serde::{Deserialize, Serialize};
 
 use crate::config;
-use crate::repo::bytes::Bytes;
-use crate::repo::types::Repo;
-use crate::utils::Lock;
+use crate::repo::{Owner, Remote, Repo};
 
-pub struct Database {
-    repos: Vec<Rc<Repo>>,
-    path: PathBuf,
-    lock: Lock,
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Bucket {
+    remotes: Vec<String>,
+    owners: Vec<String>,
+    labels: Vec<String>,
+    repos: Vec<RepoBucket>,
 }
 
-impl Database {
-    pub fn read() -> Result<Database> {
-        let lock = Lock::acquire("database")?;
-        let path = PathBuf::from(&config::base().metadir).join("database");
-        let bytes = Bytes::read(&path)?;
-        let repos: Vec<Rc<Repo>> = bytes.into();
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct RepoBucket {
+    remote: u32,
+    owner: u32,
+    name: String,
+    path: Option<String>,
+    last_accessed: u64,
+    accessed: f64,
+    labels: Option<HashSet<u32>>,
+}
 
-        Ok(Database { repos, path, lock })
-    }
+impl Bucket {
+    // Assume a maximum size for the database. This prevents bincode from
+    // throwing strange errors when it encounters invalid data.
+    const MAX_SIZE: u64 = 32 << 20;
 
-    pub fn get<S>(&self, remote: S, owner: S, name: S) -> Option<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        self.repos.iter().find_map(|repo| {
-            if repo.remote.as_str().ne(remote.as_ref()) {
-                return None;
-            }
-            if repo.owner.as_str().ne(owner.as_ref()) {
-                return None;
-            }
-            if repo.name.as_str().eq(name.as_ref()) {
-                return Some(Rc::clone(repo));
-            }
-            None
-        })
-    }
+    // Use Version to ensure that decode and encode are consistent.
+    const VERSION: u32 = 1;
 
-    pub fn must_get<S>(&self, remote: S, owner: S, name: S) -> Result<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        match self.get(remote.as_ref(), owner.as_ref(), name.as_ref()) {
-            Some(repo) => Ok(repo),
-            None => bail!("Could not find repo {}/{}", owner.as_ref(), name.as_ref()),
+    fn empty() -> Self {
+        Bucket {
+            remotes: Vec::new(),
+            owners: Vec::new(),
+            repos: Vec::new(),
+            labels: Vec::new(),
         }
     }
 
-    pub fn get_fuzzy<S>(&self, remote: S, query: S) -> Option<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        self.repos.iter().find_map(|repo| {
-            if !remote.as_ref().is_empty() && remote.as_ref().ne(repo.remote.as_str()) {
-                return None;
-            }
-            if repo.name.as_str().contains(query.as_ref()) {
-                return Some(Rc::clone(repo));
-            }
-            None
-        })
-    }
+    fn decode(data: &[u8]) -> Result<Bucket> {
+        let decoder = &mut bincode::options()
+            .with_fixint_encoding()
+            .with_limit(Self::MAX_SIZE);
 
-    pub fn must_get_fuzzy<S>(&self, remote: S, query: S) -> Result<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        match self.get_fuzzy(remote.as_ref(), query.as_ref()) {
-            Some(repo) => Ok(repo),
-            None => bail!("Could not find matched repo with query {}", query.as_ref()),
+        let version_size = decoder.serialized_size(&Self::VERSION).unwrap() as usize;
+        if data.len() < version_size {
+            bail!("corrupted data");
         }
+
+        let (version_data, data) = data.split_at(version_size);
+        let version: u32 = decoder
+            .deserialize(version_data)
+            .context("decode version")?;
+        if version != Self::VERSION {
+            bail!("unsupported version {version}");
+        }
+
+        Ok(decoder.deserialize(data).context("decode repo data")?)
     }
 
-    pub fn latest<S>(&self, remote: S) -> Option<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        let dir = config::current_dir();
-        let mut max_time = 0;
-        let mut pos = None;
-        for (idx, repo) in self.repos.iter().enumerate() {
-            let repo_path = repo.get_path();
-            if repo_path.eq(dir) {
-                // If we are currently in the root directory of a repo, the latest method
-                // should return another repo, so the current repo will be skipped here.
-                continue;
-            }
-            if dir.starts_with(&repo_path) {
-                // If we are currently in a subdirectory of a repo, latest will directly
-                // return this repo.
-                if remote.as_ref().is_empty() || repo.remote.as_str().eq(remote.as_ref()) {
-                    return Some(Rc::clone(repo));
+    fn from_repos(repos: Vec<Rc<Repo>>) -> Bucket {
+        let mut remotes: Vec<String> = Vec::new();
+        let mut remotes_index: HashMap<String, u32> = HashMap::new();
+
+        let mut owners: Vec<String> = Vec::new();
+        let mut owners_index: HashMap<String, u32> = HashMap::new();
+
+        let mut all_labels: Vec<String> = Vec::new();
+        let mut all_labels_index: HashMap<String, u32> = HashMap::new();
+
+        let mut repo_buckets: Vec<RepoBucket> = Vec::with_capacity(repos.len());
+        for repo in repos {
+            let remote_idx = match remotes_index.get(repo.remote.name.as_str()) {
+                Some(idx) => *idx,
+                None => {
+                    let remote_name = repo.remote.name.to_string();
+                    let idx = remotes.len() as u32;
+                    remotes_index.insert(remote_name.clone(), idx);
+                    remotes.push(remote_name);
+                    idx
                 }
-            }
-            if !remote.as_ref().is_empty() && repo.remote.as_str().ne(remote.as_ref()) {
-                continue;
-            }
-            if repo.last_accessed > max_time {
-                pos = Some(idx);
-                max_time = repo.last_accessed;
-            }
-        }
-        match pos {
-            Some(idx) => Some(Rc::clone(&self.repos[idx])),
-            None => None,
-        }
-    }
+            };
 
-    pub fn must_latest<S>(&self, remote: S) -> Result<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        match self.latest(remote) {
-            Some(repo) => Ok(repo),
-            None => bail!("Could not find latest repo"),
+            let owner_idx = match owners_index.get(repo.owner.name.as_str()) {
+                Some(idx) => *idx,
+                None => {
+                    let owner_name = repo.owner.name.to_string();
+                    let idx = owners.len() as u32;
+                    owners_index.insert(owner_name.clone(), idx);
+                    owners.push(owner_name);
+                    idx
+                }
+            };
+
+            let labels_idx = match repo.labels.as_ref() {
+                Some(labels_set) => {
+                    let mut labels_idx = HashSet::with_capacity(labels_set.len());
+                    for label in labels_set.iter() {
+                        let idx = match all_labels_index.get(label.as_str()) {
+                            Some(idx) => *idx,
+                            None => {
+                                let label_name = label.to_string();
+                                let idx = all_labels.len() as u32;
+                                all_labels_index.insert(label_name.clone(), idx);
+                                all_labels.push(label_name);
+                                idx
+                            }
+                        };
+                        labels_idx.insert(idx);
+                    }
+                    Some(labels_idx)
+                }
+                None => None,
+            };
+
+            let repo = Rc::try_unwrap(repo).expect("Unwrap repo rc failed");
+            let Repo {
+                name,
+                remote: _,
+                owner: _,
+                path,
+                last_accessed,
+                accessed,
+                labels: _,
+            } = repo;
+
+            repo_buckets.push(RepoBucket {
+                remote: remote_idx,
+                owner: owner_idx,
+                name,
+                path,
+                last_accessed,
+                accessed,
+                labels: labels_idx,
+            })
         }
-    }
 
-    pub fn current(&self) -> Option<Rc<Repo>> {
-        let dir = config::current_dir();
-        self.repos.iter().find_map(|repo| {
-            if repo.get_path().eq(dir) {
-                return Some(Rc::clone(repo));
-            }
-            None
-        })
-    }
-
-    pub fn must_current(&self) -> Result<Rc<Repo>> {
-        match self.current() {
-            Some(repo) => Ok(repo),
-            None => bail!("You are not in a roxide repository"),
-        }
-    }
-
-    pub fn list_all(&self) -> Vec<Rc<Repo>> {
-        let mut list = Vec::with_capacity(self.repos.len());
-        for repo in self.repos.iter() {
-            list.push(Rc::clone(repo));
-        }
-        list
-    }
-
-    pub fn list_by_remote<S>(&self, remote: S) -> Vec<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        let mut list = Vec::new();
-        for repo in self.repos.iter() {
-            if repo.remote.as_str().eq(remote.as_ref()) {
-                list.push(Rc::clone(repo));
-            }
-        }
-        list
-    }
-
-    pub fn list_by_owner<S>(&self, remote: S, owner: S) -> Vec<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        let mut list = Vec::new();
-        for repo in self.repos.iter() {
-            if repo.remote.as_str().eq(remote.as_ref()) && repo.owner.as_str().eq(owner.as_ref()) {
-                list.push(Rc::clone(repo));
-            }
-        }
-        list
-    }
-
-    pub fn list_owners<S>(&self, remote: S) -> Vec<Rc<String>>
-    where
-        S: AsRef<str>,
-    {
-        let mut owners = Vec::new();
-        let mut owner_set = HashSet::new();
-        for repo in self.repos.iter() {
-            if repo.remote.as_str().ne(remote.as_ref()) {
-                continue;
-            }
-            if let None = owner_set.get(repo.owner.as_str()) {
-                owner_set.insert(repo.owner.as_str());
-                owners.push(Rc::clone(&repo.owner));
-            }
-        }
-        owners
-    }
-
-    pub fn add(&mut self, repo: Rc<Repo>) {
-        if let Some(idx) = self.position(&repo) {
-            self.repos[idx] = repo;
-        } else {
-            self.repos.push(repo);
+        Bucket {
+            remotes,
+            owners,
+            labels: all_labels,
+            repos: repo_buckets,
         }
     }
 
-    pub fn update(&mut self, repo: Rc<Repo>) {
-        self.add(repo.update());
-    }
+    fn build_repos(self, cfg: &config::Config) -> Result<Vec<Rc<Repo>>> {
+        let Bucket {
+            remotes: remote_names,
+            owners: owner_names,
+            labels: all_label_names,
+            repos: all_buckets,
+        } = self;
 
-    pub fn remove(&mut self, repo: Rc<Repo>) {
-        if let Some(idx) = self.position(&repo) {
-            self.repos.remove(idx);
+        let mut remote_index: HashMap<u32, Rc<Remote>> = HashMap::with_capacity(remote_names.len());
+        for (idx, remote_name) in remote_names.into_iter().enumerate() {
+            let remote_cfg = match cfg.get_remote(&remote_name)  {
+                Some(remote_cfg) => remote_cfg,
+                None => bail!("could not find remote config for '{remote_name}', please add it to your config file"),
+            };
+
+            let remote = Rc::new(Remote {
+                name: remote_name,
+                cfg: remote_cfg,
+            });
+            remote_index.insert(idx as u32, remote);
         }
-    }
 
-    pub fn close(self) -> Result<()> {
-        let Database { repos, path, lock } = self;
-        let bytes: Bytes = repos.into();
-        bytes.save(&path)?;
-        // Drop lock to release file lock after write done.
-        drop(lock);
-        Ok(())
-    }
+        let owner_name_index: HashMap<u32, String> = owner_names
+            .into_iter()
+            .enumerate()
+            .map(|(idx, owner)| (idx as u32, owner))
+            .collect();
+        let mut owner_index: HashMap<String, HashMap<String, Rc<Owner>>> =
+            HashMap::with_capacity(owner_name_index.len());
 
-    fn position(&self, repo: &Rc<Repo>) -> Option<usize> {
-        let mut pos = None;
-        for (idx, to_update) in self.repos.iter().enumerate() {
-            if to_update.eq(repo) {
-                pos = Some(idx);
-                break;
-            }
+        let label_name_index: HashMap<u32, Rc<String>> = all_label_names
+            .into_iter()
+            .enumerate()
+            .map(|(idx, label)| (idx as u32, Rc::new(label)))
+            .collect();
+
+        let mut repos: Vec<Rc<Repo>> = Vec::with_capacity(all_buckets.len());
+        for repo_bucket in all_buckets {
+            let remote = match remote_index.get(&repo_bucket.remote) {
+                Some(remote) => Rc::clone(remote),
+                None => continue,
+            };
+
+            let owner_name = match owner_name_index.get(&repo_bucket.owner) {
+                Some(owner_name) => owner_name,
+                None => continue,
+            };
+
+            let owner = match owner_index.get(&remote.name) {
+                Some(m) => match m.get(owner_name) {
+                    Some(owner) => Some(Rc::clone(owner)),
+                    None => None,
+                },
+                None => None,
+            };
+            let owner = match owner {
+                Some(o) => o,
+                None => {
+                    let owner_name = owner_name.clone();
+                    let owner_remote = Rc::clone(&remote);
+                    let owner_cfg = cfg.get_owner(&remote.name, &owner_name);
+                    let owner = Rc::new(Owner {
+                        name: owner_name,
+                        remote: owner_remote,
+                        cfg: owner_cfg,
+                    });
+                    match owner_index.get_mut(&remote.name) {
+                        Some(m) => {
+                            m.insert(owner.name.to_string(), Rc::clone(&owner));
+                        }
+                        None => {
+                            let mut m = HashMap::with_capacity(1);
+                            m.insert(owner.name.to_string(), Rc::clone(&owner));
+                            owner_index.insert(remote.name.to_string(), m);
+                        }
+                    }
+                    owner
+                }
+            };
+
+            let labels = match repo_bucket.labels.as_ref() {
+                Some(labels_index) => {
+                    let mut labels = HashSet::with_capacity(labels_index.len());
+                    for idx in labels_index {
+                        if let Some(label_name) = label_name_index.get(idx) {
+                            labels.insert(Rc::clone(label_name));
+                        }
+                    }
+
+                    Some(labels)
+                }
+                None => None,
+            };
+
+            let repo = Rc::new(Repo {
+                name: repo_bucket.name,
+                remote,
+                owner,
+                path: repo_bucket.path,
+                last_accessed: repo_bucket.last_accessed,
+                accessed: repo_bucket.accessed,
+                labels,
+            });
+
+            repos.push(repo);
         }
-        pos
+
+        Ok(repos)
     }
 }
 
 #[cfg(test)]
-pub mod tests {
-    use serial_test::serial;
+mod tests {
+    use crate::config::tests as config_tests;
+    use crate::repo::database::*;
+    use crate::{hash_set, vec_strings};
 
-    use super::*;
+    fn get_expect_bucket() -> Bucket {
+        Bucket {
+            remotes: vec_strings!["github", "gitlab"],
+            owners: vec_strings!["fioncat", "kubernetes", "test"],
+            labels: vec_strings!["pin", "sync"],
+            repos: vec![
+                RepoBucket {
+                    remote: 0,
+                    owner: 0,
+                    name: String::from("roxide"),
+                    accessed: 12.0,
+                    last_accessed: 12,
+                    path: None,
+                    labels: Some(hash_set![0]),
+                },
+                RepoBucket {
+                    remote: 0,
+                    owner: 0,
+                    name: String::from("spacenvim"),
+                    accessed: 11.0,
+                    last_accessed: 11,
+                    path: None,
+                    labels: Some(hash_set![0]),
+                },
+                RepoBucket {
+                    remote: 0,
+                    owner: 1,
+                    name: String::from("kubernetes"),
+                    accessed: 10.0,
+                    last_accessed: 10,
+                    path: None,
+                    labels: None,
+                },
+                RepoBucket {
+                    remote: 1,
+                    owner: 2,
+                    name: String::from("test-repo"),
+                    accessed: 9.0,
+                    last_accessed: 9,
+                    path: None,
+                    labels: Some(hash_set![1]),
+                },
+            ],
+        }
+    }
 
-    pub fn list_repos() -> Vec<Rc<Repo>> {
+    fn get_expect_repos(cfg: &config::Config) -> Vec<Rc<Repo>> {
+        let github_remote = Rc::new(Remote {
+            name: String::from("github"),
+            cfg: cfg.get_remote("github").unwrap(),
+        });
+        let gitlab_remote = Rc::new(Remote {
+            name: String::from("gitlab"),
+            cfg: cfg.get_remote("gitlab").unwrap(),
+        });
+        let fioncat_owner = Rc::new(Owner {
+            name: String::from("fioncat"),
+            remote: Rc::clone(&github_remote),
+            cfg: cfg.get_owner("github", "fioncat"),
+        });
+        let kubernetes_owner = Rc::new(Owner {
+            name: String::from("kubernetes"),
+            remote: Rc::clone(&github_remote),
+            cfg: cfg.get_owner("github", "kubernetes"),
+        });
+        let test_owner = Rc::new(Owner {
+            name: String::from("test"),
+            remote: Rc::clone(&gitlab_remote),
+            cfg: cfg.get_owner("gitlab", "test"),
+        });
+        let pin_label = Rc::new(String::from("pin"));
+        let sync_label = Rc::new(String::from("sync"));
         vec![
-            Repo::new("github", "fioncat", "roxide", None),
-            Repo::new(
-                "github",
-                "fioncat",
-                "spacenvim",
-                Some(String::from("/path/to/nvim-config")),
-            ),
-            Repo::new("github", "fioncat", "csync", None),
-            Repo::new("github", "fioncat", "fioncat", None),
-            Repo::new("github", "fioncat", "dotfiles", None),
-            Repo::new("github", "kubernetes", "kubernetes", None).with_labels(&["tmp", "huge"]),
-            Repo::new("github", "kubernetes", "kube-proxy", None),
-            Repo::new("github", "kubernetes", "kubelet", None),
-            Repo::new("github", "kubernetes", "kubectl", None),
-            Repo::new("gitlab", "my-owner-01", "my-repo-01", None),
-            Repo::new("gitlab", "my-owner-01", "my-repo-02", None),
-            Repo::new("gitlab", "my-owner-01", "my-repo-03", None),
-            Repo::new("gitlab", "my-owner-02", "my-repo-01", None),
-            Repo::new("test", "rust", "hello", None).with_labels(&["tmp"]),
-            Repo::new("test", "rust", "test-roxide", None).with_labels(&["tmp"]),
-            Repo::new("test", "go", "hello", None).with_labels(&["tmp"]),
-            Repo::new("test", "python", "hello", None).with_labels(&["tmp"]),
+            Rc::new(Repo {
+                name: String::from("roxide"),
+                remote: Rc::clone(&github_remote),
+                owner: Rc::clone(&fioncat_owner),
+                path: None,
+                accessed: 12.0,
+                last_accessed: 12,
+                labels: Some(hash_set![Rc::clone(&pin_label)]),
+            }),
+            Rc::new(Repo {
+                name: String::from("spacenvim"),
+                remote: Rc::clone(&github_remote),
+                owner: Rc::clone(&fioncat_owner),
+                path: None,
+                accessed: 11.0,
+                last_accessed: 11,
+                labels: Some(hash_set![pin_label]),
+            }),
+            Rc::new(Repo {
+                name: String::from("kubernetes"),
+                remote: Rc::clone(&github_remote),
+                owner: Rc::clone(&kubernetes_owner),
+                path: None,
+                accessed: 10.0,
+                last_accessed: 10,
+                labels: None,
+            }),
+            Rc::new(Repo {
+                name: String::from("test-repo"),
+                remote: Rc::clone(&gitlab_remote),
+                owner: Rc::clone(&test_owner),
+                path: None,
+                accessed: 9.0,
+                last_accessed: 9,
+                labels: Some(hash_set![sync_label]),
+            }),
         ]
     }
 
     #[test]
-    #[serial]
-    fn test_database() {
-        let path = PathBuf::new();
-        let repos = list_repos();
-        let lock = Lock::acquire("test-database").unwrap();
-        let db = Database { repos, path, lock };
+    fn test_bucket_from() {
+        let cfg = config_tests::get_test_config("test_bucket_from");
 
-        assert_eq!(
-            db.get("github", "fioncat", "dotfiles"),
-            Some(Repo::new("github", "fioncat", "dotfiles", None))
-        );
-        assert_eq!(
-            db.get("github", "fioncat", "spacenvim"),
-            Some(Repo::new(
-                "github",
-                "fioncat",
-                "spacenvim",
-                Some(String::from("/path/to/nvim-config"))
-            ))
-        );
-        assert_eq!(
-            db.get("test", "python", "hello"),
-            Some(Repo::new("test", "python", "hello", None).with_labels(&["tmp"]))
-        );
-        assert_eq!(db.get("test", "python", "unknown"), None);
-        assert_eq!(db.get("github", "fioncat", "unknown"), None);
-        assert_eq!(db.get("", "", ""), None);
-        assert_eq!(
-            db.get_fuzzy("github", "dot"),
-            Some(Repo::new("github", "fioncat", "dotfiles", None))
-        );
-        assert_eq!(
-            db.get_fuzzy("", "kube"),
-            Some(
-                Repo::new("github", "kubernetes", "kubernetes", None).with_labels(&["huge", "tmp"])
-            )
-        );
-        assert_eq!(
-            db.get_fuzzy("", "ro"),
-            Some(Repo::new("github", "fioncat", "roxide", None))
-        );
-        assert_eq!(
-            db.get_fuzzy("gitlab", "my"),
-            Some(Repo::new("gitlab", "my-owner-01", "my-repo-01", None))
-        );
-        assert_eq!(db.get_fuzzy("gitlab", "ro"), None);
-        assert_eq!(db.get_fuzzy("", "zzzzzzzzzzzzzzz"), None);
+        let expect_bucket = get_expect_bucket();
+        let repos = get_expect_repos(&cfg);
+
+        let bucket = Bucket::from_repos(repos);
+        assert_eq!(expect_bucket, bucket);
+    }
+
+    #[test]
+    fn test_bucket_build() {
+        let cfg = config_tests::get_test_config("test_bucket_build");
+
+        let expect_repos = get_expect_repos(&cfg);
+
+        let bucket = get_expect_bucket();
+        let repos = bucket.build_repos(&cfg).unwrap();
+
+        assert_eq!(expect_repos, repos);
+    }
+
+    #[test]
+    fn test_bucket_convert() {
+        let cfg = config_tests::get_test_config("test_bucket_convert");
+
+        let expect_repos = get_expect_repos(&cfg);
+        let repos = get_expect_repos(&cfg);
+
+        let bucket = Bucket::from_repos(repos);
+        let repos = bucket.build_repos(&cfg).unwrap();
+
+        assert_eq!(expect_repos, repos);
     }
 }
