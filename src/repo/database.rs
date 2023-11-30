@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::config;
 use crate::repo::{Owner, Remote, Repo};
 
+/// The Bucket is repositories data structure stored on disk that can be directly
+/// serialized and deserialized.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct Bucket {
     remotes: Vec<String>,
@@ -18,6 +20,8 @@ struct Bucket {
     repos: Vec<RepoBucket>,
 }
 
+/// The RepoBucket is a repository data structure stored on disk that can be directly
+/// serialized and deserialized.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct RepoBucket {
     remote: u32,
@@ -30,13 +34,14 @@ struct RepoBucket {
 }
 
 impl Bucket {
-    // Assume a maximum size for the database. This prevents bincode from
-    // throwing strange errors when it encounters invalid data.
+    /// Assume a maximum size for the database. This prevents bincode from
+    /// throwing strange errors when it encounters invalid data.
     const MAX_SIZE: u64 = 32 << 20;
 
-    // Use Version to ensure that decode and encode are consistent.
+    /// Use Version to ensure that decode and encode are consistent.
     const VERSION: u32 = 1;
 
+    /// Return empty Bucket, with no repository data.
     fn empty() -> Self {
         Bucket {
             remotes: Vec::new(),
@@ -46,6 +51,7 @@ impl Bucket {
         }
     }
 
+    /// Decode json data to Bucket.
     fn decode(data: &[u8]) -> Result<Bucket> {
         let decoder = &mut bincode::options()
             .with_fixint_encoding()
@@ -67,6 +73,18 @@ impl Bucket {
         Ok(decoder.deserialize(data).context("decode repo data")?)
     }
 
+    /// To save metadata storage space, transform the list of repositories
+    /// suitable for queries into data suitable for storage in buckets.
+    /// The bucket data structure undergoes some special optimizations—it, stores
+    /// remote, owner, and label data only once, while repositories store indices
+    /// of these data. Information about remote, owner, and label for a particular
+    /// repository is located through these indices.
+    ///
+    /// # Arguments
+    ///
+    /// * `repos` - The repositories to convert, note that please ensure that the
+    /// `Rc` references are unique when calling this method; otherwise, the function
+    /// will panic.
     fn from_repos(repos: Vec<Rc<Repo>>) -> Bucket {
         let mut remotes: Vec<String> = Vec::new();
         let mut remotes_index: HashMap<String, u32> = HashMap::new();
@@ -122,6 +140,9 @@ impl Bucket {
                 None => None,
             };
 
+            // Here, directly unwrap the Rc; it is the responsibility of the
+            // external code to guarantee that the current repository has a unique
+            // reference.
             let repo = Rc::try_unwrap(repo).expect("Unwrap repo rc failed");
             let Repo {
                 name,
@@ -152,6 +173,17 @@ impl Bucket {
         }
     }
 
+    /// Convert the bucket data suitable for storage into repositories suitable for
+    /// queries; this function is the reverse process of `from_repos`.
+    /// The constructed repositories will all be Rc pointers to save memory and
+    /// clone costs. This also implies that they are entirely read-only; if modifications
+    /// are necessary, new repository objects may need to be created.
+    ///
+    /// # Arguments
+    ///
+    /// * `cfg` - The config is used to inject remote and owner configuration
+    /// information into the generated repository object for convenient subsequent
+    /// calls.
     fn build_repos(self, cfg: &config::Config) -> Result<Vec<Rc<Repo>>> {
         let Bucket {
             remotes: remote_names,
