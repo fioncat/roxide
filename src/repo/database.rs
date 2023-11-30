@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::repo::{Owner, Remote, Repo};
 use crate::utils::{self, FileLock};
 
@@ -105,6 +105,7 @@ impl Bucket {
 
     /// To save metadata storage space, transform the list of repositories
     /// suitable for queries into data suitable for storage in buckets.
+    ///
     /// The bucket data structure undergoes some special optimizations—it, stores
     /// remote, owner, and label data only once, while repositories store indices
     /// of these data. Information about remote, owner, and label for a particular
@@ -214,7 +215,7 @@ impl Bucket {
     /// * `cfg` - The config is used to inject remote and owner configuration
     /// information into the generated repository object for convenient subsequent
     /// calls.
-    fn build_repos(self, cfg: &config::Config) -> Result<Vec<Rc<Repo>>> {
+    fn build_repos(self, cfg: &Config) -> Result<Vec<Rc<Repo>>> {
         let Bucket {
             remotes: remote_names,
             owners: owner_names,
@@ -605,7 +606,7 @@ impl Database<'_> {
     /// repository to update its access time and count. Additionally, you can
     /// update the repository's labels using the `labels` parameter.
     ///
-    /// # Arguements
+    /// # Arguments
     ///
     /// * `repo` - The repository to update.
     /// * `labels` - If None, do not update labels, else, replace the labels with
@@ -703,7 +704,7 @@ mod bucket_tests {
         }
     }
 
-    fn get_expect_repos(cfg: &config::Config) -> Vec<Rc<Repo>> {
+    fn get_expect_repos(cfg: &Config) -> Vec<Rc<Repo>> {
         let github_remote = Rc::new(Remote {
             name: String::from("github"),
             cfg: cfg.get_remote("github").unwrap(),

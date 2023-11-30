@@ -67,7 +67,7 @@ pub fn write_file(path: &PathBuf, data: &[u8]) -> Result<()> {
 /// There's no need for manual release of the file lock; it automatically releases
 /// upon object release.
 pub struct FileLock {
-    path: PathBuf,
+    _path: PathBuf,
     /// Wrap the `file_lock` crate
     _file_lock: file_lock::FileLock,
 }
@@ -80,7 +80,7 @@ impl FileLock {
     /// lock. We will create a `lock_{name}` file lock under the metadir directory,
     /// which will store the current process's PID.
     ///
-    /// # Arguements
+    /// # Arguments
     ///
     /// * `cfg` - We will create file lock under `cfg.metadir`.
     /// * `name` - File lock name, you can use this to create locks at different
@@ -121,7 +121,7 @@ impl FileLock {
 
         // The file lock will be released after file_lock dropped.
         Ok(FileLock {
-            path,
+            _path: path,
             _file_lock: file_lock,
         })
     }

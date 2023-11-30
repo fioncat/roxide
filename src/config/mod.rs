@@ -108,7 +108,7 @@ impl Config {
         }
     }
 
-    pub fn get_current_dir<'a>(&'a self) -> &'a PathBuf {
+    pub fn get_current_dir(&self) -> &PathBuf {
         self.current_dir.as_ref().unwrap()
     }
 
