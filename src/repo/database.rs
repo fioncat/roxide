@@ -111,11 +111,15 @@ impl Bucket {
     /// of these data. Information about remote, owner, and label for a particular
     /// repository is located through these indices.
     ///
+    /// # Panics
+    ///
+    /// Please ensure that the `Rc` references in `repos` are unique when calling
+    /// this method; since we will try to unwrap them, otherwise, the function
+    /// will panic.
+    ///
     /// # Arguments
     ///
-    /// * `repos` - The repositories to convert, note that please ensure that the
-    /// `Rc` references are unique when calling this method; otherwise, the function
-    /// will panic.
+    /// * `repos` - The repositories to convert.
     fn from_repos(repos: Vec<Rc<Repo>>) -> Bucket {
         let mut remotes: Vec<String> = Vec::new();
         let mut remotes_index: HashMap<String, u32> = HashMap::new();

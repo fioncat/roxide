@@ -126,3 +126,9 @@ impl FileLock {
         })
     }
 }
+
+pub fn expandenv(s: impl AsRef<str>) -> Result<String> {
+    let s = shellexpand::full(s.as_ref())
+        .with_context(|| format!("expand env for '{}'", s.as_ref()))?;
+    Ok(s.to_string())
+}
