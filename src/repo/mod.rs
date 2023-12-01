@@ -42,7 +42,7 @@ pub struct Repo {
 
 impl Repo {
     pub fn new<S, O, N>(
-        cfg: &mut Config,
+        cfg: &Config,
         remote_name: S,
         owner_name: O,
         name: N,
@@ -54,20 +54,46 @@ impl Repo {
         O: AsRef<str>,
         N: AsRef<str>,
     {
-        let remote = cfg.must_get_remote(remote_name.as_ref())?;
+        let remote_cfg = cfg.must_get_remote(remote_name.as_ref())?;
+        let remote = Rc::new(Remote {
+            name: remote_name.as_ref().to_string(),
+            cfg: remote_cfg.clone(),
+        });
         let owner = match cfg.get_owner(remote_name.as_ref(), owner_name.as_ref()) {
-            Some(owner) => owner,
+            Some(owner_cfg) => Rc::new(Owner {
+                name: owner_name.as_ref().to_string(),
+                cfg: Some(owner_cfg.clone()),
+                remote: Rc::clone(&remote),
+            }),
             None => Rc::new(Owner {
                 name: owner_name.as_ref().to_string(),
-                remote: Rc::clone(&remote),
                 cfg: None,
+                remote: Rc::clone(&remote),
             }),
         };
 
         let name = name.as_ref().to_string();
 
+        let mut labels: Option<HashSet<String>> = match labels {
+            Some(labels) => Some(labels.iter().map(|label| label.clone()).collect()),
+            None => None,
+        };
+        if let Some(remote_labels) = remote_cfg.labels.as_ref() {
+            match labels.as_mut() {
+                Some(labels) => labels.extend(remote_labels.clone()),
+                None => labels = Some(remote_labels.clone()),
+            }
+        }
+        if let Some(owner_cfg) = owner.cfg.as_ref() {
+            if let Some(owner_labels) = owner_cfg.labels.as_ref() {
+                match labels.as_mut() {
+                    Some(labels) => labels.extend(owner_labels.clone()),
+                    None => labels = Some(owner_labels.clone()),
+                }
+            }
+        }
         let labels = match labels {
-            Some(labels) => Some(labels.iter().map(|label| Rc::new(label.clone())).collect()),
+            Some(labels) => Some(labels.into_iter().map(|label| Rc::new(label)).collect()),
             None => None,
         };
 
@@ -212,5 +238,37 @@ impl Repo {
             .join(remote.as_ref())
             .join(owner.as_ref())
             .join(name.as_ref())
+    }
+
+    pub fn labels_string(&self) -> Option<String> {
+        match self.labels.as_ref() {
+            Some(labels) => {
+                let mut labels: Vec<String> =
+                    labels.iter().map(|label| label.to_string()).collect();
+                labels.sort();
+                Some(labels.join(","))
+            }
+            None => None,
+        }
+    }
+
+    pub fn name_with_owner(&self) -> String {
+        format!("{}/{}", self.owner.name, self.name)
+    }
+
+    pub fn name_with_remote(&self) -> String {
+        format!("{}:{}/{}", self.remote.name, self.owner.name, self.name)
+    }
+
+    pub fn name_with_labels(&self) -> String {
+        match self.labels_string() {
+            Some(labels) => {
+                format!(
+                    "{}:{}/{}@{}",
+                    self.remote.name, self.owner.name, self.name, labels
+                )
+            }
+            None => self.name_with_remote(),
+        }
     }
 }

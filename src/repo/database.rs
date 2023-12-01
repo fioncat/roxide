@@ -229,10 +229,14 @@ impl Bucket {
 
         let mut remote_index: HashMap<u32, Rc<Remote>> = HashMap::with_capacity(remote_names.len());
         for (idx, remote_name) in remote_names.into_iter().enumerate() {
-            let remote = match cfg.get_remote(&remote_name)  {
+            let remote_cfg = match cfg.get_remote(&remote_name)  {
                 Some(remote) => remote,
                 None => bail!("could not find remote config for '{remote_name}', please add it to your config file"),
             };
+            let remote = Rc::new(Remote {
+                name: remote_name,
+                cfg: remote_cfg.clone(),
+            });
 
             remote_index.insert(idx as u32, remote);
         }
@@ -286,7 +290,11 @@ impl Bucket {
                     let owner_name = owner_name.clone();
                     let owner_remote = Rc::clone(&remote);
                     let owner = match cfg.get_owner(&remote.name, &owner_name) {
-                        Some(owner) => owner,
+                        Some(owner_cfg) => Rc::new(Owner {
+                            name: owner_name,
+                            remote: owner_remote,
+                            cfg: Some(owner_cfg.clone()),
+                        }),
                         None => Rc::new(Owner {
                             name: owner_name,
                             remote: owner_remote,
@@ -333,6 +341,7 @@ impl Bucket {
 
             repos.push(repo);
         }
+        repos.sort_unstable_by(|repo1, repo2| repo2.score(cfg).total_cmp(&repo1.score(cfg)));
 
         Ok(repos)
     }
@@ -707,11 +716,29 @@ mod bucket_tests {
     }
 
     fn get_expect_repos(cfg: &Config) -> Vec<Rc<Repo>> {
-        let github_remote = cfg.get_remote("github").unwrap();
-        let gitlab_remote = cfg.get_remote("gitlab").unwrap();
-        let fioncat_owner = cfg.get_owner("github", "fioncat").unwrap();
-        let kubernetes_owner = cfg.get_owner("github", "kubernetes").unwrap();
-        let test_owner = cfg.get_owner("gitlab", "test").unwrap();
+        let github_remote = Rc::new(Remote {
+            name: format!("github"),
+            cfg: cfg.get_remote("github").unwrap().clone(),
+        });
+        let gitlab_remote = Rc::new(Remote {
+            name: format!("gitlab"),
+            cfg: cfg.get_remote("gitlab").unwrap().clone(),
+        });
+        let fioncat_owner = Rc::new(Owner {
+            name: format!("fioncat"),
+            remote: Rc::clone(&github_remote),
+            cfg: Some(cfg.get_owner("github", "fioncat").unwrap().clone()),
+        });
+        let kubernetes_owner = Rc::new(Owner {
+            name: format!("kubernetes"),
+            remote: Rc::clone(&github_remote),
+            cfg: Some(cfg.get_owner("github", "kubernetes").unwrap().clone()),
+        });
+        let test_owner = Rc::new(Owner {
+            name: format!("test"),
+            remote: Rc::clone(&gitlab_remote),
+            cfg: Some(cfg.get_owner("gitlab", "test").unwrap().clone()),
+        });
 
         let pin_label = Rc::new(String::from("pin"));
         let sync_label = Rc::new(String::from("sync"));
@@ -789,5 +816,112 @@ mod bucket_tests {
         let repos = bucket.build_repos(&cfg).unwrap();
 
         assert_eq!(expect_repos, repos);
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::config::tests;
+    use crate::hashset_strings;
+    use crate::repo::database::*;
+
+    pub fn get_test_repos(cfg: &Config) -> Vec<Rc<Repo>> {
+        let mark_labels = Some(hashset_strings!["mark"]);
+        vec![
+            Repo::new(cfg, "github", "fioncat", "csync", None, &mark_labels).unwrap(),
+            Repo::new(cfg, "github", "fioncat", "fioncat", None, &None).unwrap(),
+            Repo::new(cfg, "github", "fioncat", "dotfiles", None, &None).unwrap(),
+            Repo::new(
+                cfg,
+                "github",
+                "kubernetes",
+                "kubernetes",
+                None,
+                &mark_labels,
+            )
+            .unwrap(),
+            Repo::new(cfg, "github", "kubernetes", "kube-proxy", None, &None).unwrap(),
+            Repo::new(cfg, "github", "kubernetes", "kubelet", None, &None).unwrap(),
+            Repo::new(cfg, "github", "kubernetes", "kubectl", None, &None).unwrap(),
+            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-01", None, &None).unwrap(),
+            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-02", None, &None).unwrap(),
+            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-03", None, &None).unwrap(),
+            Repo::new(cfg, "gitlab", "my-owner-02", "my-repo-01", None, &None).unwrap(),
+        ]
+    }
+
+    #[test]
+    fn test_load() {
+        let cfg = tests::load_test_config("database_load");
+        let repos = get_test_repos(&cfg);
+
+        let mut expect_items: Vec<String> =
+            repos.iter().map(|repo| repo.name_with_labels()).collect();
+        expect_items.sort();
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        db.save().unwrap();
+
+        let db = Database::load(&cfg).unwrap();
+        let repos = db.list_all(&None);
+        let mut items: Vec<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
+        items.sort();
+
+        assert_eq!(expect_items, items);
+    }
+
+    #[test]
+    fn test_get() {
+        let cfg = tests::load_test_config("database_get");
+        let repos = get_test_repos(&cfg);
+
+        let expect_repos = repos.clone();
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        assert_eq!(
+            db.get("github", "fioncat", "csync")
+                .unwrap()
+                .name_with_labels()
+                .as_str(),
+            "github:fioncat/csync@mark,pin,sync"
+        );
+        assert_eq!(
+            db.get("gitlab", "my-owner-01", "my-repo-01")
+                .unwrap()
+                .name_with_labels()
+                .as_str(),
+            "gitlab:my-owner-01/my-repo-01"
+        );
+        assert_eq!(db.get("gitlab", "my-owner-01", "my-repo"), None);
+
+        for expect_repo in expect_repos {
+            let repo = db
+                .get(
+                    expect_repo.remote.name.as_str(),
+                    expect_repo.owner.name.as_str(),
+                    expect_repo.name.as_str(),
+                )
+                .unwrap();
+            assert_eq!(repo.name_with_labels(), expect_repo.name_with_labels());
+        }
+    }
+
+    #[test]
+    fn test_list() {
+        let cfg = tests::load_test_config("database_list");
+        let repos = get_test_repos(&cfg);
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
     }
 }

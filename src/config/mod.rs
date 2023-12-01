@@ -5,14 +5,13 @@ pub mod defaults;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::SystemTime;
 use std::{env, fs, io};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use crate::{repo, utils};
+use crate::utils;
 
 /// The basic configuration, defining some global behaviors of roxide.
 #[derive(Debug, Deserialize)]
@@ -52,12 +51,6 @@ pub struct Config {
 
     #[serde(skip)]
     meta_path: Option<PathBuf>,
-
-    #[serde(skip)]
-    remotes_rc: Option<HashMap<String, Rc<repo::Remote>>>,
-
-    #[serde(skip)]
-    owners_rc: Option<HashMap<String, HashMap<String, Rc<repo::Owner>>>>,
 }
 
 /// Indicates an execution step in Workflow, which can be writing a file or
@@ -374,8 +367,6 @@ impl Config {
             now: None,
             workspace_path: None,
             meta_path: None,
-            remotes_rc: Some(HashMap::new()),
-            owners_rc: Some(HashMap::new()),
         };
         cfg.validate().context("validate config content")?;
         Ok(cfg)
@@ -423,38 +414,17 @@ impl Config {
         self.current_dir = Some(current_dir);
         self.now = Some(now.as_secs());
 
-        if let None = self.remotes_rc {
-            self.remotes_rc = Some(HashMap::new());
-        }
-
         Ok(())
     }
 
-    pub fn get_remote<S>(&mut self, name: S) -> Option<Rc<repo::Remote>>
+    pub fn get_remote<S>(&self, name: S) -> Option<&Remote>
     where
         S: AsRef<str>,
     {
-        if let Some(remote) = self.remotes_rc.unwrap().get(name.as_ref()) {
-            return Some(Rc::clone(remote));
-        }
-        match self.remotes.get(name.as_ref()) {
-            Some(remote) => {
-                let remote_cfg = remote.clone();
-                let remote = Rc::new(repo::Remote {
-                    name: name.as_ref().to_string(),
-                    cfg: remote_cfg,
-                });
-                self.remotes_rc
-                    .unwrap()
-                    .insert(name.as_ref().to_string(), Rc::clone(&remote));
-
-                Some(remote)
-            }
-            None => None,
-        }
+        self.remotes.get(name.as_ref())
     }
 
-    pub fn must_get_remote<S>(&mut self, name: S) -> Result<Rc<repo::Remote>>
+    pub fn must_get_remote<S>(&self, name: S) -> Result<&Remote>
     where
         S: AsRef<str>,
     {
@@ -464,52 +434,15 @@ impl Config {
         }
     }
 
-    pub fn get_owner<R, N>(&mut self, remote_name: R, name: N) -> Option<Rc<repo::Owner>>
+    pub fn get_owner<R, N>(&self, remote_name: R, name: N) -> Option<&Owner>
     where
         R: AsRef<str>,
         N: AsRef<str>,
     {
-        let remote = match self.get_remote(remote_name.as_ref()) {
-            Some(remote) => remote,
-            None => return None,
-        };
-        match self.owners_rc.unwrap().get(remote_name.as_ref()) {
-            Some(owners) => match owners.get(name.as_ref()) {
-                Some(owner) => return Some(Rc::clone(owner)),
-                None => {}
-            },
-            None => {}
-        };
-
-        let owner_cfg = match remote.cfg.owners.get(remote_name.as_ref()) {
-            Some(owner_cfg) => owner_cfg.clone(),
-            None => return None,
-        };
-
-        let owner = Rc::new(repo::Owner {
-            name: name.as_ref().to_string(),
-            cfg: Some(owner_cfg),
-            remote,
-        });
-
-        if let Some(owners_rc) = self.owners_rc.unwrap().get_mut(remote_name.as_ref()) {
-            owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
+        match self.get_remote(remote_name.as_ref()) {
+            Some(remote) => remote.owners.get(name.as_ref()),
+            None => None,
         }
-
-        // match self.owners_rc.unwrap().get_mut(remote_name.as_ref()) {
-        //     Some(owners_rc) => {
-        //         owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
-        //     }
-        //     None => {
-        //         let mut owners_rc = HashMap::with_capacity(1);
-        //         owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
-        //         self.owners_rc
-        //             .unwrap()
-        //             .insert(remote_name.as_ref().to_string(), owners_rc);
-        //     }
-        // };
-
-        Some(owner)
     }
 
     pub fn get_workspace_dir(&self) -> &PathBuf {
@@ -631,7 +564,7 @@ workflows:
 
     #[test]
     fn test_remote() {
-        let mut cfg = load_test_config("config_remote");
+        let cfg = load_test_config("config_remote");
 
         assert_eq!(cfg.remotes.len(), 3);
 
@@ -685,10 +618,8 @@ workflows:
                 format!("fioncat") => owner0,
                 format!("kubernetes")  => owner1
             ],
-
-            owners_rc: None,
         };
-        assert_eq!(cfg.get_remote("github").unwrap().cfg, github_remote);
+        assert_eq!(cfg.get_remote("github").unwrap().clone(), github_remote);
 
         let owner2 = Owner {
             labels: Some(hashset_strings!["sync", "pin"]),
@@ -714,10 +645,8 @@ workflows:
 
             alias_owner_map: None,
             alias_repo_map: None,
-
-            owners_rc: None,
         };
-        assert_eq!(cfg.get_remote("gitlab").unwrap().cfg, gitlab_remote);
+        assert_eq!(cfg.get_remote("gitlab").unwrap().clone(), gitlab_remote);
 
         let owner3 = Owner {
             on_create: Some(vec![format!("golang")]),
@@ -754,10 +683,8 @@ workflows:
 
             alias_owner_map: None,
             alias_repo_map: None,
-
-            owners_rc: None,
         };
-        assert_eq!(cfg.get_remote("test").unwrap().cfg, test_remote);
+        assert_eq!(cfg.get_remote("test").unwrap().clone(), test_remote);
     }
 
     const TEST_MAIN_GO_CONTENT: &'static str = r#"package main
