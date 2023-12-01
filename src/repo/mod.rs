@@ -1,8 +1,13 @@
+#![allow(dead_code)]
+
 pub mod database;
 
 use std::{collections::HashSet, path::PathBuf, rc::Rc};
 
+use anyhow::Result;
+
 use crate::config::{self, Config};
+use crate::utils;
 
 #[derive(Debug, PartialEq)]
 pub struct Remote {
@@ -36,13 +41,54 @@ pub struct Repo {
 }
 
 impl Repo {
+    pub fn new<S, O, N>(
+        cfg: &mut Config,
+        remote_name: S,
+        owner_name: O,
+        name: N,
+        path: Option<String>,
+        labels: &Option<HashSet<String>>,
+    ) -> Result<Rc<Repo>>
+    where
+        S: AsRef<str>,
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        let remote = cfg.must_get_remote(remote_name.as_ref())?;
+        let owner = match cfg.get_owner(remote_name.as_ref(), owner_name.as_ref()) {
+            Some(owner) => owner,
+            None => Rc::new(Owner {
+                name: owner_name.as_ref().to_string(),
+                remote: Rc::clone(&remote),
+                cfg: None,
+            }),
+        };
+
+        let name = name.as_ref().to_string();
+
+        let labels = match labels {
+            Some(labels) => Some(labels.iter().map(|label| Rc::new(label.clone())).collect()),
+            None => None,
+        };
+
+        Ok(Rc::new(Repo {
+            name,
+            remote,
+            owner,
+            path,
+            last_accessed: cfg.now(),
+            accessed: 0.0,
+            labels,
+        }))
+    }
+
     pub fn get_path(&self, cfg: &Config) -> PathBuf {
         if let Some(path) = self.path.as_ref() {
             return PathBuf::from(path);
         }
 
-        let path = PathBuf::from(&cfg.workspace);
-        path.join(&self.remote.name)
+        cfg.get_workspace_dir()
+            .join(&self.remote.name)
             .join(&self.owner.name)
             .join(&self.name)
     }
@@ -88,5 +134,83 @@ impl Repo {
             accessed: self.accessed + 1.0,
             labels: new_labels,
         })
+    }
+
+    pub fn score(&self, cfg: &Config) -> f64 {
+        let duration = cfg.now().saturating_sub(self.last_accessed);
+        if duration < utils::HOUR {
+            self.accessed * 4.0
+        } else if duration < utils::DAY {
+            self.accessed * 2.0
+        } else if duration < utils::WEEK {
+            self.accessed * 0.5
+        } else {
+            self.accessed * 0.25
+        }
+    }
+
+    pub fn clone_url(&self) -> String {
+        Self::get_clone_url(self.owner.name.as_str(), self.name.as_str(), &self.remote)
+    }
+
+    pub fn get_clone_url<O, N>(owner: O, name: N, remote: &Remote) -> String
+    where
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        if remote.cfg.has_alias() {
+            let owner = match remote.cfg.alias_owner(owner.as_ref()) {
+                Some(name) => name,
+                None => owner.as_ref(),
+            };
+            let name = match remote.cfg.alias_repo(owner, name.as_ref()) {
+                Some(name) => name,
+                None => name.as_ref(),
+            };
+
+            return Self::get_clone_url_raw(owner, name, remote);
+        }
+        Self::get_clone_url_raw(owner, name, remote)
+    }
+
+    pub fn get_clone_url_raw<O, N>(owner: O, name: N, remote: &Remote) -> String
+    where
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        let mut ssh = remote.cfg.ssh;
+        if let Some(owner_cfg) = remote.cfg.owners.get(owner.as_ref()) {
+            if let Some(use_ssh) = owner_cfg.ssh {
+                ssh = use_ssh;
+            }
+        }
+
+        let domain = match remote.cfg.clone.as_ref() {
+            Some(domain) => domain.as_str(),
+            None => "github.com",
+        };
+
+        if ssh {
+            format!("git@{}:{}/{}.git", domain, owner.as_ref(), name.as_ref())
+        } else {
+            format!(
+                "https://{}/{}/{}.git",
+                domain,
+                owner.as_ref(),
+                name.as_ref()
+            )
+        }
+    }
+
+    pub fn get_workspace_path<R, O, N>(cfg: &Config, remote: R, owner: O, name: N) -> PathBuf
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        cfg.get_workspace_dir()
+            .join(remote.as_ref())
+            .join(owner.as_ref())
+            .join(name.as_ref())
     }
 }

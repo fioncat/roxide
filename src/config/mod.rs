@@ -5,13 +5,14 @@ pub mod defaults;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::SystemTime;
 use std::{env, fs, io};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use crate::utils;
+use crate::{repo, utils};
 
 /// The basic configuration, defining some global behaviors of roxide.
 #[derive(Debug, Deserialize)]
@@ -45,11 +46,23 @@ pub struct Config {
 
     #[serde(skip)]
     now: Option<u64>,
+
+    #[serde(skip)]
+    workspace_path: Option<PathBuf>,
+
+    #[serde(skip)]
+    meta_path: Option<PathBuf>,
+
+    #[serde(skip)]
+    remotes_rc: Option<HashMap<String, Rc<repo::Remote>>>,
+
+    #[serde(skip)]
+    owners_rc: Option<HashMap<String, HashMap<String, Rc<repo::Owner>>>>,
 }
 
 /// Indicates an execution step in Workflow, which can be writing a file or
 /// executing a shell command.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct WorkflowStep {
     /// If the Step is to write to a file, then name is the file name. If Step
     /// is an execution command, name is the name of the step. (required)
@@ -327,22 +340,30 @@ impl Config {
 
     pub fn load() -> Result<Config> {
         let path = Self::get_path()?;
-        let mut cfg = match path.as_ref() {
-            Some(path) => {
-                let file = File::open(path)
-                    .with_context(|| format!("open config file '{}'", path.display()))?;
-                serde_yaml::from_reader(file)
-                    .with_context(|| format!("parse config file yaml '{}'", path.display()))?
-            }
-            None => Self::default(),
+        let cfg = match path.as_ref() {
+            Some(path) => Self::read(&path)?,
+            None => Self::default()?,
         };
+        Ok(cfg)
+    }
 
+    pub fn read(path: &PathBuf) -> Result<Config> {
+        let file =
+            File::open(path).with_context(|| format!("open config file '{}'", path.display()))?;
+        let mut cfg: Config = serde_yaml::from_reader(file)
+            .with_context(|| format!("parse config file yaml '{}'", path.display()))?;
         cfg.validate().context("validate config content")?;
         Ok(cfg)
     }
 
-    pub fn default() -> Config {
-        Config {
+    pub fn read_data(data: &[u8]) -> Result<Config> {
+        let mut cfg: Config = serde_yaml::from_slice(data).context("parse confg data")?;
+        cfg.validate().context("validate config content")?;
+        Ok(cfg)
+    }
+
+    pub fn default() -> Result<Config> {
+        let mut cfg = Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
             cmd: defaults::cmd(),
@@ -351,7 +372,13 @@ impl Config {
             workflows: defaults::empty_map(),
             current_dir: None,
             now: None,
-        }
+            workspace_path: None,
+            meta_path: None,
+            remotes_rc: Some(HashMap::new()),
+            owners_rc: Some(HashMap::new()),
+        };
+        cfg.validate().context("validate config content")?;
+        Ok(cfg)
     }
 
     pub fn validate(&mut self) -> Result<()> {
@@ -359,11 +386,24 @@ impl Config {
             self.workspace = defaults::workspace();
         }
         self.workspace = utils::expandenv(&self.workspace).context("expand config workspace")?;
+        let workspace_path = PathBuf::from(&self.workspace);
+        if !workspace_path.is_absolute() {
+            bail!(
+                "workspace path '{}' is not an absolute path",
+                self.workspace
+            );
+        }
+        self.workspace_path = Some(workspace_path);
 
         if self.metadir.is_empty() {
             self.metadir = defaults::metadir();
         }
         self.metadir = utils::expandenv(&self.metadir).context("expand config metadir")?;
+        let meta_path = PathBuf::from(&self.metadir);
+        if !meta_path.is_absolute() {
+            bail!("meta path '{}' is not an absolute path", self.metadir);
+        }
+        self.meta_path = Some(meta_path);
 
         if self.cmd.is_empty() {
             self.cmd = defaults::cmd();
@@ -383,31 +423,101 @@ impl Config {
         self.current_dir = Some(current_dir);
         self.now = Some(now.as_secs());
 
+        if let None = self.remotes_rc {
+            self.remotes_rc = Some(HashMap::new());
+        }
+
         Ok(())
     }
 
-    pub fn get_remote<S>(&self, name: S) -> Option<Remote>
+    pub fn get_remote<S>(&mut self, name: S) -> Option<Rc<repo::Remote>>
     where
         S: AsRef<str>,
     {
+        if let Some(remote) = self.remotes_rc.unwrap().get(name.as_ref()) {
+            return Some(Rc::clone(remote));
+        }
         match self.remotes.get(name.as_ref()) {
-            Some(remote) => Some(remote.clone()),
+            Some(remote) => {
+                let remote_cfg = remote.clone();
+                let remote = Rc::new(repo::Remote {
+                    name: name.as_ref().to_string(),
+                    cfg: remote_cfg,
+                });
+                self.remotes_rc
+                    .unwrap()
+                    .insert(name.as_ref().to_string(), Rc::clone(&remote));
+
+                Some(remote)
+            }
             None => None,
         }
     }
 
-    pub fn get_owner<R, N>(&self, remote_name: R, name: N) -> Option<Owner>
+    pub fn must_get_remote<S>(&mut self, name: S) -> Result<Rc<repo::Remote>>
+    where
+        S: AsRef<str>,
+    {
+        match self.get_remote(name.as_ref()) {
+            Some(remote) => Ok(remote),
+            None => bail!("remote '{}' not found", name.as_ref()),
+        }
+    }
+
+    pub fn get_owner<R, N>(&mut self, remote_name: R, name: N) -> Option<Rc<repo::Owner>>
     where
         R: AsRef<str>,
         N: AsRef<str>,
     {
-        match self.remotes.get(remote_name.as_ref()) {
-            Some(remote) => match remote.owners.get(name.as_ref()) {
-                Some(owner) => Some(owner.clone()),
-                None => None,
+        let remote = match self.get_remote(remote_name.as_ref()) {
+            Some(remote) => remote,
+            None => return None,
+        };
+        match self.owners_rc.unwrap().get(remote_name.as_ref()) {
+            Some(owners) => match owners.get(name.as_ref()) {
+                Some(owner) => return Some(Rc::clone(owner)),
+                None => {}
             },
-            None => None,
+            None => {}
+        };
+
+        let owner_cfg = match remote.cfg.owners.get(remote_name.as_ref()) {
+            Some(owner_cfg) => owner_cfg.clone(),
+            None => return None,
+        };
+
+        let owner = Rc::new(repo::Owner {
+            name: name.as_ref().to_string(),
+            cfg: Some(owner_cfg),
+            remote,
+        });
+
+        if let Some(owners_rc) = self.owners_rc.unwrap().get_mut(remote_name.as_ref()) {
+            owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
         }
+
+        // match self.owners_rc.unwrap().get_mut(remote_name.as_ref()) {
+        //     Some(owners_rc) => {
+        //         owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
+        //     }
+        //     None => {
+        //         let mut owners_rc = HashMap::with_capacity(1);
+        //         owners_rc.insert(name.as_ref().to_string(), Rc::clone(&owner));
+        //         self.owners_rc
+        //             .unwrap()
+        //             .insert(remote_name.as_ref().to_string(), owners_rc);
+        //     }
+        // };
+
+        Some(owner)
+    }
+
+    pub fn get_workspace_dir(&self) -> &PathBuf {
+        self.workspace_path.as_ref().unwrap()
+    }
+
+    pub fn get_meta_dir(&self) -> &PathBuf {
+        self.meta_path.as_ref().unwrap()
     }
 
     pub fn get_current_dir(&self) -> &PathBuf {
@@ -421,73 +531,277 @@ impl Config {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{config::*, hash_set};
+    use crate::config::*;
+    use crate::{hashmap, hashmap_strings, hashset_strings};
 
-    pub fn get_test_config(name: &str) -> Config {
-        let owner = Owner {
+    const TEST_CONFIG_YAML: &'static str = r#"
+workspace: "${PWD}/_test/{NAME}/workspace"
+metadir: "${PWD}/_test/{NAME}/meta"
+
+cmd: "rox"
+
+remotes:
+  github:
+    clone: github.com
+    user: "fioncat"
+    email: "lazycat7706@gmail.com"
+    ssh: false
+    labels: ["sync"]
+    provider: "github"
+
+    owners:
+      fioncat:
+        labels: ["pin"]
+        ssh: true
+        repo_alias:
+          spacenvim: vim
+          roxide: rox
+      kubernetes:
+        alias: "k8s"
+        labels: ["huge"]
+        repo_alias:
+          kubernetes: k8s
+
+  gitlab:
+    clone: gitlab.com
+    user: "test"
+    email: "test-email@test.com"
+    ssh: false
+    provider: "gitlab"
+    token: "test-token-gitlab"
+    cache_hours: 100
+    list_limit: 500
+    api_timeout: 30
+    api_domain: "gitlab.com"
+    owners:
+      test:
+        labels: ["sync", "pin"]
+
+  test:
+    owners:
+      golang:
+        on_create: ["golang"]
+      rust:
+        on_create: ["rust"]
+
+workflows:
+  golang:
+  - name: main.go
+    file: |
+      package main
+
+      import "fmt"
+
+      func main() {
+      \tfmt.Println("hello, world!")
+      }
+  - name: go module
+    run: go mod init ${REPO_NAME}
+
+  rust:
+  - name: init cargo
+    run: cargo init
+
+  fetch:
+  - name: fetch git
+    run: git fetch --all
+"#;
+
+    pub fn load_test_config(name: &str) -> Config {
+        let yaml = TEST_CONFIG_YAML.replace("{NAME}", name);
+        let cfg = Config::read_data(yaml.as_bytes()).unwrap();
+        cfg
+    }
+
+    #[test]
+    fn test_path() {
+        let cfg = load_test_config("config_path");
+
+        let current_dir = env::current_dir().unwrap();
+        let expect_workspace = current_dir
+            .join("_test")
+            .join("config_path")
+            .join("workspace");
+        let expect_meta = current_dir.join("_test").join("config_path").join("meta");
+
+        assert_eq!(cfg.get_workspace_dir(), &expect_workspace);
+        assert_eq!(cfg.get_meta_dir(), &expect_meta);
+        assert_eq!(cfg.cmd, format!("rox"));
+    }
+
+    #[test]
+    fn test_remote() {
+        let mut cfg = load_test_config("config_remote");
+
+        assert_eq!(cfg.remotes.len(), 3);
+
+        let owner0 = Owner {
+            alias: None,
+            labels: Some(hashset_strings!["pin"]),
+            on_create: None,
+            repo_alias: hashmap_strings![
+                "spacenvim" => "vim",
+                "roxide" => "rox"
+            ],
+            ssh: Some(true),
+        };
+        let owner1 = Owner {
+            alias: Some(format!("k8s")),
+            labels: Some(hashset_strings!["huge"]),
+            on_create: None,
+            repo_alias: hashmap_strings![
+                "kubernetes" => "k8s"
+            ],
+            ssh: None,
+        };
+        let github_remote = Remote {
+            clone: Some(format!("github.com")),
+            user: Some(format!("fioncat")),
+            email: Some(format!("lazycat7706@gmail.com")),
+            ssh: false,
+            labels: Some(hashset_strings!["sync"]),
+            provider: Some(Provider::Github),
+
+            alias_owner_map: Some(hashmap_strings![
+                "k8s" => "kubernetes"
+            ]),
+            alias_repo_map: Some(hashmap![
+                format!("fioncat") => hashmap_strings![
+                    "vim" => "spacenvim",
+                    "rox" => "roxide"
+                ],
+                format!("kubernetes") => hashmap_strings![
+                    "k8s" => "kubernetes"
+                ]
+            ]),
+
+            api_domain: None,
+            api_timeout: defaults::api_timeout(),
+            cache_hours: defaults::cache_hours(),
+            list_limit: defaults::list_limit(),
+            token: None,
+
+            owners: hashmap![
+                format!("fioncat") => owner0,
+                format!("kubernetes")  => owner1
+            ],
+
+            owners_rc: None,
+        };
+        assert_eq!(cfg.get_remote("github").unwrap().cfg, github_remote);
+
+        let owner2 = Owner {
+            labels: Some(hashset_strings!["sync", "pin"]),
+
+            alias: None,
+            on_create: None,
+            repo_alias: defaults::empty_map(),
+            ssh: None,
+        };
+        let gitlab_remote = Remote {
+            clone: Some(format!("gitlab.com")),
+            user: Some(format!("test")),
+            email: Some(format!("test-email@test.com")),
+            ssh: false,
+            provider: Some(Provider::Gitlab),
+            token: Some(format!("test-token-gitlab")),
+            cache_hours: 100,
+            list_limit: 500,
+            api_timeout: 30,
+            api_domain: Some(format!("gitlab.com")),
+            owners: hashmap![format!("test") => owner2],
+            labels: None,
+
+            alias_owner_map: None,
+            alias_repo_map: None,
+
+            owners_rc: None,
+        };
+        assert_eq!(cfg.get_remote("gitlab").unwrap().cfg, gitlab_remote);
+
+        let owner3 = Owner {
+            on_create: Some(vec![format!("golang")]),
+
             alias: None,
             labels: None,
-            repo_alias: HashMap::new(),
+            repo_alias: defaults::empty_map(),
             ssh: None,
-            on_create: None,
         };
+        let owner4 = Owner {
+            on_create: Some(vec![format!("rust")]),
 
-        let mut github_owners = HashMap::with_capacity(2);
-        github_owners.insert(String::from("fioncat"), owner.clone());
-        github_owners.insert(String::from("kubernetes"), owner.clone());
+            alias: None,
+            labels: None,
+            repo_alias: defaults::empty_map(),
+            ssh: None,
+        };
+        let test_remote = Remote {
+            clone: None,
+            user: None,
+            email: None,
+            ssh: false,
+            provider: None,
+            token: None,
+            api_timeout: defaults::api_timeout(),
+            cache_hours: defaults::cache_hours(),
+            list_limit: defaults::list_limit(),
+            api_domain: None,
+            owners: hashmap![
+                format!("golang") => owner3,
+                format!("rust") => owner4
+            ],
+            labels: None,
 
-        let mut gitlab_owners = HashMap::with_capacity(1);
-        gitlab_owners.insert(String::from("test"), owner.clone());
+            alias_owner_map: None,
+            alias_repo_map: None,
 
-        let mut remotes = HashMap::with_capacity(2);
-        remotes.insert(
-            String::from("github"),
-            Remote {
-                clone: Some(String::from("github.com")),
-                user: Some(String::from("fioncat")),
-                email: Some(String::from("lazycat7706@gmail.com")),
-                ssh: false,
-                labels: Some(hash_set!(String::from("sync"))),
-                provider: Some(Provider::Github),
-                token: None,
-                cache_hours: 0,
-                list_limit: 0,
-                api_timeout: 0,
-                api_domain: None,
-                owners: github_owners,
-                alias_owner_map: None,
-                alias_repo_map: None,
+            owners_rc: None,
+        };
+        assert_eq!(cfg.get_remote("test").unwrap().cfg, test_remote);
+    }
+
+    const TEST_MAIN_GO_CONTENT: &'static str = r#"package main
+
+import "fmt"
+
+func main() {
+\tfmt.Println("hello, world!")
+}
+"#;
+
+    #[test]
+    fn test_workflows() {
+        let cfg = load_test_config("config_workflow");
+
+        let w0 = vec![
+            WorkflowStep {
+                name: format!("main.go"),
+                file: Some(format!("{}", TEST_MAIN_GO_CONTENT)),
+                run: None,
             },
-        );
-        remotes.insert(
-            String::from("gitlab"),
-            Remote {
-                clone: Some(String::from("gitlab.com")),
-                user: Some(String::from("test-user")),
-                email: Some(String::from("test-email@test.com")),
-                ssh: false,
-                labels: Some(hash_set!(String::from("sync"))),
-                provider: Some(Provider::Gitlab),
-                token: None,
-                cache_hours: 0,
-                list_limit: 0,
-                api_timeout: 0,
-                api_domain: None,
-                owners: gitlab_owners,
-                alias_owner_map: None,
-                alias_repo_map: None,
+            WorkflowStep {
+                name: format!("go module"),
+                file: None,
+                run: Some(String::from("go mod init ${REPO_NAME}")),
             },
-        );
+        ];
+        let w1 = vec![WorkflowStep {
+            name: format!("init cargo"),
+            file: None,
+            run: Some(String::from("cargo init")),
+        }];
+        let w2 = vec![WorkflowStep {
+            name: format!("fetch git"),
+            file: None,
+            run: Some(String::from("git fetch --all")),
+        }];
 
-        Config {
-            workspace: format!("./_test/{name}/workspace"),
-            metadir: format!("./_test/{name}/metadir"),
-            cmd: String::from("ro"),
-            remotes,
-            release: HashMap::new(),
-            workflows: HashMap::new(),
-            current_dir: None,
-            now: None,
-        }
+        let wf = hashmap![
+            format!("golang") => w0,
+            format!("rust") => w1,
+            format!("fetch") => w2
+        ];
+
+        assert_eq!(cfg.workflows, wf);
     }
 }

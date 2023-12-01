@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::{fs, process};
@@ -6,6 +8,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::config::Config;
 
+#[cfg(test)]
 #[macro_export]
 macro_rules! vec_strings {
     ( $( $s:expr ),* ) => {
@@ -17,8 +20,9 @@ macro_rules! vec_strings {
     };
 }
 
+#[cfg(test)]
 #[macro_export]
-macro_rules! hash_set {
+macro_rules! hashset {
     ( $( $x:expr ),* ) => {
         {
             let mut set = HashSet::new();
@@ -29,6 +33,48 @@ macro_rules! hash_set {
         }
     };
 }
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! hashset_strings {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut set = HashSet::new();
+            $(
+                set.insert(String::from($x));
+            )*
+            set
+        }
+    };
+}
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! hashmap {
+    ($($key:expr => $value:expr),*) => {{
+        let mut map = HashMap::new();
+        $(map.insert($key, $value);)*
+        map
+    }};
+}
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! hashmap_strings {
+    ($($key:expr => $value:expr),*) => {{
+        let mut map = HashMap::new();
+        $(map.insert(String::from($key), String::from($value));)*
+        map
+    }};
+}
+
+pub const SECOND: u64 = 1;
+pub const MINUTE: u64 = 60 * SECOND;
+pub const HOUR: u64 = 60 * MINUTE;
+pub const DAY: u64 = 24 * HOUR;
+pub const WEEK: u64 = 7 * DAY;
+pub const MONTH: u64 = 30 * DAY;
+pub const YEAR: u64 = 365 * DAY;
 
 /// If the file directory doesn't exist, create it; if it exists, take no action.
 pub fn ensure_dir(path: &PathBuf) -> Result<()> {
@@ -86,8 +132,7 @@ impl FileLock {
     /// * `name` - File lock name, you can use this to create locks at different
     /// granularities to lock different processes.
     pub fn acquire(cfg: &Config, name: impl AsRef<str>) -> Result<FileLock> {
-        let dir = PathBuf::from(&cfg.metadir);
-        let path = dir.join(format!("lock_{}", name.as_ref()));
+        let path = cfg.get_meta_dir().join(format!("lock_{}", name.as_ref()));
         ensure_dir(&path)?;
 
         let lock_opts = file_lock::FileOptions::new()

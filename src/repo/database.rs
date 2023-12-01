@@ -229,15 +229,11 @@ impl Bucket {
 
         let mut remote_index: HashMap<u32, Rc<Remote>> = HashMap::with_capacity(remote_names.len());
         for (idx, remote_name) in remote_names.into_iter().enumerate() {
-            let remote_cfg = match cfg.get_remote(&remote_name)  {
-                Some(remote_cfg) => remote_cfg,
+            let remote = match cfg.get_remote(&remote_name)  {
+                Some(remote) => remote,
                 None => bail!("could not find remote config for '{remote_name}', please add it to your config file"),
             };
 
-            let remote = Rc::new(Remote {
-                name: remote_name,
-                cfg: remote_cfg,
-            });
             remote_index.insert(idx as u32, remote);
         }
 
@@ -289,12 +285,14 @@ impl Bucket {
                     // Build the owner object
                     let owner_name = owner_name.clone();
                     let owner_remote = Rc::clone(&remote);
-                    let owner_cfg = cfg.get_owner(&remote.name, &owner_name);
-                    let owner = Rc::new(Owner {
-                        name: owner_name,
-                        remote: owner_remote,
-                        cfg: owner_cfg,
-                    });
+                    let owner = match cfg.get_owner(&remote.name, &owner_name) {
+                        Some(owner) => owner,
+                        None => Rc::new(Owner {
+                            name: owner_name,
+                            remote: owner_remote,
+                            cfg: None,
+                        }),
+                    };
                     match owner_index.get_mut(&remote.name) {
                         Some(m) => {
                             m.insert(owner.name.to_string(), Rc::clone(&owner));
@@ -363,7 +361,7 @@ impl Database<'_> {
     /// database, suitable for handling the initial condition.
     pub fn load(cfg: &Config) -> Result<Database> {
         let lock = FileLock::acquire(cfg, "database")?;
-        let path = PathBuf::from(&cfg.metadir).join("database");
+        let path = cfg.get_meta_dir().join("database");
         let bucket = Bucket::read(&path)?;
         let repos = bucket.build_repos(cfg)?;
 
@@ -660,7 +658,7 @@ impl Database<'_> {
 mod bucket_tests {
     use crate::config::tests as config_tests;
     use crate::repo::database::*;
-    use crate::{hash_set, vec_strings};
+    use crate::{hashset, vec_strings};
 
     fn get_expect_bucket() -> Bucket {
         Bucket {
@@ -675,7 +673,7 @@ mod bucket_tests {
                     accessed: 12.0,
                     last_accessed: 12,
                     path: None,
-                    labels: Some(hash_set![0]),
+                    labels: Some(hashset![0]),
                 },
                 RepoBucket {
                     remote: 0,
@@ -684,7 +682,7 @@ mod bucket_tests {
                     accessed: 11.0,
                     last_accessed: 11,
                     path: None,
-                    labels: Some(hash_set![0]),
+                    labels: Some(hashset![0]),
                 },
                 RepoBucket {
                     remote: 0,
@@ -702,36 +700,19 @@ mod bucket_tests {
                     accessed: 9.0,
                     last_accessed: 9,
                     path: None,
-                    labels: Some(hash_set![1]),
+                    labels: Some(hashset![1]),
                 },
             ],
         }
     }
 
     fn get_expect_repos(cfg: &Config) -> Vec<Rc<Repo>> {
-        let github_remote = Rc::new(Remote {
-            name: String::from("github"),
-            cfg: cfg.get_remote("github").unwrap(),
-        });
-        let gitlab_remote = Rc::new(Remote {
-            name: String::from("gitlab"),
-            cfg: cfg.get_remote("gitlab").unwrap(),
-        });
-        let fioncat_owner = Rc::new(Owner {
-            name: String::from("fioncat"),
-            remote: Rc::clone(&github_remote),
-            cfg: cfg.get_owner("github", "fioncat"),
-        });
-        let kubernetes_owner = Rc::new(Owner {
-            name: String::from("kubernetes"),
-            remote: Rc::clone(&github_remote),
-            cfg: cfg.get_owner("github", "kubernetes"),
-        });
-        let test_owner = Rc::new(Owner {
-            name: String::from("test"),
-            remote: Rc::clone(&gitlab_remote),
-            cfg: cfg.get_owner("gitlab", "test"),
-        });
+        let github_remote = cfg.get_remote("github").unwrap();
+        let gitlab_remote = cfg.get_remote("gitlab").unwrap();
+        let fioncat_owner = cfg.get_owner("github", "fioncat").unwrap();
+        let kubernetes_owner = cfg.get_owner("github", "kubernetes").unwrap();
+        let test_owner = cfg.get_owner("gitlab", "test").unwrap();
+
         let pin_label = Rc::new(String::from("pin"));
         let sync_label = Rc::new(String::from("sync"));
         vec![
@@ -742,7 +723,7 @@ mod bucket_tests {
                 path: None,
                 accessed: 12.0,
                 last_accessed: 12,
-                labels: Some(hash_set![Rc::clone(&pin_label)]),
+                labels: Some(hashset![Rc::clone(&pin_label)]),
             }),
             Rc::new(Repo {
                 name: String::from("spacenvim"),
@@ -751,7 +732,7 @@ mod bucket_tests {
                 path: None,
                 accessed: 11.0,
                 last_accessed: 11,
-                labels: Some(hash_set![pin_label]),
+                labels: Some(hashset![pin_label]),
             }),
             Rc::new(Repo {
                 name: String::from("kubernetes"),
@@ -769,14 +750,14 @@ mod bucket_tests {
                 path: None,
                 accessed: 9.0,
                 last_accessed: 9,
-                labels: Some(hash_set![sync_label]),
+                labels: Some(hashset![sync_label]),
             }),
         ]
     }
 
     #[test]
     fn test_bucket_from() {
-        let cfg = config_tests::get_test_config("test_bucket_from");
+        let cfg = config_tests::load_test_config("repo_bucket_from");
 
         let expect_bucket = get_expect_bucket();
         let repos = get_expect_repos(&cfg);
@@ -787,7 +768,7 @@ mod bucket_tests {
 
     #[test]
     fn test_bucket_build() {
-        let cfg = config_tests::get_test_config("test_bucket_build");
+        let cfg = config_tests::load_test_config("repo_bucket_build");
 
         let expect_repos = get_expect_repos(&cfg);
 
@@ -799,7 +780,7 @@ mod bucket_tests {
 
     #[test]
     fn test_bucket_convert() {
-        let cfg = config_tests::get_test_config("test_bucket_convert");
+        let cfg = config_tests::load_test_config("repo_bucket_convert");
 
         let expect_repos = get_expect_repos(&cfg);
         let repos = get_expect_repos(&cfg);
