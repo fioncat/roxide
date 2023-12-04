@@ -434,6 +434,12 @@ impl Config {
         }
     }
 
+    pub fn list_remote_names(&self) -> Vec<String> {
+        let mut names: Vec<_> = self.remotes.iter().map(|(key, _)| key.clone()).collect();
+        names.sort();
+        names
+    }
+
     pub fn get_owner<R, N>(&self, remote_name: R, name: N) -> Option<&Owner>
     where
         R: AsRef<str>,
@@ -463,7 +469,7 @@ impl Config {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod config_tests {
     use crate::config::*;
     use crate::{hashmap, hashmap_strings, hashset_strings};
 

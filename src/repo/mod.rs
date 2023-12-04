@@ -40,6 +40,13 @@ pub struct Repo {
     pub labels: Option<HashSet<Rc<String>>>,
 }
 
+pub enum NameLevel {
+    Name,
+    Owner,
+    Remote,
+    Labels,
+}
+
 impl Repo {
     pub fn new<S, O, N>(
         cfg: &Config,
@@ -238,6 +245,15 @@ impl Repo {
             .join(remote.as_ref())
             .join(owner.as_ref())
             .join(name.as_ref())
+    }
+
+    pub fn to_string(&self, level: &NameLevel) -> String {
+        match level {
+            NameLevel::Name => self.name.clone(),
+            NameLevel::Owner => self.name_with_owner(),
+            NameLevel::Remote => self.name_with_remote(),
+            NameLevel::Labels => self.name_with_labels(),
+        }
     }
 
     pub fn labels_string(&self) -> Option<String> {
