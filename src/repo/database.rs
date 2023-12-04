@@ -850,6 +850,29 @@ pub mod tests {
         ]
     }
 
+    fn repos_as_strings(repos: &Vec<Rc<Repo>>) -> Vec<String> {
+        let mut items: Vec<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
+        items.sort();
+        items
+    }
+
+    fn repos_labels_as_strings(repos: &Vec<Rc<Repo>>, label: &str) -> Vec<String> {
+        let repos: Vec<_> = repos
+            .iter()
+            .filter_map(|repo| match repo.labels.as_ref() {
+                Some(labels) => {
+                    if labels.contains(&Rc::new(String::from(label))) {
+                        Some(Rc::clone(repo))
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            })
+            .collect();
+        repos_as_strings(&repos)
+    }
+
     #[test]
     fn test_load() {
         let cfg = tests::load_test_config("database_load");
@@ -868,10 +891,8 @@ pub mod tests {
 
         let db = Database::load(&cfg).unwrap();
         let repos = db.list_all(&None);
-        let mut items: Vec<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
-        items.sort();
 
-        assert_eq!(expect_items, items);
+        assert_eq!(expect_items, repos_as_strings(&repos));
     }
 
     #[test]
@@ -915,13 +936,112 @@ pub mod tests {
     }
 
     #[test]
-    fn test_list() {
-        let cfg = tests::load_test_config("database_list");
+    fn test_list_all() {
+        let cfg = tests::load_test_config("database_list_all");
         let repos = get_test_repos(&cfg);
+
+        let expect = repos_as_strings(&repos);
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
             db.update(repo, None);
         }
+
+        let repos = db.list_all(&None);
+        assert_eq!(repos_as_strings(&repos), expect);
+    }
+
+    #[test]
+    fn test_list_labels() {
+        let cfg = tests::load_test_config("database_list_labels");
+        let repos = get_test_repos(&cfg);
+
+        let expect_pin = repos_labels_as_strings(&repos, "pin");
+        let expect_sync = repos_labels_as_strings(&repos, "sync");
+        let expect_huge = repos_labels_as_strings(&repos, "huge");
+        let expect_mark = repos_labels_as_strings(&repos, "mark");
+        let expect_none = repos_labels_as_strings(&repos, "none");
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        assert_eq!(
+            repos_as_strings(&db.list_all(&Some(hashset_strings!["pin"]))),
+            expect_pin
+        );
+        assert_eq!(
+            repos_as_strings(&db.list_all(&Some(hashset_strings!["sync"]))),
+            expect_sync
+        );
+        assert_eq!(
+            repos_as_strings(&db.list_all(&Some(hashset_strings!["huge"]))),
+            expect_huge
+        );
+        assert_eq!(
+            repos_as_strings(&db.list_all(&Some(hashset_strings!["mark"]))),
+            expect_mark
+        );
+        assert_eq!(
+            repos_as_strings(&db.list_all(&Some(hashset_strings!["none"]))),
+            expect_none
+        );
+    }
+
+    #[test]
+    fn test_list_remote() {
+        let cfg = tests::load_test_config("database_list_remote");
+        let repos = get_test_repos(&cfg);
+
+        let expect_repos: Vec<_> = repos
+            .iter()
+            .filter_map(|repo| {
+                if repo.remote.name.as_str() == "github" {
+                    Some(Rc::clone(repo))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        let repos = db.list_by_remote("github", &None);
+
+        assert_eq!(repos_as_strings(&expect_repos), repos_as_strings(&repos));
+    }
+
+    #[test]
+    fn test_list_owner() {
+        let cfg = tests::load_test_config("database_list_owner");
+        let repos = get_test_repos(&cfg);
+
+        let expect_repos: Vec<_> = repos
+            .iter()
+            .filter_map(|repo| {
+                if repo.remote.name.as_str() == "github" {
+                    if repo.owner.name.as_str() == "fioncat" {
+                        Some(Rc::clone(repo))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        let repos = db.list_by_owner("github", "fioncat", &None);
+
+        assert_eq!(repos_as_strings(&expect_repos), repos_as_strings(&repos));
     }
 }
