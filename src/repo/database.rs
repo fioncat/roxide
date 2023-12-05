@@ -115,7 +115,7 @@ impl Bucket {
     ///
     /// # Panics
     ///
-    /// Please ensure that the `Rc` references in `repos` are unique when calling
+    /// Please ensure that the [`Rc`] references in `repos` are unique when calling
     /// this method; since we will try to unwrap them, otherwise, the function
     /// will panic.
     ///
@@ -211,8 +211,8 @@ impl Bucket {
     }
 
     /// Convert the bucket data suitable for storage into repositories suitable for
-    /// queries; this function is the reverse process of `from_repos`.
-    /// The constructed repositories will all be Rc pointers to save memory and
+    /// queries; this function is the reverse process of [`Bucket::from_repos`].
+    /// The constructed repositories will all be [`Rc`] pointers to save memory and
     /// clone costs. This also implies that they are entirely read-only; if modifications
     /// are necessary, new repository objects may need to be created.
     ///
@@ -352,7 +352,7 @@ impl Bucket {
 /// The Database provides basic functions for querying the repository, enabling
 /// location identification and listing. It also supports updating and deleting
 /// repository data. However, changes made need to be written to disk by calling
-/// the `save` function after the operations.
+/// the [`Database::save`] function after the operations.
 pub struct Database<'a> {
     repos: Vec<Rc<Repo>>,
     path: PathBuf,
@@ -405,7 +405,7 @@ impl Database<'_> {
         })
     }
 
-    /// Similar to `get_repo`, but returns error if the repository is not found.
+    /// Similar to [`Database::get`], but returns error if the repository is not found.
     pub fn must_get<R, O, N>(&self, remote_name: R, owner_name: O, name: N) -> Result<Rc<Repo>>
     where
         R: AsRef<str>,
@@ -443,7 +443,8 @@ impl Database<'_> {
         })
     }
 
-    /// Similar to `get_fuzzy`, but returns error if the repository is not found.
+    /// Similar to [`Database::get_fuzzy`], but returns error if the repository
+    /// is not found.
     pub fn must_get_fuzzy<R, K>(&self, remote_name: R, keyword: K) -> Result<Rc<Repo>>
     where
         R: AsRef<str>,
@@ -475,8 +476,8 @@ impl Database<'_> {
     /// 2. If the current position is within a subdirectory of a repository,
     /// it will directly return the current repository.
     ///
-    /// This design is intended to make the `get_latest` function more flexible,
-    /// allowing it to achieve effects similar to `cd -` in Linux.
+    /// This design is intended to make the function more flexible, allowing it to
+    /// achieve effects similar to `cd -` in Linux.
     pub fn get_latest<S>(&self, remote_name: S) -> Option<Rc<Repo>>
     where
         S: AsRef<str>,
@@ -558,7 +559,7 @@ impl Database<'_> {
     pub fn list_all(&self, filter_labels: &Option<HashSet<String>>) -> Vec<Rc<Repo>> {
         let mut vec = Vec::with_capacity(self.repos.len());
         for repo in self.repos.iter() {
-            if !repo.has_labels(filter_labels) {
+            if !repo.contains_labels(filter_labels) {
                 continue;
             }
             vec.push(Rc::clone(repo));
@@ -577,7 +578,7 @@ impl Database<'_> {
     {
         let mut vec = Vec::with_capacity(self.repos.len());
         for repo in self.repos.iter() {
-            if !repo.has_labels(filter_labels) {
+            if !repo.contains_labels(filter_labels) {
                 continue;
             }
             if repo.remote.name.as_str() == remote_name.as_ref() {
@@ -600,7 +601,7 @@ impl Database<'_> {
     {
         let mut vec = Vec::with_capacity(self.repos.len());
         for repo in self.repos.iter() {
-            if !repo.has_labels(filter_labels) {
+            if !repo.contains_labels(filter_labels) {
                 continue;
             }
             if repo.remote.name.as_str() != remote_name.as_ref() {
@@ -688,7 +689,7 @@ pub trait ProviderBuilder {
     ) -> Result<Box<dyn Provider>>;
 }
 
-/// In certain situations, the Selector needs to choose from multiple repositories.
+/// In certain situations, the [`Selector`] needs to choose from multiple repositories.
 /// This enum is used to define whether the preference during selection is towards
 /// searching or fuzzy matching.
 #[derive(Debug, Clone)]
@@ -697,7 +698,7 @@ pub enum SelectMode {
     Search,
 }
 
-/// Define options for the Selector during the selection and filtering process.
+/// Define options for the [`Selector`] during the selection and filtering process.
 #[derive(Debug, Clone)]
 pub struct SelectOptions<T: TerminalHelper, P: ProviderBuilder> {
     terminal_helper: T,
@@ -718,8 +719,8 @@ pub struct SelectOptions<T: TerminalHelper, P: ProviderBuilder> {
 }
 
 impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
-    /// Create a new SelectOptions, with specified `TerminalHelper` and `ProviderBuilder`
-    /// and default options. Useful for testing, in production, please use `default`.
+    /// Create a new SelectOptions, with specified [`TerminalHelper`] and [`ProviderBuilder`]
+    /// and default options. Useful for testing, in production, please use [`SelectOptions::default`].
     pub fn new(th: T, pb: P) -> SelectOptions<T, P> {
         SelectOptions {
             terminal_helper: th,
@@ -808,6 +809,43 @@ enum SelectOneType<'a> {
     Direct,
 }
 
+/// [`Database`] is responsible for storing basic repository data, but the selection
+/// of repositories for operations is handled by a separate Selector.
+///
+/// The Selector chooses one or more repositories based on the args provided by
+/// the user, enabling subsequent operations. The Selector essentially encapsulates
+/// the Database, offering more advanced query logic.
+///
+/// ## Query single
+///
+/// Any query requires two parameters, `head` and `query`. When querying a single
+/// repository, their meanings are as follows:
+///
+/// * `head`: Can have multiple meanings:
+///   * If no `query` is provided, it can be the remote name or a keyword for fuzzy
+///     searching.
+///   * If no `query` is provided and it starts with `http` or `git@`, it represents
+///     the clone or access URL of the repository.
+///   * If `query` is provided, it forcibly represents the remote name.
+/// * `query`: The query statement. It can take different formats:
+///   * `{keyword}`: Directly use the keyword to perform fuzzy matching on a
+///     repository (if `force_search` is specified, it will use the provider for
+///     repository search).
+///   * `{owner}/`: Query repositories under a specific `{owner}`.
+///   * `{owner}/{name}`: Precisely locate a repository.
+/// * If both `head` and `query` are empty, by default, the last accessed repository
+///   (excluding the current repository) will be returned. If `force_search` is
+///   specified, it will search all local repositories.
+///
+/// ## Query multiple
+///
+/// For selecting multiple repositories, the parameters are much simpler:
+///
+/// * `head`: Represents the remote name.
+/// * `query`: Represents the owner's name.
+///
+/// In general, when selecting multiple repositories, both of these parameters
+/// must be provided.
 pub struct Selector<'a, T: TerminalHelper, P: ProviderBuilder> {
     head: &'a str,
     query: &'a str,
@@ -820,6 +858,7 @@ pub struct Selector<'a, T: TerminalHelper, P: ProviderBuilder> {
 impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     const GITHUB_DOMAIN: &'static str = "github.com";
 
+    /// Create a new [`Selector`] object.
     pub fn new(
         db: &'a Database<'a>,
         head: &'a str,
@@ -834,6 +873,23 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
     }
 
+    /// Similar to [`Selector::one`], the difference is that an error is returned
+    /// if the repository does not exist in the database.
+    pub fn must_one(&self) -> Result<Rc<Repo>> {
+        todo!()
+    }
+
+    /// Select one repository. See [`Selector`].
+    ///
+    /// # Returns
+    ///
+    /// Here, there are two return values. The first represents the repository,
+    /// and the second indicates whether the repository exists in the database.
+    /// How to handle these two parameters is up to the user. For example, the user
+    /// may decide to create the repository if it doesn't exist in the database or
+    /// raise an error directly.
+    ///
+    /// See also: [`Selector::must_one`]
     pub fn one(&self) -> Result<(Rc<Repo>, bool)> {
         if self.opts.force_remote {
             if self.head.is_empty() {
@@ -859,7 +915,16 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         if self.query.is_empty() {
+            // If only one `head` parameter is provided, its meaning needs to be
+            // inferred based on its format:
+            // - It could be a URL.
+            // - It could be a clone SSH.
+            // - It could be a remote name.
+            // - It could be a fuzzy keyword.
             let select_type = if self.head.ends_with(".git") {
+                // If `head` ends with `".git"`, by default, consider it as a clone
+                // URL, which could be in either HTTP or SSH format. However, it
+                // could also be just a remote or keyword ending with `".git"`.
                 if self.head.starts_with("http") {
                     let url = self.head.strip_suffix(".git").unwrap();
                     SelectOneType::Url(
@@ -868,12 +933,17 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 } else if self.head.starts_with("git@") {
                     SelectOneType::Ssh(self.head)
                 } else {
+                    // If it is neither HTTP nor SSH, consider it not to be a
+                    // clone URL.
                     match Url::parse(self.head) {
                         Ok(url) => SelectOneType::Url(url),
                         Err(_) => SelectOneType::Direct,
                     }
                 }
             } else {
+                // We prioritize treating `head` as a URL, so we attempt to parse
+                // it using URL rules. If parsing fails, then consider it as a
+                // remote or keyword.
                 match Url::parse(&self.head) {
                     Ok(url) => SelectOneType::Url(url),
                     Err(_) => SelectOneType::Direct,
@@ -890,6 +960,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         self.one_from_owner()
     }
 
+    /// Select one repository from a url.
     fn one_from_url(&self, url: Url) -> Result<(Rc<Repo>, bool)> {
         let domain = match url.domain() {
             Some(domain) => domain,
@@ -900,6 +971,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let mut target_remote_name: Option<String> = None;
         let mut is_gitlab = false;
         for name in remote_names {
+            // We match the domain of the URL based on the clone domain of the
+            // remote. This is because in many cases, the provided URL is a clone
+            // address, and even for access addresses, most of the time their
+            // domains are consistent with the clone.
+            // TODO: Provide another match domain in config?
             let remote_cfg = self.db.cfg.must_get_remote(&name)?;
             let remote_domain = match remote_cfg.clone.as_ref() {
                 Some(domain) => domain,
@@ -910,6 +986,9 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 continue;
             }
 
+            // We only support parsing two types of URLs: GitHub and GitLab. For
+            // non-GitHub cases, we consider them all as GitLab.
+            // TODO: Add support for parsing URLs from more types of remotes.
             if remote_domain != Self::GITHUB_DOMAIN {
                 is_gitlab = true;
             }
@@ -927,27 +1006,41 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             None => bail!("invalid url '{url}', path could not be empty"),
         };
 
-        let mut parts = Vec::new();
+        // We use a simple method to parse repository URL:
+        //
+        // - For GitHub, both owner and name are required, and sub-owners are not
+        // supported. Therefore, as long as two path segments are identified, it
+        // is considered within a repository. The subsequent path is assumed to be
+        // the branch or file path.
+        //
+        // - For GitLab, the presence of sub-owners complicates direct localization
+        // of two segments. The path rule in GitLab is that starting from "-", the
+        // subsequent path is the branch or file. Therefore, locating the "-" is
+        // sufficient for GitLab.
+        let mut segs = Vec::new(); // The segments for repository, contains owner and name
         for part in path_iter {
             if is_gitlab {
                 if part == "-" {
                     break;
                 }
-                parts.push(part);
+                segs.push(part);
                 continue;
             }
 
-            if parts.len() == 2 {
+            if segs.len() == 2 {
                 break;
             }
-            parts.push(part);
+            segs.push(part);
         }
 
-        if parts.len() < 2 {
+        // The owner and name are both required for GitHub and GitLab, so the length
+        // of `segs` should be bigger than 2.
+        // If not, it means that user are not in a repository, maybe in an owner.
+        if segs.len() < 2 {
             bail!("invalid url '{url}', should be in a repo");
         }
 
-        let path = parts.join("/");
+        let path = segs.join("/");
         let (owner, name) = Self::parse_owner(&path);
 
         match self.db.get(&remote_name, &owner, &name) {
@@ -956,7 +1049,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
     }
 
+    /// Select one repository from a ssh url.
     fn one_from_ssh(&self, ssh: &str) -> Result<(Rc<Repo>, bool)> {
+        // Parsing SSH is done in a clever way by reusing the code for parsing
+        // URLs. The approach involves converting the SSH statement to a URL and
+        // then calling the URL parsing code.
         let full_name = ssh
             .strip_prefix("git@")
             .unwrap()
@@ -976,7 +1073,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             .with_context(|| format!("select from ssh '{ssh}'"))
     }
 
+    /// Select one repository from a head statement.
     fn one_from_head(&self) -> Result<(Rc<Repo>, bool)> {
+        // Treating `head` as a remote (with higher priority) or fuzzy matching
+        // keyword, we will call different functions from the database to retrieve
+        // the information.
         match self.db.cfg.get_remote(self.head) {
             Some(_) => {
                 let repo = match self.opts.mode {
@@ -995,13 +1096,19 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
     }
 
+    /// Select one repository from owner.
     fn one_from_owner(&self) -> Result<(Rc<Repo>, bool)> {
+        // Up to this point, with the `query` provided, indicating that `head`
+        // represents a remote, we can directly retrieve the remote configuration.
         let remote_name = self.head;
         let remote_cfg = self.db.cfg.must_get_remote(remote_name)?;
         let remote = Remote {
             name: remote_name.to_string(),
             cfg: remote_cfg.clone(),
         };
+
+        // A special syntax: If `query` ends with "/", it indicates a search
+        // within the owner.
         if self.query.ends_with("/") {
             let owner = self.query.strip_suffix("/").unwrap();
             let mut search_local = self.opts.force_local;
@@ -1030,6 +1137,12 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             return self.get_or_create_repo(remote_name, owner, name);
         }
 
+        // At this point, there are still two potential branching scenarios:
+        //
+        // - `query` might be a fuzzy matching keyword or a keyword for searching.
+        // This can be determined based on whether `query` contains "/".
+        // - If `query` contains "/", the user wants to directly locate or
+        // create a repository, and we can directly call the get function.
         let (owner, name) = Self::parse_owner(self.query);
         if owner.is_empty() {
             return match self.opts.mode {
@@ -1044,6 +1157,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         self.get_or_create_repo(remote_name, &owner, &name)
     }
 
+    /// Select one repository from remote provider.
     fn one_from_provider(&self, remote: &Remote) -> Result<(Rc<Repo>, bool)> {
         let provider = self.opts.provider_builder.build_provider(
             &self.db.cfg,
@@ -1067,6 +1181,8 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         self.get_or_create_repo(&remote.name, &owner, &name)
     }
 
+    /// Creating or retrieving a repository, the second return value indicates
+    /// whether the repository exists in the Database.
     fn get_or_create_repo<S, O, N>(
         &self,
         remote_name: S,
@@ -1087,6 +1203,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
     }
 
+    /// Create a new repository object.
     fn new_repo<S, O, N>(&self, remote_name: S, owner_name: O, name: N) -> Result<(Rc<Repo>, bool)>
     where
         S: AsRef<str>,
@@ -1104,6 +1221,18 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((repo, false))
     }
 
+    /// Parsing a path into owner and name follows the basic format: `"{owner}/{name}"`.
+    /// `"{owner}"` adheres to GitLab's rules and can include sub-owners (i.e., multiple
+    /// levels of directories). If the path does not contain `"/"`, then return the
+    /// path directly with an empty owner.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Selector::parse_owner("fioncat/roxide"), (format!("fioncat"), format!("roxide")));
+    /// assert_eq!(Selector::parse_owner("s0/s1/repo"), (format!("s0/s1"), format!("repo")));
+    /// assert_eq!(Selector::parse_owner("roxide"), (format!(""), format!("roxide")));
+    /// ```
     pub fn parse_owner(path: impl AsRef<str>) -> (String, String) {
         let items: Vec<_> = path.as_ref().split("/").collect();
         let items_len = items.len();
@@ -1119,6 +1248,14 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         (group_buffer.join("/"), base.to_string())
     }
 
+    /// Selecting multiple repositories from the local database.
+    ///
+    /// # Returns
+    ///
+    /// In addition to the list of repositories, the return value will also include
+    /// a suggested [`NameLevel`] for display.
+    /// If you want to display the list of repositories, use this [`NameLevel`] to
+    /// call [`Repo::to_string`].
     pub fn many_local(&self) -> Result<(Vec<Rc<Repo>>, NameLevel)> {
         let (repos, level) = self.many_local_raw()?;
         if self.opts.many_edit {
@@ -1137,13 +1274,17 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((repos, level))
     }
 
+    /// The same as [`Selector::many_local`], without editor filtering.
     fn many_local_raw(&self) -> Result<(Vec<Rc<Repo>>, NameLevel)> {
         if self.head.is_empty() {
+            // List all repositories.
             let repos = self.db.list_all(&self.opts.filter_labels);
             return Ok((repos, NameLevel::Remote));
         }
 
         if self.query.is_empty() {
+            // If `head` is the remote name, select all repositories under that
+            // remote; otherwise, perform a fuzzy search.
             return match self.db.cfg.get_remote(self.head) {
                 Some(_) => {
                     let repos = self.db.list_by_remote(self.head, &self.opts.filter_labels);
@@ -1156,6 +1297,10 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             };
         }
 
+        // When selecting multiple repositories, the logic here is similar to
+        // selecting one. Adding "/" after the query indicates selecting the entire
+        // owner, and not adding it uses fuzzy matching. The difference from
+        // selecting one is that there is no search performed here.
         let remote_name = self.head;
         let remote_cfg = self.db.cfg.must_get_remote(remote_name)?;
         let remote = Remote {
@@ -1182,6 +1327,13 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((vec![repo], NameLevel::Name))
     }
 
+    /// Selecting multiple repositories from the remote provider.
+    ///
+    /// # Returns
+    ///
+    /// - [`Remote`]: The remote object being searched.
+    /// - String: The owner name being searched.
+    /// - Vec<String>: The search results.
     pub fn many_remote(&self) -> Result<(Remote, String, Vec<String>)> {
         let (remote, owner, names) = self.many_remote_raw()?;
         if self.opts.many_edit {
@@ -1192,6 +1344,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((remote, owner, names))
     }
 
+    /// The same as [`Selector::many_local`], without editor filtering.
     fn many_remote_raw(&self) -> Result<(Remote, String, Vec<String>)> {
         if self.head.is_empty() {
             bail!("internal error, when select many from provider, the head cannot be empty");
@@ -1696,7 +1849,6 @@ mod select_tests {
                 format!("github:kubernetes/kubernetes"),
             ),
             (
-                // The clone https url's ".git" suffix should be trimed.
                 format!("https://github.com/kubernetes/kubectl.git"),
                 format!("github:kubernetes/kubectl"),
             ),

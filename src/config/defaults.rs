@@ -21,15 +21,15 @@ pub fn empty_set<K>() -> HashSet<K> {
 }
 
 pub fn release() -> HashMap<String, String> {
-    let mut hmap = HashMap::with_capacity(5);
-    hmap.insert(String::from("patch"), String::from("v{0}.{1}.{2+}"));
-    hmap.insert(String::from("minor"), String::from("v{0}.{1+}.0"));
-    hmap.insert(String::from("major"), String::from("v{0+}.0.0"));
+    let mut map = HashMap::with_capacity(5);
+    map.insert(String::from("patch"), String::from("v{0}.{1}.{2+}"));
+    map.insert(String::from("minor"), String::from("v{0}.{1+}.0"));
+    map.insert(String::from("major"), String::from("v{0+}.0.0"));
 
-    hmap.insert(String::from("date-stash"), String::from("{%Y}-{%m}-{%d}"));
-    hmap.insert(String::from("date-dot"), String::from("{%Y}.{%m}.{%d}"));
+    map.insert(String::from("date-stash"), String::from("{%Y}-{%m}-{%d}"));
+    map.insert(String::from("date-dot"), String::from("{%Y}.{%m}.{%d}"));
 
-    hmap
+    map
 }
 
 pub fn cache_hours() -> u32 {

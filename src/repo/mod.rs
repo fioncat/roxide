@@ -2,52 +2,86 @@
 
 pub mod database;
 
-use std::{collections::HashSet, path::PathBuf, rc::Rc};
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::config::{self, Config};
+use crate::config::{Config, OwnerConfig, RemoteConfig};
 use crate::utils;
 
+/// Represents the remote to which the repository belongs, including the config
+/// information of the remote.
 #[derive(Debug, PartialEq)]
 pub struct Remote {
+    /// The remote name.
     pub name: String,
 
-    pub cfg: config::Remote,
+    /// The remote config.
+    pub cfg: RemoteConfig,
 }
 
+/// Represents the owner to which the repository belongs, including the config of
+/// the owner and the associated remote.
 #[derive(Debug, PartialEq)]
 pub struct Owner {
+    /// The owner name.
     pub name: String,
 
+    /// The remote to which this owner belongs.
     pub remote: Rc<Remote>,
 
-    pub cfg: Option<config::Owner>,
+    /// The owner config. If it is [`None`], it indicates that this owner does not
+    /// have a config.
+    pub cfg: Option<OwnerConfig>,
 }
 
+/// Represents a repository, which is the most fundamental operational object,
+/// typically used in the form of [`Rc`].
 #[derive(Debug, PartialEq)]
 pub struct Repo {
+    /// The repository name.
     pub name: String,
 
+    /// The remote to which this repository belongs.
     pub remote: Rc<Remote>,
+    /// The owner to which this repository belongs.
     pub owner: Rc<Owner>,
 
+    /// The local path of the repository, optional. If it is [`None`], it means that
+    /// the repository is located under the `workspace`, and the local path will be
+    /// dynamically generated.
     pub path: Option<String>,
 
+    /// The Unix timestamp of the last visit to this repository.
     pub last_accessed: u64,
+    /// The number of times this repository has been accessed.
     pub accessed: f64,
 
+    /// Labels for this repository. Labels are typically used for filtering and
+    /// other operations.
+    ///
+    /// Some special labels may have specific effects in certain scenarios, such as
+    /// `pin`, `sync`, etc. Refer to the documentation for individual commands for
+    /// more details.
     pub labels: Option<HashSet<Rc<String>>>,
 }
 
+/// Represents how to display the repository, passes to [`Repo::to_string`].
 pub enum NameLevel {
+    /// Only display name.
     Name,
+    /// Display owner and name: `{owner}/{name}`.
     Owner,
+    /// Display remote, owner and name: `{remote}:{owner}/{name}`
     Remote,
+    /// Display remote, owner, name and labels: `{remote}:{owner}/{name}@{labels}`
     Labels,
 }
 
 impl Repo {
+    /// Create a new repo [`Rc`] object.
     pub fn new<S, O, N>(
         cfg: &Config,
         remote_name: S,
@@ -61,6 +95,8 @@ impl Repo {
         O: AsRef<str>,
         N: AsRef<str>,
     {
+        // Get remote and owner config, create new `Rc` object.
+        // Here all the configs will be cloned.
         let remote_cfg = cfg.must_get_remote(remote_name.as_ref())?;
         let remote = Rc::new(Remote {
             name: remote_name.as_ref().to_string(),
@@ -85,20 +121,23 @@ impl Repo {
             Some(labels) => Some(labels.iter().map(|label| label.clone()).collect()),
             None => None,
         };
-        if let Some(remote_labels) = remote_cfg.labels.as_ref() {
-            match labels.as_mut() {
-                Some(labels) => labels.extend(remote_labels.clone()),
-                None => labels = Some(remote_labels.clone()),
-            }
-        }
-        if let Some(owner_cfg) = owner.cfg.as_ref() {
-            if let Some(owner_labels) = owner_cfg.labels.as_ref() {
+
+        // If the config includes labels that do not currently exist in the
+        // repository, we need to extend these labels to the repository.
+        let mut append_cfg_labels = |cfg_labels: Option<HashSet<String>>| {
+            if let Some(cfg_labels) = cfg_labels {
                 match labels.as_mut() {
-                    Some(labels) => labels.extend(owner_labels.clone()),
-                    None => labels = Some(owner_labels.clone()),
+                    Some(labels) => labels.extend(cfg_labels),
+                    None => labels = Some(cfg_labels),
                 }
             }
+        };
+        append_cfg_labels(remote_cfg.labels.clone());
+        if let Some(owner_cfg) = owner.cfg.as_ref() {
+            append_cfg_labels(owner_cfg.labels.clone());
         }
+
+        // Convert `String` in labels to `Rc<String>`
         let labels = match labels {
             Some(labels) => Some(labels.into_iter().map(|label| Rc::new(label)).collect()),
             None => None,
@@ -115,6 +154,13 @@ impl Repo {
         }))
     }
 
+    /// Retrieve the repository path.
+    ///
+    /// If the user explicitly specifies a path for the repository, clone it directly
+    /// and return that path. If no path is specified, consider the repository to be
+    /// in the workspace and generate a path using the rule:
+    ///
+    /// * `{workspace}/{remote}/{owner}/{name}`.
     pub fn get_path(&self, cfg: &Config) -> PathBuf {
         if let Some(path) = self.path.as_ref() {
             return PathBuf::from(path);
@@ -126,7 +172,8 @@ impl Repo {
             .join(&self.name)
     }
 
-    pub fn has_labels(&self, labels: &Option<HashSet<String>>) -> bool {
+    /// Check if the repository contains the specified labels.
+    pub fn contains_labels(&self, labels: &Option<HashSet<String>>) -> bool {
         match labels {
             Some(labels) => {
                 if labels.is_empty() {
@@ -147,6 +194,15 @@ impl Repo {
         }
     }
 
+    /// Update the repository, which will update the following fields:
+    ///
+    /// * `last_accessed`: Updated to the current time.
+    /// * `accessed`: Incremented by 1.
+    /// * `labels`: Updated if the `labels` parameter is not [`None`]. Note that if
+    /// `labels` is `Some(HashSet::new())`, it will set `labels` to [`None`].
+    ///
+    /// This function will return a new repository [`Rc`], but the new object's
+    /// internal references to remote and owner will be shared with the original.
     pub fn update(&self, cfg: &Config, labels: Option<HashSet<String>>) -> Rc<Repo> {
         let new_labels = match labels {
             Some(labels) => {
@@ -169,6 +225,16 @@ impl Repo {
         })
     }
 
+    /// `score` is used to sort and prioritize multiple repositories. In scenarios
+    /// like fuzzy matching, repositories with higher scores are matched first.
+    ///
+    /// The scoring algorithm here is borrowed from:
+    ///
+    /// * [zoxide](https://github.com/ajeetdsouza/zoxide)
+    ///
+    /// For details, please refer to:
+    ///
+    /// * [Algorithm](https://github.com/ajeetdsouza/zoxide/wiki/Algorithm#frecency)
     pub fn score(&self, cfg: &Config) -> f64 {
         let duration = cfg.now().saturating_sub(self.last_accessed);
         if duration < utils::HOUR {
@@ -182,10 +248,16 @@ impl Repo {
         }
     }
 
+    /// Retrieve the `git clone` URL for this repository.
+    ///
+    /// Alias rules from the configuration will be applied here.
     pub fn clone_url(&self) -> String {
         Self::get_clone_url(self.owner.name.as_str(), self.name.as_str(), &self.remote)
     }
 
+    /// Retrieve the `git clone` URL for the specified repository.
+    ///
+    /// Alias rules from the configuration will be applied here.
     pub fn get_clone_url<O, N>(owner: O, name: N, remote: &Remote) -> String
     where
         O: AsRef<str>,
@@ -201,12 +273,15 @@ impl Repo {
                 None => name.as_ref(),
             };
 
-            return Self::get_clone_url_raw(owner, name, remote);
+            return Self::get_clone_url_without_alias(owner, name, remote);
         }
-        Self::get_clone_url_raw(owner, name, remote)
+        Self::get_clone_url_without_alias(owner, name, remote)
     }
 
-    pub fn get_clone_url_raw<O, N>(owner: O, name: N, remote: &Remote) -> String
+    /// Retrieve the `git clone` URL for the specified repository.
+    ///
+    /// The alias rules in config will be ignored.
+    pub fn get_clone_url_without_alias<O, N>(owner: O, name: N, remote: &Remote) -> String
     where
         O: AsRef<str>,
         N: AsRef<str>,
@@ -235,6 +310,7 @@ impl Repo {
         }
     }
 
+    /// Retrieve the workspace path for this repository.
     pub fn get_workspace_path<R, O, N>(cfg: &Config, remote: R, owner: O, name: N) -> PathBuf
     where
         R: AsRef<str>,
@@ -247,6 +323,7 @@ impl Repo {
             .join(name.as_ref())
     }
 
+    /// Build the string to display this repository. See: [`NameLevel`].
     pub fn to_string(&self, level: &NameLevel) -> String {
         match level {
             NameLevel::Name => self.name.clone(),
@@ -256,6 +333,7 @@ impl Repo {
         }
     }
 
+    /// Build the labels show string, return [`None`] if this repository has no label.
     pub fn labels_string(&self) -> Option<String> {
         match self.labels.as_ref() {
             Some(labels) => {
@@ -268,14 +346,17 @@ impl Repo {
         }
     }
 
+    /// Show repository with owner, See: [`NameLevel::Owner`].
     pub fn name_with_owner(&self) -> String {
         format!("{}/{}", self.owner.name, self.name)
     }
 
+    /// Show repository with remote, See: [`NameLevel::Remote`].
     pub fn name_with_remote(&self) -> String {
         format!("{}:{}/{}", self.remote.name, self.owner.name, self.name)
     }
 
+    /// Show repository with labels, See: [`NameLevel::Labels`].
     pub fn name_with_labels(&self) -> String {
         match self.labels_string() {
             Some(labels) => {

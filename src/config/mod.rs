@@ -30,7 +30,7 @@ pub struct Config {
 
     /// The remotes config.
     #[serde(default = "defaults::empty_map")]
-    pub remotes: HashMap<String, Remote>,
+    pub remotes: HashMap<String, RemoteConfig>,
 
     /// The tag release rule.
     #[serde(default = "defaults::release")]
@@ -68,11 +68,11 @@ pub struct WorkflowStep {
     pub run: Option<String>,
 }
 
-/// Remote is a Git remote repository. Typical examples are Github and Gitlab.
+/// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
 #[derive(Debug, Deserialize, Clone, PartialEq)]
-pub struct Remote {
+pub struct RemoteConfig {
     /// The clone domain, for Github, is "github.com". If your remote Git repository
-    /// is self-built, this is a private domian, such as "git.mydomain.com".
+    /// is self-built, this is a private domain, such as "git.my.domain.com".
     ///
     /// If clone is not empty, all repo will be added to the workspace in the
     /// way of `git clone`. You need to create repo in the remote.
@@ -105,7 +105,7 @@ pub struct Remote {
     /// Currently only `github` and `gitlab` are supported. If your remote is of
     /// these two types, it is strongly recommended to enable it, and it is
     /// recommended to use it with `token` to complete the authentication.
-    pub provider: Option<Provider>,
+    pub provider: Option<ProviderType>,
 
     /// Uses with `provider` to authenticate when calling api.
     ///
@@ -143,7 +143,7 @@ pub struct Remote {
 
     /// Some personalized configurations for different owners.
     #[serde(default = "defaults::empty_map")]
-    pub owners: HashMap<String, Owner>,
+    pub owners: HashMap<String, OwnerConfig>,
 
     #[serde(skip)]
     alias_owner_map: Option<HashMap<String, String>>,
@@ -154,7 +154,7 @@ pub struct Remote {
 
 /// Owner configuration. Some configurations will override remote's.
 #[derive(Debug, Deserialize, Clone, PartialEq)]
-pub struct Owner {
+pub struct OwnerConfig {
     /// Alias the remote owner to another name.
     pub alias: Option<String>,
 
@@ -174,14 +174,14 @@ pub struct Owner {
 
 /// The remote api provider type.
 #[derive(Debug, Deserialize, Clone, PartialEq)]
-pub enum Provider {
+pub enum ProviderType {
     #[serde(rename = "github")]
     Github,
     #[serde(rename = "gitlab")]
     Gitlab,
 }
 
-impl Remote {
+impl RemoteConfig {
     pub fn has_alias(&self) -> bool {
         if let Some(_) = self.alias_owner_map {
             return true;
@@ -350,7 +350,7 @@ impl Config {
     }
 
     pub fn read_data(data: &[u8]) -> Result<Config> {
-        let mut cfg: Config = serde_yaml::from_slice(data).context("parse confg data")?;
+        let mut cfg: Config = serde_yaml::from_slice(data).context("parse config data")?;
         cfg.validate().context("validate config content")?;
         Ok(cfg)
     }
@@ -417,14 +417,14 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_remote<S>(&self, name: S) -> Option<&Remote>
+    pub fn get_remote<S>(&self, name: S) -> Option<&RemoteConfig>
     where
         S: AsRef<str>,
     {
         self.remotes.get(name.as_ref())
     }
 
-    pub fn must_get_remote<S>(&self, name: S) -> Result<&Remote>
+    pub fn must_get_remote<S>(&self, name: S) -> Result<&RemoteConfig>
     where
         S: AsRef<str>,
     {
@@ -440,7 +440,7 @@ impl Config {
         names
     }
 
-    pub fn get_owner<R, N>(&self, remote_name: R, name: N) -> Option<&Owner>
+    pub fn get_owner<R, N>(&self, remote_name: R, name: N) -> Option<&OwnerConfig>
     where
         R: AsRef<str>,
         N: AsRef<str>,
@@ -574,7 +574,7 @@ workflows:
 
         assert_eq!(cfg.remotes.len(), 3);
 
-        let owner0 = Owner {
+        let owner0 = OwnerConfig {
             alias: None,
             labels: Some(hashset_strings!["pin"]),
             on_create: None,
@@ -584,7 +584,7 @@ workflows:
             ],
             ssh: Some(true),
         };
-        let owner1 = Owner {
+        let owner1 = OwnerConfig {
             alias: Some(format!("k8s")),
             labels: Some(hashset_strings!["huge"]),
             on_create: None,
@@ -593,13 +593,13 @@ workflows:
             ],
             ssh: None,
         };
-        let github_remote = Remote {
+        let github_remote = RemoteConfig {
             clone: Some(format!("github.com")),
             user: Some(format!("fioncat")),
             email: Some(format!("lazycat7706@gmail.com")),
             ssh: false,
             labels: Some(hashset_strings!["sync"]),
-            provider: Some(Provider::Github),
+            provider: Some(ProviderType::Github),
 
             alias_owner_map: Some(hashmap_strings![
                 "k8s" => "kubernetes"
@@ -627,7 +627,7 @@ workflows:
         };
         assert_eq!(cfg.get_remote("github").unwrap().clone(), github_remote);
 
-        let owner2 = Owner {
+        let owner2 = OwnerConfig {
             labels: Some(hashset_strings!["sync", "pin"]),
 
             alias: None,
@@ -635,12 +635,12 @@ workflows:
             repo_alias: defaults::empty_map(),
             ssh: None,
         };
-        let gitlab_remote = Remote {
+        let gitlab_remote = RemoteConfig {
             clone: Some(format!("gitlab.com")),
             user: Some(format!("test")),
             email: Some(format!("test-email@test.com")),
             ssh: false,
-            provider: Some(Provider::Gitlab),
+            provider: Some(ProviderType::Gitlab),
             token: Some(format!("test-token-gitlab")),
             cache_hours: 100,
             list_limit: 500,
@@ -654,7 +654,7 @@ workflows:
         };
         assert_eq!(cfg.get_remote("gitlab").unwrap().clone(), gitlab_remote);
 
-        let owner3 = Owner {
+        let owner3 = OwnerConfig {
             on_create: Some(vec![format!("golang")]),
 
             alias: None,
@@ -662,7 +662,7 @@ workflows:
             repo_alias: defaults::empty_map(),
             ssh: None,
         };
-        let owner4 = Owner {
+        let owner4 = OwnerConfig {
             on_create: Some(vec![format!("rust")]),
 
             alias: None,
@@ -670,7 +670,7 @@ workflows:
             repo_alias: defaults::empty_map(),
             ssh: None,
         };
-        let test_remote = Remote {
+        let test_remote = RemoteConfig {
             clone: None,
             user: None,
             email: None,
