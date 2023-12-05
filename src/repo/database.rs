@@ -665,12 +665,21 @@ impl Database<'_> {
     }
 }
 
+/// Used to provide some functionalities for the terminal. The main purpose of
+/// defining this trait is for abstraction, especially for testing purposes where
+/// it is inconvenient to directly use some functionalities of the terminal.
 pub trait TerminalHelper {
+    /// Searching in terminal, typically accomplished by directly invoking `fzf`.
     fn search(&self, items: &Vec<String>) -> Result<usize>;
+
+    /// Use an editor to edit and filter multiple items.
     fn edit(&self, items: Vec<String>) -> Result<Vec<String>>;
 }
 
+/// Used to construct an API provider, this trait abstraction is primarily for
+/// ease of testing.
 pub trait ProviderBuilder {
+    /// Build an API provider object.
     fn build_provider(
         &self,
         cfg: &Config,
@@ -679,11 +688,17 @@ pub trait ProviderBuilder {
     ) -> Result<Box<dyn Provider>>;
 }
 
+/// In certain situations, the Selector needs to choose from multiple repositories.
+/// This enum is used to define whether the preference during selection is towards
+/// searching or fuzzy matching.
+#[derive(Debug, Clone)]
 pub enum SelectMode {
     Fuzzy,
     Search,
 }
 
+/// Define options for the Selector during the selection and filtering process.
+#[derive(Debug, Clone)]
 pub struct SelectOptions<T: TerminalHelper, P: ProviderBuilder> {
     terminal_helper: T,
     provider_builder: P,
@@ -703,6 +718,8 @@ pub struct SelectOptions<T: TerminalHelper, P: ProviderBuilder> {
 }
 
 impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
+    /// Create a new SelectOptions, with specified `TerminalHelper` and `ProviderBuilder`
+    /// and default options. Useful for testing, in production, please use `default`.
     pub fn new(th: T, pb: P) -> SelectOptions<T, P> {
         SelectOptions {
             terminal_helper: th,
@@ -723,6 +740,7 @@ impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
         }
     }
 
+    /// During selection, prioritize the use of searching over fuzzy matching.
     pub fn with_force_search(mut self, value: bool) -> Self {
         if value {
             self.mode = SelectMode::Search;
@@ -730,36 +748,48 @@ impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
         self
     }
 
+    /// Control whether to use caching when building a provider.
     pub fn with_force_no_cache(mut self, value: bool) -> Self {
         self.force_no_cache = value;
         self
     }
 
+    /// Control whether to search only in the local repository without relying on
+    /// a provider.
     pub fn with_force_local(mut self, value: bool) -> Self {
         self.force_local = value;
         self
     }
 
+    /// Control whether to use only the provider without searching in the local
+    /// repository. If this option is enabled, searching will filter out all local
+    /// repositories.
     pub fn with_force_remote(mut self, value: bool) -> Self {
         self.force_remote = value;
         self
     }
 
+    /// Control whether to use a specified path instead of the workspace path when
+    /// constructing a repository.
     pub fn with_repo_path(mut self, value: String) -> Self {
         self.repo_path = Some(value);
         self
     }
 
+    /// Control the use of a terminal editor to filter results when selecting
+    /// multiple repositories.
     pub fn with_many_edit(mut self, value: bool) -> Self {
         self.many_edit = value;
         self
     }
 
+    /// Control the use of specified labels for filtering during search.
     pub fn with_filter_labels(mut self, labels: HashSet<String>) -> Self {
         self.filter_labels = Some(labels);
         self
     }
 
+    /// Search repos from vec
     fn search_from_vec(&self, repos: &Vec<Rc<Repo>>, level: &NameLevel) -> Result<Rc<Repo>> {
         let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         let idx = self.terminal_helper.search(&items)?;
@@ -870,7 +900,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let mut target_remote_name: Option<String> = None;
         let mut is_gitlab = false;
         for name in remote_names {
-            let remote_cfg = self.db.cfg.must_get_remote(name)?;
+            let remote_cfg = self.db.cfg.must_get_remote(&name)?;
             let remote_domain = match remote_cfg.clone.as_ref() {
                 Some(domain) => domain,
                 None => continue,
@@ -883,7 +913,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             if remote_domain != Self::GITHUB_DOMAIN {
                 is_gitlab = true;
             }
-            target_remote_name = Some(remote_domain.clone());
+            target_remote_name = Some(name);
             break;
         }
 
@@ -1588,9 +1618,11 @@ pub mod database_tests {
 
 #[cfg(test)]
 mod select_tests {
+    use crate::api::api_tests::StaticProvider;
     use crate::config::config_tests;
     use crate::repo::database::*;
 
+    #[derive(Debug, Clone)]
     struct TestTerminalHelper {
         target: Option<String>,
 
@@ -1621,25 +1653,86 @@ mod select_tests {
         }
     }
 
+    #[derive(Debug, Clone)]
+    struct StaticProviderBuilder {}
+
+    impl ProviderBuilder for StaticProviderBuilder {
+        fn build_provider(
+            &self,
+            _cfg: &Config,
+            _remote: &Remote,
+            _force: bool,
+        ) -> Result<Box<dyn Provider>> {
+            Ok(StaticProvider::mock())
+        }
+    }
+
+    fn new_test_options(
+        target: Option<String>,
+        edits: Option<Vec<String>>,
+    ) -> SelectOptions<TestTerminalHelper, StaticProviderBuilder> {
+        SelectOptions::new(
+            TestTerminalHelper { target, edits },
+            StaticProviderBuilder {},
+        )
+    }
+
     #[test]
     fn test_one_url() {
         let cfg = config_tests::load_test_config("select/one_url");
         let repos = database_tests::get_test_repos(&cfg);
 
+        let cases = vec![
+            (
+                format!("https://github.com/fioncat/csync"),
+                format!("github:fioncat/csync"),
+            ),
+            (
+                format!("https://github.com/fioncat/dotfiles/blob/test/starship.toml"),
+                format!("github:fioncat/dotfiles"),
+            ),
+            (
+                format!("https://github.com/kubernetes/kubernetes/tree/master/api/discovery"),
+                format!("github:kubernetes/kubernetes"),
+            ),
+            (
+                // The clone https url's ".git" suffix should be trimed.
+                format!("https://github.com/kubernetes/kubectl.git"),
+                format!("github:kubernetes/kubectl"),
+            ),
+            (
+                // The clone ssh url
+                format!("git@github.com:kubernetes/kubectl.git"),
+                format!("github:kubernetes/kubectl"),
+            ),
+            (
+                // gitlab format path
+                format!("https://gitlab.com/my-owner-01/my-repo-02/-/tree/main.rs"),
+                format!("gitlab:my-owner-01/my-repo-02"),
+            ),
+            (
+                // gitlab not found
+                format!("https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev"),
+                format!("gitlab:my-owner-01/hello/unknown-repo"),
+            ),
+        ];
+
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
             db.update(repo, None);
         }
-    }
 
-    #[test]
-    fn test_one_ssh() {
-        let cfg = config_tests::load_test_config("select/one_ssh");
-        let repos = database_tests::get_test_repos(&cfg);
-
-        let mut db = Database::load(&cfg).unwrap();
-        for repo in repos {
-            db.update(repo, None);
+        let opts = new_test_options(None, None);
+        for case in cases {
+            let (url, expect) = case;
+            let selector = Selector::new(&db, url.as_str(), "", opts.clone());
+            let (repo, exists) = selector.one().unwrap();
+            if repo.name.as_str() != "unknown-repo" {
+                assert!(exists);
+            } else {
+                assert!(!exists);
+            }
+            assert_eq!(expect, repo.name_with_remote());
         }
     }
 
@@ -1648,9 +1741,55 @@ mod select_tests {
         let cfg = config_tests::load_test_config("select/one_fuzzy");
         let repos = database_tests::get_test_repos(&cfg);
 
+        let cases = vec![
+            (
+                format!("github"),
+                format!("sync"),
+                format!("github:fioncat/csync"),
+            ),
+            (
+                format!(""),
+                format!("dot"),
+                format!("github:fioncat/dotfiles"),
+            ),
+            (
+                format!("github"),
+                format!("proxy"),
+                format!("github:kubernetes/kube-proxy"),
+            ),
+            (
+                format!(""),
+                format!("let"),
+                format!("github:kubernetes/kubelet"),
+            ),
+            (
+                format!(""),
+                format!("01"),
+                format!("gitlab:my-owner-01/my-repo-01"),
+            ),
+            (
+                format!("gitlab"),
+                format!("03"),
+                format!("gitlab:my-owner-01/my-repo-03"),
+            ),
+        ];
+
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
             db.update(repo, None);
+        }
+
+        let opts = new_test_options(None, None);
+        for case in cases {
+            let (remote, keyword, expect) = case;
+            let selector = if remote.is_empty() {
+                Selector::new(&db, keyword.as_str(), "", opts.clone())
+            } else {
+                Selector::new(&db, remote.as_str(), keyword.as_str(), opts.clone())
+            };
+            let (repo, exists) = selector.one().unwrap();
+            assert!(exists);
+            assert_eq!(expect, repo.name_with_remote());
         }
     }
 
@@ -1659,9 +1798,66 @@ mod select_tests {
         let cfg = config_tests::load_test_config("select/one_search");
         let repos = database_tests::get_test_repos(&cfg);
 
+        let cases = vec![
+            (
+                format!(""),
+                format!(""),
+                format!("github:fioncat/dotfiles"),
+                format!("github:fioncat/dotfiles"),
+            ),
+            (
+                format!(""),
+                format!(""),
+                format!("gitlab:my-owner-01/my-repo-02"),
+                format!("gitlab:my-owner-01/my-repo-02"),
+            ),
+            (
+                format!("github"),
+                format!(""),
+                format!("fioncat/csync"),
+                format!("github:fioncat/csync"),
+            ),
+            (
+                format!("github"),
+                format!(""),
+                format!("kubernetes/kubectl"),
+                format!("github:kubernetes/kubectl"),
+            ),
+            (
+                // Search in owner, use format "github fioncat/"
+                format!("github"),
+                format!("fioncat/"),
+                format!("fioncat"),
+                format!("github:fioncat/fioncat"),
+            ),
+            (
+                format!("github"),
+                format!("kubernetes/"),
+                format!("kubelet"),
+                format!("github:kubernetes/kubelet"),
+            ),
+            (
+                format!("gitlab"),
+                format!("my-owner-02/"),
+                format!("my-repo-01"),
+                format!("gitlab:my-owner-02/my-repo-01"),
+            ),
+        ];
+
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
             db.update(repo, None);
+        }
+
+        for case in cases {
+            let (remote, query, target, expect) = case;
+            let opts = new_test_options(Some(target), None)
+                .with_force_search(true)
+                .with_force_local(true);
+            let selector = Selector::new(&db, &remote, &query, opts);
+            let (repo, exists) = selector.one().unwrap();
+            assert!(exists);
+            assert_eq!(expect, repo.name_with_remote());
         }
     }
 
@@ -1674,50 +1870,13 @@ mod select_tests {
         for repo in repos {
             db.update(repo, None);
         }
-    }
+        let expect = db.must_get_latest("").unwrap();
 
-    #[test]
-    fn test_one_owner_fuzzy() {
-        let cfg = config_tests::load_test_config("select/one_owner_fuzzy");
-        let repos = database_tests::get_test_repos(&cfg);
-
-        let mut db = Database::load(&cfg).unwrap();
-        for repo in repos {
-            db.update(repo, None);
-        }
-    }
-
-    #[test]
-    fn test_one_owner_search() {
-        let cfg = config_tests::load_test_config("select/one_owner_search");
-        let repos = database_tests::get_test_repos(&cfg);
-
-        let mut db = Database::load(&cfg).unwrap();
-        for repo in repos {
-            db.update(repo, None);
-        }
-    }
-
-    #[test]
-    fn test_one_name_search() {
-        let cfg = config_tests::load_test_config("select/one_name_search");
-        let repos = database_tests::get_test_repos(&cfg);
-
-        let mut db = Database::load(&cfg).unwrap();
-        for repo in repos {
-            db.update(repo, None);
-        }
-    }
-
-    #[test]
-    fn test_one_name_fuzzy() {
-        let cfg = config_tests::load_test_config("select/one_name_fuzzy");
-        let repos = database_tests::get_test_repos(&cfg);
-
-        let mut db = Database::load(&cfg).unwrap();
-        for repo in repos {
-            db.update(repo, None);
-        }
+        let opts = new_test_options(None, None);
+        let selector = Selector::new(&db, "", "", opts);
+        let (repo, exists) = selector.one().unwrap();
+        assert!(exists);
+        assert_eq!(repo.name_with_labels(), expect.name_with_labels());
     }
 
     #[test]
@@ -1725,9 +1884,39 @@ mod select_tests {
         let cfg = config_tests::load_test_config("select/one_name_get");
         let repos = database_tests::get_test_repos(&cfg);
 
+        let cases = vec![
+            (
+                format!("github"),
+                format!("fioncat/dotfiles"),
+                format!("github:fioncat/dotfiles"),
+            ),
+            (
+                format!("github"),
+                format!("kubernetes/kubernetes"),
+                format!("github:kubernetes/kubernetes"),
+            ),
+            (
+                format!("github"),
+                format!("kubernetes/unknown"),
+                format!("github:kubernetes/unknown"),
+            ),
+        ];
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
             db.update(repo, None);
+        }
+
+        let opts = new_test_options(None, None);
+        for case in cases {
+            let (remote, query, expect) = case;
+            let selector = Selector::new(&db, &remote, &query, opts.clone());
+            let (repo, exists) = selector.one().unwrap();
+            if repo.name.as_str() == "unknown" {
+                assert!(!exists);
+            } else {
+                assert!(exists);
+            }
+            assert_eq!(expect, repo.name_with_remote());
         }
     }
 }
