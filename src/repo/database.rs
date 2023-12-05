@@ -1773,6 +1773,7 @@ pub mod database_tests {
 mod select_tests {
     use crate::api::api_tests::StaticProvider;
     use crate::config::config_tests;
+    use crate::hashset_strings;
     use crate::repo::database::*;
 
     #[derive(Debug, Clone)]
@@ -2069,6 +2070,69 @@ mod select_tests {
                 assert!(exists);
             }
             assert_eq!(expect, repo.name_with_remote());
+        }
+    }
+
+    #[test]
+    fn test_many_local() {
+        let cfg = config_tests::load_test_config("select/many_local");
+        let repos = database_tests::get_test_repos(&cfg);
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.update(repo, None);
+        }
+
+        let cases = vec![
+            (
+                format!(""),
+                format!(""),
+                db.list_all(&None)
+                    .iter()
+                    .map(|repo| repo.name_with_labels())
+                    .collect::<HashSet<String>>(),
+            ),
+            (
+                format!("github"),
+                format!(""),
+                db.list_by_remote("github", &None)
+                    .iter()
+                    .map(|repo| repo.name_with_labels())
+                    .collect::<HashSet<String>>(),
+            ),
+            (
+                format!("github"),
+                format!("fioncat/"),
+                db.list_by_owner("github", "fioncat", &None)
+                    .iter()
+                    .map(|repo| repo.name_with_labels())
+                    .collect::<HashSet<String>>(),
+            ),
+            (
+                format!("csync"),
+                format!(""),
+                hashset_strings![db
+                    .get("github", "fioncat", "csync")
+                    .unwrap()
+                    .name_with_labels()],
+            ),
+            (
+                format!("gitlab"),
+                format!("02"),
+                hashset_strings![db
+                    .get("gitlab", "my-owner-01", "my-repo-02")
+                    .unwrap()
+                    .name_with_labels()],
+            ),
+        ];
+
+        let opts = new_test_options(None, None);
+        for case in cases {
+            let (head, query, expect) = case;
+            let selector = Selector::new(&db, &head, &query, opts.clone());
+            let (repos, _) = selector.many_local().unwrap();
+            let repos: HashSet<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
+
+            assert_eq!(repos, expect);
         }
     }
 }
