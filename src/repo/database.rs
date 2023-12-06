@@ -689,6 +689,21 @@ pub trait ProviderBuilder {
     ) -> Result<Box<dyn Provider>>;
 }
 
+/// The default provider builder implement, use [`crate::api::build_provider`].
+pub struct DefaultProviderBuilder {}
+
+impl ProviderBuilder for DefaultProviderBuilder {
+    fn build_provider(
+        &self,
+        cfg: &Config,
+        remote: &Remote,
+        force: bool,
+    ) -> Result<Box<dyn Provider>> {
+        use crate::api::build_provider;
+        build_provider(cfg, remote, force)
+    }
+}
+
 /// In certain situations, the [`Selector`] needs to choose from multiple repositories.
 /// This enum is used to define whether the preference during selection is towards
 /// searching or fuzzy matching.

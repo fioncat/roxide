@@ -1,15 +1,22 @@
 #![allow(dead_code)]
 
+mod alias;
+mod cache;
 mod github;
 mod gitlab;
 
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use console::style;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::api::alias::Alias;
+use crate::api::cache::Cache;
+use crate::api::github::Github;
+use crate::api::gitlab::Gitlab;
+use crate::config::{Config, ProviderType};
 use crate::repo::Remote;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -91,6 +98,29 @@ pub fn build_common_client(remote: &Remote) -> Client {
         .timeout(Duration::from_secs(remote.cfg.api_timeout))
         .build()
         .unwrap()
+}
+
+pub fn build_provider(cfg: &Config, remote: &Remote, force: bool) -> Result<Box<dyn Provider>> {
+    if let None = remote.cfg.provider {
+        bail!("missing provider config for remote '{}'", remote.name);
+    }
+
+    let mut provider = match remote.cfg.provider.as_ref().unwrap() {
+        ProviderType::Github => Github::new(remote),
+        ProviderType::Gitlab => Gitlab::new(remote),
+    };
+
+    if remote.cfg.cache_hours > 0 {
+        let cache = Cache::new(cfg, remote, provider, force)?;
+        provider = Box::new(cache);
+    }
+
+    if remote.cfg.has_alias() {
+        let (alias_owner, alias_repo) = remote.cfg.get_alias_map();
+        provider = Alias::new(alias_owner, alias_repo, provider);
+    }
+
+    Ok(provider)
 }
 
 #[cfg(test)]
