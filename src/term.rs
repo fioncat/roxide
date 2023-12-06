@@ -260,9 +260,9 @@ pub fn confirm_items(
         let item_size = console::measure_text_width(&item);
         if current_size == 0 {
             if idx == 0 {
-                print!("{head}{item}");
+                _ = write!(io::stderr(), "{head}{item}");
             } else {
-                print!("{head_space}{item}");
+                _ = write!(io::stderr(), "{head_space}{item}");
             }
             current_size = head_size + item_size;
             continue;
@@ -276,7 +276,7 @@ pub fn confirm_items(
             continue;
         }
 
-        print!("  {item}");
+        _ = write!(io::stderr(), "  {item}");
     }
     stderr!("\n");
 
