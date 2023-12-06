@@ -1,20 +1,31 @@
 #![allow(dead_code)]
 
-use std::io::{self, Write};
+use std::collections::HashSet;
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::{env, fs};
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use console::{style, Term};
+use chrono::Local;
+use console::{style, StyledObject, Term};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Input;
+use pad::PadStr;
+use regex::{Captures, Regex};
+use reqwest::blocking::Client;
+use reqwest::{Method, Url};
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
 
-use crate::config::Config;
+use crate::api::Provider;
+use crate::config::{Config, WorkflowStep};
 use crate::errors::SilentExit;
+use crate::repo::{Remote, Repo};
 use crate::utils;
 
 /// The macro for [`must_confirm`].
@@ -393,4 +404,1114 @@ pub fn get_editor() -> Result<String> {
         bail!("could not get your default editor, please set env $EDITOR");
     }
     Ok(editor)
+}
+
+pub struct CmdResult {
+    pub code: Option<i32>,
+
+    pub stdout: String,
+    pub stderr: String,
+
+    pub display: Option<String>,
+}
+
+impl CmdResult {
+    pub fn check(&self) -> Result<()> {
+        if let Some(code) = self.code {
+            if code == 0 {
+                return Ok(());
+            }
+        }
+        if let None = self.display {
+            // The command has already been output to the terminal, and its output
+            // has been redirected. No need to print any error messages here.
+            bail!(SilentExit { code: 130 });
+        }
+        let cmd_name = self.display.as_ref().unwrap();
+
+        let code = match self.code {
+            Some(code) => code.to_string(),
+            None => String::from("<unknown>"),
+        };
+
+        let mut msg = format!("command `{cmd_name}` exited with bad code {code}");
+        if !self.stdout.is_empty() {
+            msg.push_str(&format!(
+                ", stdout: '{}'",
+                Self::trim_output(&self.stdout, true)
+            ));
+        }
+        if !self.stderr.is_empty() {
+            msg.push_str(&format!(
+                ", stderr: '{}'",
+                Self::trim_output(&self.stderr, true)
+            ));
+        }
+
+        bail!(msg)
+    }
+
+    pub fn read(&self) -> Result<String> {
+        self.check()?;
+        Ok(Self::trim_output(&self.stdout, false))
+    }
+
+    pub fn lines(&self) -> Result<Vec<String>> {
+        let output = self.read()?;
+        let lines: Vec<String> = output
+            .split("\n")
+            .filter_map(|line| {
+                if line.is_empty() {
+                    return None;
+                }
+                Some(line.to_string())
+            })
+            .collect();
+        Ok(lines)
+    }
+
+    fn trim_output(s: &String, no_break: bool) -> String {
+        let s = s.trim();
+        if no_break {
+            s.replace("\n", "; ").replace("'", "")
+        } else {
+            String::from(s)
+        }
+    }
+}
+
+pub struct Cmd<'a> {
+    name: &'a str,
+
+    cmd: Command,
+    input: Option<String>,
+
+    display: Option<String>,
+}
+
+impl<'a> Cmd<'_> {
+    pub fn new(program: &str) -> Cmd {
+        Self::with_args(program, &[])
+    }
+
+    pub fn with_args(program: &'a str, args: &[&str]) -> Cmd<'a> {
+        let mut cmd = Command::new(program);
+        if !args.is_empty() {
+            cmd.args(args);
+        }
+
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        Cmd {
+            name: program,
+            cmd,
+            input: None,
+            display: None,
+        }
+    }
+
+    pub fn git(args: &[&str]) -> Cmd<'a> {
+        Self::with_args("git", args)
+    }
+
+    pub fn with_display(mut self, display: impl ToString) -> Self {
+        self.display = Some(display.to_string());
+        // We redirect command's stderr to program's. So that user can view command's
+        // error output directly.
+        self.cmd.stderr(Stdio::inherit());
+        self
+    }
+
+    pub fn with_display_cmd(self) -> Self {
+        self.with_display("")
+    }
+
+    pub fn with_input(&mut self, input: String) -> &mut Self {
+        self.input = Some(input);
+        self.cmd.stdin(Stdio::piped());
+        self
+    }
+
+    pub fn with_env<K, V>(&mut self, key: K, val: V) -> &mut Self
+    where
+        K: AsRef<str>,
+        V: AsRef<str>,
+    {
+        self.cmd.env(key.as_ref(), val.as_ref());
+        self
+    }
+
+    pub fn with_path(&mut self, path: &PathBuf) -> &mut Self {
+        self.cmd.current_dir(path);
+        self
+    }
+
+    pub fn sh(script: &str) -> Cmd {
+        // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
+        // the script does not output any content to stdout. This method is not
+        // applicable to Windows and a more universal method is needed.
+        let script = format!("{script} > /dev/stderr");
+        Self::with_args("sh", &["-c", script.as_str()])
+    }
+
+    pub fn lines(&mut self) -> Result<Vec<String>> {
+        self.execute()?.lines()
+    }
+
+    pub fn read(&mut self) -> Result<String> {
+        self.execute()?.read()
+    }
+
+    pub fn execute_check(&mut self) -> Result<()> {
+        self.execute()?.check()
+    }
+
+    pub fn execute(&mut self) -> Result<CmdResult> {
+        let result_display = self.show();
+
+        let mut child = match self.cmd.spawn() {
+            Ok(child) => child,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                bail!(
+                    "could not find command `{}`, please make sure it is installed",
+                    self.name
+                );
+            }
+            Err(e) => {
+                return Err(e).with_context(|| format!("could not launch command `{}`", self.name))
+            }
+        };
+
+        if let Some(input) = &self.input {
+            let handle = child.stdin.as_mut().unwrap();
+            if let Err(err) = write!(handle, "{}", input) {
+                return Err(err).with_context(|| format!("write input to command `{}`", self.name));
+            }
+
+            drop(child.stdin.take());
+        }
+
+        let mut stdout = child.stdout.take();
+        let mut stderr = child.stderr.take();
+
+        let status = child.wait().context("Wait command done")?;
+        let stdout = match stdout.as_mut() {
+            Some(stdout) => {
+                let mut out = String::new();
+                stdout
+                    .read_to_string(&mut out)
+                    .with_context(|| format!("read stdout from command `{}`", self.name))?;
+                out
+            }
+            None => String::new(),
+        };
+        let stderr = match stderr.as_mut() {
+            Some(stderr) => {
+                let mut out = String::new();
+                stderr
+                    .read_to_string(&mut out)
+                    .with_context(|| format!("read stderr from command `{}`", self.name))?;
+                out
+            }
+            None => String::new(),
+        };
+
+        Ok(CmdResult {
+            code: status.code(),
+            display: result_display,
+            stdout,
+            stderr,
+        })
+    }
+
+    fn show(&self) -> Option<String> {
+        let mut cmd_args = Vec::with_capacity(1);
+        cmd_args.push(self.cmd.get_program().to_str().unwrap());
+        let args = self.cmd.get_args();
+        for arg in args {
+            cmd_args.push(arg.to_str().unwrap());
+        }
+        let cmd_name = cmd_args.join(" ");
+
+        if let None = self.display {
+            return Some(cmd_name);
+        }
+        let display = self.display.as_ref().unwrap().as_str();
+
+        if !display.is_empty() {
+            exec!("{}", display);
+        }
+        exec!("{} {}", style("::").magenta(), cmd_name);
+        None
+    }
+}
+
+pub struct GitCmd<'a> {
+    prefix: Vec<&'a str>,
+}
+
+impl<'a> GitCmd<'a> {
+    pub fn with_path(path: &'a str) -> GitCmd<'a> {
+        let prefix = if path != "" { vec!["-C", path] } else { vec![] };
+        GitCmd { prefix }
+    }
+
+    pub fn exec(&self, args: &[&str]) -> Result<()> {
+        let args = [&self.prefix, args].concat();
+        Cmd::git(&args).execute()?.check()
+    }
+
+    pub fn lines(&self, args: &[&str]) -> Result<Vec<String>> {
+        let args = [&self.prefix, args].concat();
+        Cmd::git(&args).execute()?.lines()
+    }
+
+    pub fn read(&self, args: &[&str]) -> Result<String> {
+        let args = [&self.prefix, args].concat();
+        Cmd::git(&args).execute()?.read()
+    }
+
+    pub fn checkout(&self, arg: &str) -> Result<()> {
+        self.exec(&["checkout", arg])
+    }
+}
+
+pub fn fzf_search<S>(keys: &Vec<S>) -> Result<usize>
+where
+    S: AsRef<str>,
+{
+    let mut input = String::with_capacity(keys.len());
+    for key in keys {
+        input.push_str(key.as_ref());
+        input.push_str("\n");
+    }
+
+    let mut fzf = Cmd::new("fzf");
+    fzf.with_input(input);
+
+    let result = fzf.execute()?;
+    match result.code {
+        Some(0) => {
+            let output = result.read()?;
+            match keys.iter().position(|s| s.as_ref() == output) {
+                Some(idx) => Ok(idx),
+                None => bail!("could not find key {}", output),
+            }
+        }
+        Some(1) => bail!("fzf no match found"),
+        Some(2) => bail!("fzf returned an error"),
+        Some(130) => bail!(SilentExit { code: 130 }),
+        Some(128..=254) | None => bail!("fzf was terminated"),
+        _ => bail!("fzf returned an unknown error"),
+    }
+}
+
+pub fn ensure_no_uncommitted() -> Result<()> {
+    let mut git =
+        Cmd::git(&["status", "-s"]).with_display("Check if repository has uncommitted change");
+    let lines = git.lines()?;
+    if !lines.is_empty() {
+        bail!(
+            "you have {} to handle",
+            utils::plural(&lines, "uncommitted change"),
+        );
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BranchStatus {
+    Sync,
+    Gone,
+    Ahead,
+    Behind,
+    Conflict,
+    Detached,
+}
+
+impl BranchStatus {
+    pub fn display(&self) -> StyledObject<&'static str> {
+        match self {
+            Self::Sync => style("sync").green(),
+            Self::Gone => style("gone").red(),
+            Self::Ahead => style("ahead").yellow(),
+            Self::Behind => style("behind").yellow(),
+            Self::Conflict => style("conflict").yellow().bold(),
+            Self::Detached => style("detached").red(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct GitBranch {
+    pub name: String,
+    pub status: BranchStatus,
+
+    pub current: bool,
+}
+
+impl GitBranch {
+    const BRANCH_REGEX: &'static str = r"^(\*)*[ ]*([^ ]*)[ ]*([^ ]*)[ ]*(\[[^\]]*\])*[ ]*(.*)$";
+    const HEAD_BRANCH_PREFIX: &'static str = "HEAD branch:";
+
+    pub fn get_regex() -> Regex {
+        Regex::new(Self::BRANCH_REGEX).expect("parse git branch regex")
+    }
+
+    pub fn list() -> Result<Vec<GitBranch>> {
+        let re = Self::get_regex();
+        let lines = Cmd::git(&["branch", "-vv"])
+            .with_display("List git branch info")
+            .lines()?;
+        let mut branches: Vec<GitBranch> = Vec::with_capacity(lines.len());
+        for line in lines {
+            let branch = Self::parse(&re, line)?;
+            branches.push(branch);
+        }
+
+        Ok(branches)
+    }
+
+    pub fn list_remote(remote: &str) -> Result<Vec<String>> {
+        let lines = Cmd::git(&["branch", "-al"])
+            .with_display("List remote git branch")
+            .lines()?;
+        let remote_prefix = format!("{remote}/");
+        let mut items = Vec::with_capacity(lines.len());
+        for line in lines {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if !line.starts_with("remotes/") {
+                continue;
+            }
+            let item = line.strip_prefix("remotes/").unwrap();
+            if !item.starts_with(&remote_prefix) {
+                continue;
+            }
+            let item = item.strip_prefix(&remote_prefix).unwrap().trim();
+            if item.is_empty() {
+                continue;
+            }
+            if item.starts_with("HEAD ->") {
+                continue;
+            }
+            items.push(item.to_string());
+        }
+
+        let lines = Cmd::git(&["branch"])
+            .with_display("List local git branch")
+            .lines()?;
+        let mut local_branch_map = HashSet::with_capacity(lines.len());
+        for line in lines {
+            let mut line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with("*") {
+                line = line.strip_prefix("*").unwrap().trim();
+            }
+            local_branch_map.insert(line.to_string());
+        }
+
+        Ok(items
+            .into_iter()
+            .filter(|item| !local_branch_map.contains(item))
+            .collect())
+    }
+
+    pub fn default() -> Result<String> {
+        Self::default_by_remote("origin")
+    }
+
+    pub fn default_by_remote(remote: &str) -> Result<String> {
+        info!("Get default branch for {}", remote);
+        let head_ref = format!("refs/remotes/{}/HEAD", remote);
+        let remote_ref = format!("refs/remotes/{}/", remote);
+
+        let mut git = Cmd::git(&["symbolic-ref", &head_ref]).with_display_cmd();
+        if let Ok(out) = git.read() {
+            if out.is_empty() {
+                bail!("default branch is empty")
+            }
+            return match out.strip_prefix(&remote_ref) {
+                Some(s) => Ok(s.to_string()),
+                None => bail!("invalid ref output by git: {}", style(out).yellow()),
+            };
+        }
+        // If failed, user might not switch to this branch yet, let's
+        // use "git show <remote>" instead to get default branch.
+        let mut git = Cmd::git(&["remote", "show", remote]).with_display_cmd();
+        let lines = git.lines()?;
+        Self::parse_default_branch(lines)
+    }
+
+    pub fn parse_default_branch(lines: Vec<String>) -> Result<String> {
+        for line in lines {
+            if let Some(branch) = line.trim().strip_prefix(Self::HEAD_BRANCH_PREFIX) {
+                let branch = branch.trim();
+                if branch.is_empty() {
+                    bail!("default branch returned by git remote show is empty");
+                }
+                return Ok(branch.to_string());
+            }
+        }
+
+        bail!("no default branch returned by git remote show, please check your git command");
+    }
+
+    pub fn current() -> Result<String> {
+        Cmd::git(&["branch", "--show-current"])
+            .with_display("Get current branch info")
+            .read()
+    }
+
+    pub fn parse(re: &Regex, line: impl AsRef<str>) -> Result<GitBranch> {
+        let parse_err = format!(
+            "invalid branch description {}, please check your git command",
+            style(line.as_ref()).yellow()
+        );
+        let mut iter = re.captures_iter(line.as_ref());
+        let caps = match iter.next() {
+            Some(caps) => caps,
+            None => bail!(parse_err),
+        };
+        // We have 6 captures:
+        //   0 -> line itself
+        //   1 -> current branch
+        //   2 -> branch name
+        //   3 -> commit id
+        //   4 -> remote description
+        //   5 -> commit message
+        if caps.len() != 6 {
+            bail!(parse_err)
+        }
+        let mut current = false;
+        if let Some(_) = caps.get(1) {
+            current = true;
+        }
+
+        let name = match caps.get(2) {
+            Some(name) => name.as_str().trim(),
+            None => bail!("{}: missing name", parse_err),
+        };
+
+        let status = match caps.get(4) {
+            Some(remote_desc) => {
+                let remote_desc = remote_desc.as_str();
+                let behind = remote_desc.contains("behind");
+                let ahead = remote_desc.contains("ahead");
+
+                if remote_desc.contains("gone") {
+                    BranchStatus::Gone
+                } else if ahead && behind {
+                    BranchStatus::Conflict
+                } else if ahead {
+                    BranchStatus::Ahead
+                } else if behind {
+                    BranchStatus::Behind
+                } else {
+                    BranchStatus::Sync
+                }
+            }
+            None => BranchStatus::Detached,
+        };
+
+        Ok(GitBranch {
+            name: name.to_string(),
+            status,
+            current,
+        })
+    }
+}
+
+pub struct GitRemote(String);
+
+impl GitRemote {
+    pub fn list() -> Result<Vec<GitRemote>> {
+        let lines = Cmd::git(&["remote"])
+            .with_display("List git remotes")
+            .lines()?;
+        Ok(lines.iter().map(|s| GitRemote(s.to_string())).collect())
+    }
+
+    pub fn new() -> GitRemote {
+        GitRemote(String::from("origin"))
+    }
+
+    pub fn from_upstream(
+        cfg: &Config,
+        remote: &Remote,
+        repo: &Rc<Repo>,
+        provider: &Box<dyn Provider>,
+    ) -> Result<GitRemote> {
+        let remotes = Self::list()?;
+        let upstream_remote = remotes
+            .into_iter()
+            .find(|remote| remote.0.as_str() == "upstream");
+        if let Some(remote) = upstream_remote {
+            return Ok(remote);
+        }
+
+        info!("Get upstream for {}", repo.name_with_remote());
+        let api_repo = provider.get_repo(&repo.owner.name, &repo.name)?;
+        if let None = api_repo.upstream {
+            bail!(
+                "repo {} is not forked, so it has not an upstream",
+                repo.name_with_remote()
+            );
+        }
+        let api_upstream = api_repo.upstream.unwrap();
+        let upstream = Repo::from_api_upstream(cfg, &remote.name, api_upstream)?;
+        let url = upstream.clone_url();
+
+        confirm!(
+            "Do you want to set upstream to {}: {}",
+            upstream.name_with_remote(),
+            url
+        );
+
+        Cmd::git(&["remote", "add", "upstream", url.as_str()])
+            .execute()?
+            .check()?;
+        Ok(GitRemote(String::from("upstream")))
+    }
+
+    pub fn target(&self, branch: Option<&str>) -> Result<String> {
+        let (target, branch) = match branch {
+            Some(branch) => (format!("{}/{}", self.0, branch), branch.to_string()),
+            None => {
+                let branch = GitBranch::default_by_remote(&self.0)?;
+                (format!("{}/{}", self.0, branch), branch)
+            }
+        };
+        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()]).execute_check()?;
+        Ok(target)
+    }
+
+    pub fn commits_between(&self, branch: Option<&str>) -> Result<Vec<String>> {
+        let target = self.target(branch)?;
+        let compare = format!("HEAD...{}", target);
+        let lines = Cmd::git(&[
+            "log",
+            "--left-right",
+            "--cherry-pick",
+            "--oneline",
+            compare.as_str(),
+        ])
+        .with_display(format!("Get commits between {target}"))
+        .lines()?;
+        let commits: Vec<_> = lines
+            .iter()
+            .filter(|line| {
+                // If the commit message output by "git log xxx" does not start
+                // with "<", it means that this commit is from the target branch.
+                // Since we only list commits from current branch, ignore such
+                // commits.
+                line.trim().starts_with("<")
+            })
+            .map(|line| line.strip_prefix("<").unwrap().to_string())
+            .map(|line| {
+                let mut fields = line.split_whitespace();
+                fields.next();
+                let commit = fields
+                    .map(|field| field.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                commit
+            })
+            .collect();
+        Ok(commits)
+    }
+
+    pub fn get_url(&self) -> Result<String> {
+        let url = Cmd::git(&["remote", "get-url", &self.0])
+            .with_display(format!("Get url for remote {}", self.0))
+            .read()?;
+        Ok(url)
+    }
+}
+
+pub struct GitTag(String);
+
+impl std::fmt::Display for GitTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl GitTag {
+    const NUM_REGEX: &'static str = r"\d+";
+    const PLACEHOLDER_REGEX: &'static str = r"\{(\d+|%[yYmMdD])(\+)*}";
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn list() -> Result<Vec<GitTag>> {
+        let tags: Vec<_> = Cmd::git(&["tag"])
+            .with_display("Get git tags")
+            .lines()?
+            .iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| GitTag(line.trim().to_string()))
+            .collect();
+        Ok(tags)
+    }
+
+    pub fn latest() -> Result<GitTag> {
+        Cmd::git(&["fetch", "origin", "--prune-tags"])
+            .with_display("Fetch tags")
+            .execute_check()?;
+        let output = Cmd::git(&["describe", "--tags", "--abbrev=0"])
+            .with_display("Get latest tag")
+            .read()?;
+        if output.is_empty() {
+            bail!("no latest tag");
+        }
+        Ok(GitTag(output))
+    }
+
+    pub fn apply_rule(&self, rule: impl AsRef<str>) -> Result<GitTag> {
+        let num_re = Regex::new(Self::NUM_REGEX).context("unable to parse num regex")?;
+        let ph_re = Regex::new(Self::PLACEHOLDER_REGEX)
+            .context("unable to parse rule placeholder regex")?;
+
+        let nums: Vec<i32> = num_re
+            .captures_iter(self.0.as_str())
+            .map(|caps| {
+                caps.get(0)
+                    .unwrap()
+                    .as_str()
+                    .parse()
+                    // The caps here MUST be number, so it is safe to use expect here
+                    .expect("unable to parse num caps")
+            })
+            .collect();
+
+        let mut with_date = false;
+        let result = ph_re.replace_all(rule.as_ref(), |caps: &Captures| {
+            let rep = caps.get(1).unwrap().as_str();
+            let idx: usize = match rep.parse() {
+                Ok(idx) => idx,
+                Err(_) => {
+                    with_date = true;
+                    return rep.to_string();
+                }
+            };
+            let num = if idx >= nums.len() { 0 } else { nums[idx] };
+            let plus = caps.get(2);
+            match plus {
+                Some(_) => format!("{}", num + 1),
+                None => format!("{}", num),
+            }
+        });
+        let mut result = result.to_string();
+        if with_date {
+            let date = Local::now();
+            result = date.format(&result).to_string();
+        }
+
+        Ok(GitTag(result))
+    }
+}
+
+pub struct Workflow<'a> {
+    pub name: String,
+    steps: &'a Vec<WorkflowStep>,
+
+    cfg: &'a Config,
+}
+
+impl<'a> Workflow<'_> {
+    pub fn new(cfg: &Config, name: impl AsRef<str>) -> Result<Workflow> {
+        match cfg.workflows.get(name.as_ref()) {
+            Some(steps) => Ok(Workflow {
+                name: name.as_ref().to_string(),
+                steps,
+                cfg,
+            }),
+            None => bail!("could not find workflow '{}'", name.as_ref()),
+        }
+    }
+
+    pub fn execute_repo(&self, cfg: &Config, repo: &Rc<Repo>) -> Result<()> {
+        info!(
+            "Execute workflow '{}' for '{}'",
+            self.name,
+            repo.name_with_remote()
+        );
+        let dir = repo.get_path(cfg);
+        for step in self.steps.iter() {
+            if let Some(run) = &step.run {
+                let script = run.replace("\n", ";");
+                let mut cmd = Cmd::sh(&script).with_display(format!("Run {}", step.name));
+                cmd.with_path(&dir);
+
+                cmd.with_env("REPO_NAME", repo.name.as_str());
+                cmd.with_env("REPO_OWNER", repo.owner.name.as_str());
+                cmd.with_env("REMOTE", repo.remote.name.as_str());
+                cmd.with_env("REPO_NAME_WITH_OWNER", repo.name_with_owner());
+                cmd.with_env("REPO_NAME_WITH_REMOTE", repo.name_with_remote());
+
+                cmd.execute_check()?;
+                continue;
+            }
+            if let None = step.file {
+                continue;
+            }
+
+            let content = step.file.as_ref().unwrap();
+            let content = content.replace("\\t", "\t");
+
+            exec!("Create file '{}'", step.name);
+            let path = dir.join(&step.name);
+            utils::write_file(&path, content.as_bytes())?;
+        }
+        Ok(())
+    }
+
+    pub fn execute_task<S>(&self, dir: &PathBuf, remote: S, owner: S, name: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let long_name = format!("{}/{}", owner.as_ref(), name.as_ref());
+        let full_name = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
+
+        for step in self.steps.iter() {
+            if let Some(run) = &step.run {
+                let script = run.replace("\n", ";");
+                let mut cmd = Cmd::sh(&script);
+                cmd.with_path(&dir);
+
+                cmd.with_env("REPO_NAME", name.as_ref());
+                cmd.with_env("REPO_OWNER", owner.as_ref());
+                cmd.with_env("REMOTE", remote.as_ref());
+                cmd.with_env("REPO_LONG", long_name.as_str());
+                cmd.with_env("REPO_FULL", full_name.as_str());
+
+                cmd.execute_check()?;
+                continue;
+            }
+            if let None = step.file {
+                continue;
+            }
+
+            let content = step.file.as_ref().unwrap();
+            let content = content.replace("\\t", "\t");
+
+            let path = dir.join(&step.name);
+            utils::write_file(&path, content.as_bytes())?;
+        }
+        Ok(())
+    }
+}
+
+pub struct Table {
+    ncol: usize,
+    rows: Vec<Vec<String>>,
+}
+
+impl Table {
+    pub fn with_capacity(size: usize) -> Table {
+        Table {
+            ncol: 0,
+            rows: Vec::with_capacity(size),
+        }
+    }
+
+    pub fn add(&mut self, row: Vec<String>) {
+        if row.is_empty() {
+            panic!("empty row");
+        }
+        if self.ncol == 0 {
+            self.ncol = row.len();
+        } else if row.len() != self.ncol {
+            panic!("unexpect row len");
+        }
+        self.rows.push(row);
+    }
+
+    pub fn show(self) {
+        let mut pads = Vec::with_capacity(self.ncol);
+        for i in 0..self.ncol {
+            let mut max_len: usize = 0;
+            for row in self.rows.iter() {
+                let cell = row.get(i).unwrap();
+                if cell.len() > max_len {
+                    max_len = cell.len()
+                }
+            }
+            pads.push(max_len + 2);
+        }
+
+        for row in self.rows.into_iter() {
+            for (i, cell) in row.into_iter().enumerate() {
+                let pad = pads[i];
+                let cell = cell.pad_to_width_with_alignment(pad, pad::Alignment::Left);
+                print!("{}", cell);
+            }
+            println!()
+        }
+    }
+}
+
+struct ProgressWriter<W: Write> {
+    desc: String,
+    desc_size: usize,
+
+    upstream: W,
+
+    last_report: Instant,
+
+    current: usize,
+    total: usize,
+}
+
+impl<W: Write> ProgressWriter<W> {
+    const SPACE: &'static str = " ";
+    const SPACE_SIZE: usize = 1;
+
+    const REPORT_INTERVAL: Duration = Duration::from_millis(200);
+
+    pub fn new(desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
+        let desc_size = console::measure_text_width(&desc);
+        let last_report = Instant::now();
+
+        let pw = ProgressWriter {
+            desc,
+            desc_size,
+            upstream,
+            last_report,
+            current: 0,
+            total,
+        };
+        write_stderr(pw.render());
+        pw
+    }
+
+    fn render(&self) -> String {
+        let term_size = size();
+        if self.desc_size > term_size {
+            return ".".repeat(term_size);
+        }
+
+        let mut line = self.desc.clone();
+        if self.desc_size + Self::SPACE_SIZE > term_size || bar_size() == 0 {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let bar = render_bar(self.current, self.total);
+        let bar_size = console::measure_text_width(&bar);
+        let line_size = console::measure_text_width(&line);
+        if line_size + bar_size > term_size {
+            return line;
+        }
+        line.push_str(&bar);
+
+        let line_size = console::measure_text_width(&line);
+        if line_size + Self::SPACE_SIZE > term_size {
+            return line;
+        }
+        line.push_str(Self::SPACE);
+
+        let info = utils::human_bytes(self.current as u64);
+        let info_size = console::measure_text_width(&info);
+        let line_size = console::measure_text_width(&line);
+        if line_size + info_size > term_size {
+            return line;
+        }
+        line.push_str(&info);
+        line
+    }
+}
+
+impl<W: Write> Write for ProgressWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let size = self.upstream.write(buf)?;
+        self.current += size;
+
+        if self.current >= self.total {
+            self.current = self.total;
+            cursor_up();
+            write_stderr(self.render());
+            return Ok(size);
+        }
+
+        let now = Instant::now();
+        let delta = now - self.last_report;
+        if delta >= Self::REPORT_INTERVAL {
+            cursor_up();
+            write_stderr(self.render());
+            self.last_report = now;
+        }
+
+        Ok(size)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.upstream.flush()
+    }
+}
+
+pub fn download(name: &str, url: impl AsRef<str>, path: impl AsRef<str>) -> Result<()> {
+    const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let client = Client::builder().timeout(DOWNLOAD_TIMEOUT).build().unwrap();
+    let url = Url::parse(url.as_ref()).context("parse download url")?;
+
+    let req = client
+        .request(Method::GET, url)
+        .build()
+        .context("build download http request")?;
+
+    let mut resp = client.execute(req).context("request http download")?;
+    let total = match resp.content_length() {
+        Some(size) => size,
+        None => bail!("could not find content-length in http response"),
+    };
+
+    let path = PathBuf::from(path.as_ref());
+    utils::ensure_dir(&path)?;
+
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("Open file {}", path.display()))?;
+    let desc = format!("Downloading {name}:");
+
+    let mut pw = ProgressWriter::new(desc, total as usize, file);
+    resp.copy_to(&mut pw).context("download data")?;
+
+    cursor_up();
+    info!("Download {} done", name);
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod term_tests {
+    use crate::term::*;
+
+    #[test]
+    fn test_show_json() {
+        #[derive(Debug, Serialize)]
+        struct TestInfo {
+            pub name: String,
+            pub age: i32,
+            pub emails: Vec<String>,
+        }
+
+        let info = TestInfo {
+            name: String::from("Rowlet"),
+            age: 25,
+            emails: vec![
+                String::from("lazycat7706@gmail.com"),
+                String::from("631029386@qq.com"),
+            ],
+        };
+        show_json(&info).unwrap();
+    }
+
+    #[test]
+    fn test_parse_branch() {
+        let cases = vec![
+            (
+                "* main cf11adb [origin/main] My best commit since the project begin",
+                "main",
+                BranchStatus::Sync,
+                true,
+            ),
+            (
+                "release/1.6 dc07e7ec7 [origin/release/1.6] Merge pull request #9024 from akhilerm/cherry-pick-9021-release/1.6",
+                "release/1.6",
+                BranchStatus::Sync,
+                false
+            ),
+            (
+                "feat/update-version 3b0569d62 [origin/feat/update-version: ahead 1] chore: update cargo version",
+                "feat/update-version",
+                BranchStatus::Ahead,
+                false
+            ),
+            (
+                "* feat/tmp-dev 92bbd6e [origin/feat/tmp-dev: gone] Merge pull request #6 from fioncat/hello",
+                "feat/tmp-dev",
+                BranchStatus::Gone,
+                true
+            ),
+            (
+                "master       b4a40de [origin/master: ahead 1, behind 1] test commit",
+                "master",
+                BranchStatus::Conflict,
+                false
+            ),
+            (
+                "* dev        b4a40de test commit",
+                "dev",
+                BranchStatus::Detached,
+                true
+            ),
+        ];
+
+        let re = GitBranch::get_regex();
+        for (raw, name, status, current) in cases {
+            let result = GitBranch::parse(&re, raw).unwrap();
+            let expect = GitBranch {
+                name: String::from(name),
+                status,
+                current,
+            };
+            assert_eq!(result, expect);
+        }
+    }
+
+    #[test]
+    fn test_parse_default_branch() {
+        // Lines from `git remote show origin`
+        let lines = vec![
+            "  * remote origin",
+            "  Fetch URL: git@github.com:fioncat/roxide.git",
+            "  Push  URL: git@github.com:fioncat/roxide.git",
+            "  HEAD branch: main",
+            "  Remote branches:",
+            "    feat/test tracked",
+            "    main      tracked",
+            "  Local branches configured for 'git pull':",
+            "    feat/test merges with remote feat/test",
+            "    main      merges with remote main",
+            "  Local refs configured for 'git push':",
+            "    feat/test pushes to feat/test (up to date)",
+            "    main      pushes to main      (up to date)",
+        ];
+
+        let default_branch = GitBranch::parse_default_branch(
+            lines.into_iter().map(|line| line.to_string()).collect(),
+        )
+        .unwrap();
+        assert_eq!(default_branch, "main");
+    }
+
+    #[test]
+    fn test_apply_tag_rule() {
+        let cases = vec![
+            ("v0.1.0", "v{0}.{1+}.0", "v0.2.0"),
+            ("v12.1.0", "v{0+}.0.0", "v13.0.0"),
+            ("v0.8.13", "{0}.{1}.{2+}-rc1", "0.8.14-rc1"),
+            ("1.2.23", "{0}.{1}.{2+}-rc{3}", "1.2.24-rc0"),
+            ("1.2.23", "{0}.{1}.{2+}-rc{3+}", "1.2.24-rc1"),
+            ("1.2.20-rc4", "{0}.{1}.{2+}-rc{3+}", "1.2.21-rc5"),
+        ];
+
+        for (before, rule, expect) in cases {
+            let tag = GitTag(String::from(before));
+            let result = tag.apply_rule(rule).unwrap();
+            assert_eq!(result.as_str(), expect);
+        }
+    }
 }

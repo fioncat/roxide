@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
+use crate::api::ApiUpstream;
 use crate::config::{Config, OwnerConfig, RemoteConfig};
 use crate::utils;
 
@@ -152,6 +153,25 @@ impl Repo {
             accessed: 0.0,
             labels,
         }))
+    }
+
+    /// Use [`ApiUpstream`] to build a repository object.
+    pub fn from_api_upstream<S>(
+        cfg: &Config,
+        remote_name: S,
+        upstream: ApiUpstream,
+    ) -> Result<Rc<Repo>>
+    where
+        S: AsRef<str>,
+    {
+        Self::new(
+            cfg,
+            remote_name.as_ref(),
+            &upstream.owner,
+            &upstream.name,
+            None,
+            &None,
+        )
     }
 
     /// Retrieve the repository path.
