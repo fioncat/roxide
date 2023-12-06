@@ -28,18 +28,6 @@ pub struct Cache {
 }
 
 impl Provider for Cache {
-    fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
-        let path = self.get_repo_path(owner, name);
-        if !self.force {
-            if let Some(repo) = self.read(&path)? {
-                return Ok(repo);
-            }
-        }
-        let repo = self.upstream.get_repo(owner, name)?;
-        self.write(&repo, &path)?;
-        Ok(repo)
-    }
-
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = self.list_repos_path(owner);
         if !self.force {
@@ -50,6 +38,18 @@ impl Provider for Cache {
         let repos = self.upstream.list_repos(owner)?;
         self.write(&repos, &path)?;
         Ok(repos)
+    }
+
+    fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
+        let path = self.get_repo_path(owner, name);
+        if !self.force {
+            if let Some(repo) = self.read(&path)? {
+                return Ok(repo);
+            }
+        }
+        let repo = self.upstream.get_repo(owner, name)?;
+        self.write(&repo, &path)?;
+        Ok(repo)
     }
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {

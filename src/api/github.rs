@@ -94,23 +94,22 @@ struct PullRequestBody {
 impl From<MergeOptions> for PullRequestOptions {
     fn from(merge: MergeOptions) -> Self {
         let MergeOptions {
-            mut owner,
-            mut name,
+            owner,
+            name,
             upstream,
             source,
             target,
         } = merge;
 
-        let (head, head_search) = match upstream {
+        let (head, head_search, owner, name) = match upstream {
             Some(upstream) => {
                 let head = format!("{owner}:{source}");
                 let head_search = format!("{owner}/{source}");
-                (owner, name) = (upstream.owner, upstream.name);
-                (head, head_search)
+                (head, head_search, upstream.owner, upstream.name)
             }
             None => {
                 let head_search = source.clone();
-                (source, head_search)
+                (source, head_search, owner, name)
             }
         };
         PullRequestOptions {
@@ -191,7 +190,7 @@ impl Provider for Github {
 }
 
 impl Github {
-    const API_VERSION: &str = "2022-11-28";
+    const API_VERSION: &'static str = "2022-11-28";
 
     pub fn new(remote: &Remote) -> Box<dyn Provider> {
         let client = super::build_common_client(remote);
@@ -218,7 +217,7 @@ impl Github {
     where
         T: DeserializeOwned + ?Sized,
     {
-        let req = self.build_request(path, Method::GET, None)?;
+        let req = self.build_request(path, Method::GET, None).context("build Github request")?;
         self.execute(req)
     }
 
@@ -227,7 +226,7 @@ impl Github {
         B: Serialize,
         R: DeserializeOwned + ?Sized,
     {
-        let body = serde_json::to_vec(&body).context("encode GitHub request body")?;
+        let body = serde_json::to_vec(&body).context("encode Github request body")?;
         let req = self.build_request(path, Method::POST, Some(body))?;
         self.execute(req)
     }
@@ -236,19 +235,19 @@ impl Github {
     where
         T: DeserializeOwned + ?Sized,
     {
-        let resp = self.client.execute(req).context("GitHub http request")?;
+        let resp = self.client.execute(req).context("Github http request")?;
         let ok = resp.status().is_success();
-        let data = resp.bytes().context("read GitHub response body")?;
+        let data = resp.bytes().context("read Github response body")?;
         if ok {
-            return serde_json::from_slice(&data).context("decode GitHub response data");
+            return serde_json::from_slice(&data).context("decode Github response data");
         }
 
         match serde_json::from_slice::<Error>(&data) {
-            Ok(err) => bail!("GitHub api error: {}", err.message),
+            Ok(err) => bail!("Github api error: {}", err.message),
             Err(_err) => bail!(
                 "unknown GitHub api error: {}",
                 String::from_utf8(data.to_vec())
-                    .context("decode GitHub response to UTF-8 string")?
+                    .context("decode Github response to UTF-8 string")?
             ),
         }
     }
@@ -268,7 +267,7 @@ impl Github {
         if let Some(body) = body {
             builder = builder.body(body);
         }
-        builder.build().context("build GitHub request")
+        builder.build().context("build request")
     }
 
     pub fn get_latest_tag(&self, owner: &str, name: &str) -> Result<String> {

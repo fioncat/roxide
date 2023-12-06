@@ -14,12 +14,6 @@ pub struct Alias {
 }
 
 impl Provider for Alias {
-    fn get_repo(&self, raw_owner: &str, raw_name: &str) -> Result<ApiRepo> {
-        let owner = self.alias_owner(raw_owner);
-        let name = self.alias_repo(owner, raw_name);
-        self.upstream.get_repo(owner, name)
-    }
-
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let owner = self.alias_owner(owner);
         let names = self.upstream.list_repos(owner)?;
@@ -28,6 +22,12 @@ impl Provider for Alias {
             .map(|name| self.raw_repo(owner, name))
             .collect();
         Ok(names)
+    }
+
+    fn get_repo(&self, raw_owner: &str, raw_name: &str) -> Result<ApiRepo> {
+        let owner = self.alias_owner(raw_owner);
+        let name = self.alias_repo(owner, raw_name);
+        self.upstream.get_repo(owner, name)
     }
 
     fn get_merge(&self, mut merge: MergeOptions) -> Result<Option<String>> {

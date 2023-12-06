@@ -112,6 +112,8 @@ pub fn write_file(path: &PathBuf, data: &[u8]) -> Result<()> {
 /// lock, any attempts by other identical processes to acquire the lock will fail.
 /// There's no need for manual release of the file lock; it automatically releases
 /// upon object release.
+///
+/// See: [`file_lock`] and [`file_lock::FileLock`].
 pub struct FileLock {
     _path: PathBuf,
     /// Wrap the `file_lock` crate
@@ -130,7 +132,7 @@ impl FileLock {
     ///
     /// * `cfg` - We will create file lock under `cfg.metadir`.
     /// * `name` - File lock name, you can use this to create locks at different
-    /// granularities to lock different processes.
+    /// granularity to lock different processes.
     pub fn acquire(cfg: &Config, name: impl AsRef<str>) -> Result<FileLock> {
         let path = cfg.get_meta_dir().join(format!("lock_{}", name.as_ref()));
         ensure_dir(&path)?;
@@ -172,6 +174,7 @@ impl FileLock {
     }
 }
 
+/// See: [`shellexpand::full`].
 pub fn expandenv(s: impl AsRef<str>) -> Result<String> {
     let s = shellexpand::full(s.as_ref())
         .with_context(|| format!("expand env for '{}'", s.as_ref()))?;

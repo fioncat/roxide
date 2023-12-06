@@ -831,7 +831,9 @@ enum SelectOneType<'a> {
 /// the user, enabling subsequent operations. The Selector essentially encapsulates
 /// the Database, offering more advanced query logic.
 ///
-/// ## Query single
+/// ## Select one
+///
+/// Please use [`Selector::one`] or [`Selector::must_one`].
 ///
 /// Any query requires two parameters, `head` and `query`. When querying a single
 /// repository, their meanings are as follows:
@@ -852,12 +854,15 @@ enum SelectOneType<'a> {
 ///   (excluding the current repository) will be returned. If `force_search` is
 ///   specified, it will search all local repositories.
 ///
-/// ## Query multiple
+/// ## Select multiple
+///
+/// Please use [`Selector::many_local`] or [`Selector::many_remote`].
 ///
 /// For selecting multiple repositories, the parameters are much simpler:
 ///
-/// * `head`: Represents the remote name.
-/// * `query`: Represents the owner's name.
+/// * `head`: Represents the remote name or fuzzy matching keyword (not support using URL).
+/// * `query`: The same as single, but when using `{owner}/`, will select all owner's
+///   repositories rather than searching owner.
 ///
 /// In general, when selecting multiple repositories, both of these parameters
 /// must be provided.
