@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::Provider;
 use crate::config::Config;
 use crate::repo::{NameLevel, Owner, Remote, Repo};
+use crate::term;
 use crate::utils::{self, FileLock};
 
 /// The Bucket is repositories data structure stored on disk that can be directly
@@ -616,6 +617,26 @@ impl Database<'_> {
         vec
     }
 
+    /// List all owner names.
+    pub fn list_owners<R>(&self, remote_name: R) -> Vec<String>
+    where
+        R: AsRef<str>,
+    {
+        let mut owners = Vec::new();
+        let mut owner_set = HashSet::new();
+        for repo in self.repos.iter() {
+            if repo.remote.name.as_str() != remote_name.as_ref() {
+                continue;
+            }
+            if let None = owner_set.get(repo.owner.name.as_str()) {
+                owner_set.insert(repo.owner.name.as_str());
+                owners.push(repo.owner.name.clone());
+            }
+        }
+        owners.sort();
+        owners
+    }
+
     /// Update the repository data in the database. Call this after accessing a
     /// repository to update its access time and count. Additionally, you can
     /// update the repository's labels using the `labels` parameter.
@@ -674,7 +695,7 @@ pub trait TerminalHelper {
     fn search(&self, items: &Vec<String>) -> Result<usize>;
 
     /// Use an editor to edit and filter multiple items.
-    fn edit(&self, items: Vec<String>) -> Result<Vec<String>>;
+    fn edit(&self, cfg: &Config, items: Vec<String>) -> Result<Vec<String>>;
 }
 
 /// Used to construct an API provider, this trait abstraction is primarily for
@@ -701,6 +722,22 @@ impl ProviderBuilder for DefaultProviderBuilder {
     ) -> Result<Box<dyn Provider>> {
         use crate::api::build_provider;
         build_provider(cfg, remote, force)
+    }
+}
+
+/// The default terminal helper implement, use:
+///
+/// * [`term::fzf_search`] for searching.
+/// * [`term::edit_items`] for edit.
+pub struct DefaultTerminalHelper {}
+
+impl TerminalHelper for DefaultTerminalHelper {
+    fn search(&self, items: &Vec<String>) -> Result<usize> {
+        term::fzf_search(items)
+    }
+
+    fn edit(&self, cfg: &Config, items: Vec<String>) -> Result<Vec<String>> {
+        term::edit_items(cfg, items)
     }
 }
 
@@ -731,6 +768,14 @@ pub struct SelectOptions<T: TerminalHelper, P: ProviderBuilder> {
     many_edit: bool,
 
     filter_labels: Option<HashSet<String>>,
+}
+
+impl SelectOptions<DefaultTerminalHelper, DefaultProviderBuilder> {
+    /// Create a default SelectOptions, with [`DefaultTerminalHelper`]
+    /// and [`DefaultProviderBuilder`].
+    pub fn default() -> Self {
+        SelectOptions::new(DefaultTerminalHelper {}, DefaultProviderBuilder {})
+    }
 }
 
 impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
@@ -891,6 +936,25 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             db,
             opts,
         }
+    }
+
+    /// Similar to [`Selector::new`], but use different type for `head` and `query`.
+    pub fn from_args(
+        db: &'a Database<'a>,
+        head: &'a Option<String>,
+        query: &'a Option<String>,
+        opts: SelectOptions<T, P>,
+    ) -> Selector<'a, T, P> {
+        let head = match head {
+            Some(head) => head.as_str(),
+            None => "",
+        };
+        let query = match query {
+            Some(query) => query.as_str(),
+            None => "",
+        };
+
+        Self::new(db, head, query, opts)
     }
 
     /// Similar to [`Selector::one`], the difference is that an error is returned
@@ -1061,7 +1125,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         let path = segs.join("/");
-        let (owner, name) = Self::parse_owner(&path);
+        let (owner, name) = parse_owner(&path);
 
         match self.db.get(&remote_name, &owner, &name) {
             Some(repo) => Ok((repo, true)),
@@ -1163,7 +1227,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         // This can be determined based on whether `query` contains "/".
         // - If `query` contains "/", the user wants to directly locate or
         // create a repository, and we can directly call the get function.
-        let (owner, name) = Self::parse_owner(self.query);
+        let (owner, name) = parse_owner(self.query);
         if owner.is_empty() {
             return match self.opts.mode {
                 SelectMode::Search => self.one_from_provider(&remote),
@@ -1193,7 +1257,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let idx = self.opts.terminal_helper.search(&items)?;
         let result = &items[idx];
 
-        let (owner, name) = Self::parse_owner(result);
+        let (owner, name) = parse_owner(result);
         if owner.is_empty() || name.is_empty() {
             bail!("invalid repo name '{result}' from remote");
         }
@@ -1241,33 +1305,6 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((repo, false))
     }
 
-    /// Parsing a path into owner and name follows the basic format: `"{owner}/{name}"`.
-    /// `"{owner}"` adheres to GitLab's rules and can include sub-owners (i.e., multiple
-    /// levels of directories). If the path does not contain `"/"`, then return the
-    /// path directly with an empty owner.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// assert_eq!(Selector::parse_owner("fioncat/roxide"), (format!("fioncat"), format!("roxide")));
-    /// assert_eq!(Selector::parse_owner("s0/s1/repo"), (format!("s0/s1"), format!("repo")));
-    /// assert_eq!(Selector::parse_owner("roxide"), (format!(""), format!("roxide")));
-    /// ```
-    pub fn parse_owner(path: impl AsRef<str>) -> (String, String) {
-        let items: Vec<_> = path.as_ref().split("/").collect();
-        let items_len = items.len();
-        let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
-        let mut base = "";
-        for (idx, item) in items.iter().enumerate() {
-            if idx == items_len - 1 {
-                base = item;
-            } else {
-                group_buffer.push(item.to_string());
-            }
-        }
-        (group_buffer.join("/"), base.to_string())
-    }
-
     /// Selecting multiple repositories from the local database.
     ///
     /// # Returns
@@ -1280,7 +1317,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let (repos, level) = self.many_local_raw()?;
         if self.opts.many_edit {
             let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
-            let items = self.opts.terminal_helper.edit(items)?;
+            let items = self.opts.terminal_helper.edit(self.db.cfg, items)?;
             let items_set: HashSet<String> = items.into_iter().collect();
 
             let repos: Vec<Rc<Repo>> = repos
@@ -1337,7 +1374,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             ));
         }
 
-        let (owner, name) = Self::parse_owner(self.query);
+        let (owner, name) = parse_owner(self.query);
         let repo = if owner.is_empty() {
             self.db.must_get_fuzzy(&remote.name, &name)?
         } else {
@@ -1357,7 +1394,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     pub fn many_remote(&self) -> Result<(Remote, String, Vec<String>)> {
         let (remote, owner, names) = self.many_remote_raw()?;
         if self.opts.many_edit {
-            let names = self.opts.terminal_helper.edit(names.clone())?;
+            let names = self.opts.terminal_helper.edit(self.db.cfg, names.clone())?;
             return Ok((remote, owner, names));
         }
 
@@ -1376,7 +1413,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             cfg: remote_cfg.clone(),
         };
 
-        let (owner, name) = Self::parse_owner(self.query);
+        let (owner, name) = parse_owner(self.query);
         if !owner.is_empty() && !name.is_empty() {
             return Ok((remote, owner, vec![self.query.to_string()]));
         }
@@ -1404,6 +1441,33 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             .collect();
         Ok((remote, owner.to_string(), names))
     }
+}
+
+/// Parsing a path into owner and name follows the basic format: `"{owner}/{name}"`.
+/// `"{owner}"` adheres to GitLab's rules and can include sub-owners (i.e., multiple
+/// levels of directories). If the path does not contain `"/"`, then return the
+/// path directly with an empty owner.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(Selector::parse_owner("fioncat/roxide"), (format!("fioncat"), format!("roxide")));
+/// assert_eq!(Selector::parse_owner("s0/s1/repo"), (format!("s0/s1"), format!("repo")));
+/// assert_eq!(Selector::parse_owner("roxide"), (format!(""), format!("roxide")));
+/// ```
+pub fn parse_owner(path: impl AsRef<str>) -> (String, String) {
+    let items: Vec<_> = path.as_ref().split("/").collect();
+    let items_len = items.len();
+    let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
+    let mut base = "";
+    for (idx, item) in items.iter().enumerate() {
+        if idx == items_len - 1 {
+            base = item;
+        } else {
+            group_buffer.push(item.to_string());
+        }
+    }
+    (group_buffer.join("/"), base.to_string())
 }
 
 #[cfg(test)]
@@ -1819,7 +1883,7 @@ mod select_tests {
             }
         }
 
-        fn edit(&self, items: Vec<String>) -> Result<Vec<String>> {
+        fn edit(&self, _cfg: &Config, items: Vec<String>) -> Result<Vec<String>> {
             match self.edits.as_ref() {
                 Some(edits) => Ok(edits.clone()),
                 None => Ok(items),

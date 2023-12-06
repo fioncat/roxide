@@ -14,7 +14,7 @@ use serde::Deserialize;
 use crate::utils;
 
 /// The basic configuration, defining some global behaviors of roxide.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     /// The working directory, where all repo will be stored.
     #[serde(default = "defaults::workspace")]
@@ -55,7 +55,7 @@ pub struct Config {
 
 /// Indicates an execution step in Workflow, which can be writing a file or
 /// executing a shell command.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct WorkflowStep {
     /// If the Step is to write to a file, then name is the file name. If Step
     /// is an execution command, name is the name of the step. (required)

@@ -406,16 +406,29 @@ pub fn get_editor() -> Result<String> {
     Ok(editor)
 }
 
+/// Represents the result of a command execution, containing both the command
+/// output and the return code. Different functions can be used to further process
+/// the command result.
 pub struct CmdResult {
+    /// The return code of the command.
     pub code: Option<i32>,
 
+    /// The piped stdout of the command.
     pub stdout: String,
+    /// The piped stderr of the command, if the command is displayed, this will
+    /// be empty.
     pub stderr: String,
 
+    /// If it is [`None`], it means that the error message of the command has
+    /// already been displayed, and the `Result` does not need to show the
+    /// information again while handling the result. Otherwise, when handling the
+    /// result, it needs to show error information, including the command output.
     pub display: Option<String>,
 }
 
 impl CmdResult {
+    /// Check the execution result of the command. If command exited with none-zero
+    /// return an error.
     pub fn check(&self) -> Result<()> {
         if let Some(code) = self.code {
             if code == 0 {
@@ -451,11 +464,13 @@ impl CmdResult {
         bail!(msg)
     }
 
+    /// Check result and return stdout output.
     pub fn read(&self) -> Result<String> {
         self.check()?;
         Ok(Self::trim_output(&self.stdout, false))
     }
 
+    /// Check result and split stdout output to lines.
     pub fn lines(&self) -> Result<Vec<String>> {
         let output = self.read()?;
         let lines: Vec<String> = output
@@ -464,7 +479,7 @@ impl CmdResult {
                 if line.is_empty() {
                     return None;
                 }
-                Some(line.to_string())
+                Some(line.trim().to_string())
             })
             .collect();
         Ok(lines)
@@ -480,6 +495,23 @@ impl CmdResult {
     }
 }
 
+/// Represents a command that needs to be executed in the terminal.
+///
+/// It is a wrapper around [`Command`], and in addition to the original functionality,
+/// it can optionally output command information for better presentation and debugging.
+///
+/// By default, the output of the command will be piped to prevent terminal
+/// contamination. If you want to redirect the command output to the terminal, you
+/// need to use [`Cmd::with_display`].
+///
+/// # Examples
+///
+/// ```
+/// Cmd::new("ls").lines().unwrap();
+/// Cmd::with_args("df", &["-h"]).execute_check().unwrap();
+/// Cmd::git(&["status", "-s"]).with_display("Get git status").lines().unwrap();
+/// Cmd::git(&["branch"]).with_display_cmd().read().unwrap();
+/// ```
 pub struct Cmd<'a> {
     name: &'a str,
 
@@ -490,10 +522,12 @@ pub struct Cmd<'a> {
 }
 
 impl<'a> Cmd<'_> {
+    /// Use `program` to create a new [`Cmd`].
     pub fn new(program: &str) -> Cmd {
         Self::with_args(program, &[])
     }
 
+    /// Create a new [`Cmd`], with args.
     pub fn with_args(program: &'a str, args: &[&str]) -> Cmd<'a> {
         let mut cmd = Command::new(program);
         if !args.is_empty() {
@@ -511,10 +545,14 @@ impl<'a> Cmd<'_> {
         }
     }
 
+    /// Create a new git [`Cmd`].
     pub fn git(args: &[&str]) -> Cmd<'a> {
         Self::with_args("git", args)
     }
 
+    /// When executing a command, display the command name, args, and a prompt.
+    /// If this function is called, the command's stderr will be redirected to the
+    /// terminal, and if it fails during execution, it will return a [`SilentExit`].
     pub fn with_display(mut self, display: impl ToString) -> Self {
         self.display = Some(display.to_string());
         // We redirect command's stderr to program's. So that user can view command's
@@ -523,16 +561,20 @@ impl<'a> Cmd<'_> {
         self
     }
 
+    /// Similar to [`Cmd::with_display`], but when executed, only display the
+    /// command without showing prompt information.
     pub fn with_display_cmd(self) -> Self {
         self.with_display("")
     }
 
+    /// Set stdin as piped and pass `input` to the command's stdin.
     pub fn with_input(&mut self, input: String) -> &mut Self {
         self.input = Some(input);
         self.cmd.stdin(Stdio::piped());
         self
     }
 
+    /// Set environment variable for the command.
     pub fn with_env<K, V>(&mut self, key: K, val: V) -> &mut Self
     where
         K: AsRef<str>,
@@ -542,11 +584,17 @@ impl<'a> Cmd<'_> {
         self
     }
 
+    /// Set the work directory for the command.
     pub fn with_path(&mut self, path: &PathBuf) -> &mut Self {
         self.cmd.current_dir(path);
         self
     }
 
+    /// Create a sh command, encapsulating the command using `sh -c "xxx"`.
+    ///
+    /// ## Compatibility
+    ///
+    /// This function is only supported on Unix system.
     pub fn sh(script: &str) -> Cmd {
         // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
         // the script does not output any content to stdout. This method is not
@@ -555,18 +603,25 @@ impl<'a> Cmd<'_> {
         Self::with_args("sh", &["-c", script.as_str()])
     }
 
+    /// Execute the command and return the output as multiple lines.
+    /// See: [`CmdResult::lines`].
     pub fn lines(&mut self) -> Result<Vec<String>> {
         self.execute()?.lines()
     }
 
+    /// Execute the command and return the output as string. See: [`CmdResult::read`].
     pub fn read(&mut self) -> Result<String> {
         self.execute()?.read()
     }
 
+    /// Execute the command and check result.
     pub fn execute_check(&mut self) -> Result<()> {
         self.execute()?.check()
     }
 
+    /// Execute the command without performing result validation.
+    ///
+    /// See: [`CmdResult`].
     pub fn execute(&mut self) -> Result<CmdResult> {
         let result_display = self.show();
 
@@ -642,41 +697,67 @@ impl<'a> Cmd<'_> {
         if !display.is_empty() {
             exec!("{}", display);
         }
-        exec!("{} {}", style("::").magenta(), cmd_name);
+        stderr!("{} {}", style("::").cyan().bold(), cmd_name);
         None
     }
 }
 
+/// This is a simple wrapper for [`Cmd`] that allows setting the working directory.
+/// For GitCmd, this is achieved using args `-C <work-dir>`.
+///
+/// # Examples
+///
+/// ```
+/// GitCmd::with_path("/path/to/repo").exec(&["checkout", "main"]).unwrap();
+/// GitCmd::with_path("/path/to/repo").lines(&["branch", "-vv"]).unwrap();
+/// GitCmd::with_path("/path/to/repo").checkout("v0.1.0").unwrap();
+/// ```
 pub struct GitCmd<'a> {
     prefix: Vec<&'a str>,
 }
 
 impl<'a> GitCmd<'a> {
+    /// Create a [`GitCmd`] and set the working directory at the same time.
     pub fn with_path(path: &'a str) -> GitCmd<'a> {
         let prefix = if path != "" { vec!["-C", path] } else { vec![] };
         GitCmd { prefix }
     }
 
+    /// See: [`Cmd::execute`].
     pub fn exec(&self, args: &[&str]) -> Result<()> {
         let args = [&self.prefix, args].concat();
         Cmd::git(&args).execute()?.check()
     }
 
+    /// See: [`Cmd::lines`].
     pub fn lines(&self, args: &[&str]) -> Result<Vec<String>> {
         let args = [&self.prefix, args].concat();
         Cmd::git(&args).execute()?.lines()
     }
 
+    /// See: [`Cmd::read`].
     pub fn read(&self, args: &[&str]) -> Result<String> {
         let args = [&self.prefix, args].concat();
         Cmd::git(&args).execute()?.read()
     }
 
+    /// Use `checkout` to switch to a new branch, tag, or commit. This is a wrapper
+    /// for the command `git checkout <target>`.
     pub fn checkout(&self, arg: &str) -> Result<()> {
         self.exec(&["checkout", arg])
     }
 }
 
+/// Use the `fzf` command to search through multiple items. Return the index of the
+/// selected item from the search results.
+///
+/// # Examples
+///
+/// ```
+/// let items = vec!["item0", "item1", "item2"];
+/// let idx = fzf_search(&items).unwrap();
+/// let result = items[idx];
+/// ```
 pub fn fzf_search<S>(keys: &Vec<S>) -> Result<usize>
 where
     S: AsRef<str>,
@@ -707,6 +788,8 @@ where
     }
 }
 
+/// If there are uncommitted changes in the current Git repository, return an error.
+/// This will use `git status -s` to check.
 pub fn ensure_no_uncommitted() -> Result<()> {
     let mut git =
         Cmd::git(&["status", "-s"]).with_display("Check if repository has uncommitted change");
@@ -1137,13 +1220,13 @@ impl<'a> Workflow<'_> {
         }
     }
 
-    pub fn execute_repo(&self, cfg: &Config, repo: &Rc<Repo>) -> Result<()> {
+    pub fn execute_repo(&self, repo: &Rc<Repo>) -> Result<()> {
         info!(
             "Execute workflow '{}' for '{}'",
             self.name,
             repo.name_with_remote()
         );
-        let dir = repo.get_path(cfg);
+        let dir = repo.get_path(self.cfg);
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
                 let script = run.replace("\n", ";");
