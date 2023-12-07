@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod attach;
 mod branch;
 mod complete;
@@ -199,20 +197,6 @@ impl Completion {
                     .map(|owner| format!("{}/", owner))
                     .collect();
                 Ok(CompletionResult::from(items).no_space())
-            }
-            _ => Ok(CompletionResult::empty()),
-        }
-    }
-
-    pub fn remote_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
-        match args.len() {
-            0 | 1 => {
-                let remotes = cfg.list_remote_names();
-                let items: Vec<_> = remotes
-                    .into_iter()
-                    .map(|remote| remote.to_string())
-                    .collect();
-                Ok(CompletionResult::from(items))
             }
             _ => Ok(CompletionResult::empty()),
         }
