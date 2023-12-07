@@ -2,7 +2,7 @@
 
 mod alias;
 mod cache;
-mod github;
+pub mod github;
 mod gitlab;
 
 use std::time::Duration;

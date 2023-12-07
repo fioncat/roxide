@@ -14,7 +14,7 @@ use crate::utils;
 
 /// Represents the remote to which the repository belongs, including the config
 /// information of the remote.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Remote {
     /// The remote name.
     pub name: String,

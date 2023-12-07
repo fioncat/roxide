@@ -282,7 +282,7 @@ pub fn confirm_items(
         current_size += 2 + item_size;
         if current_size > col_size {
             stderr!();
-            stderr!("{}{}", head_space, item);
+            _ = write!(io::stderr(), "{head_space}{item}");
             current_size = head_size + item_size;
             continue;
         }
@@ -519,6 +519,8 @@ pub struct Cmd<'a> {
     input: Option<String>,
 
     display: Option<String>,
+
+    script: Option<String>,
 }
 
 impl<'a> Cmd<'_> {
@@ -542,6 +544,7 @@ impl<'a> Cmd<'_> {
             cmd,
             input: None,
             display: None,
+            script: None,
         }
     }
 
@@ -597,11 +600,14 @@ impl<'a> Cmd<'_> {
     ///
     /// This function is only supported on Unix system.
     pub fn sh(script: &str) -> Cmd {
+        let raw = script.to_string();
         // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
         // the script does not output any content to stdout. This method is not
         // applicable to Windows and a more universal method is needed.
         let script = format!("{script} > /dev/stderr");
-        Self::with_args("sh", &["-c", script.as_str()])
+        let mut cmd = Self::with_args("sh", &["-c", script.as_str()]);
+        cmd.script = Some(raw);
+        cmd
     }
 
     /// Execute the command and return the output as multiple lines.
@@ -682,13 +688,18 @@ impl<'a> Cmd<'_> {
     }
 
     fn show(&self) -> Option<String> {
-        let mut cmd_args = Vec::with_capacity(1);
-        cmd_args.push(self.cmd.get_program().to_str().unwrap());
-        let args = self.cmd.get_args();
-        for arg in args {
-            cmd_args.push(arg.to_str().unwrap());
-        }
-        let cmd_name = cmd_args.join(" ");
+        let cmd_name = match self.script.as_ref() {
+            Some(script) => format!("sh -c '{}'", style(script).underlined()),
+            None => {
+                let mut cmd_args = Vec::with_capacity(1);
+                cmd_args.push(self.cmd.get_program().to_str().unwrap());
+                let args = self.cmd.get_args();
+                for arg in args {
+                    cmd_args.push(arg.to_str().unwrap());
+                }
+                cmd_args.join(" ")
+            }
+        };
 
         if let None = self.display {
             return Some(cmd_name);
@@ -1115,7 +1126,7 @@ impl GitRemote {
     }
 }
 
-pub struct GitTag(String);
+pub struct GitTag(pub String);
 
 impl std::fmt::Display for GitTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1140,6 +1151,16 @@ impl GitTag {
             .map(|line| GitTag(line.trim().to_string()))
             .collect();
         Ok(tags)
+    }
+
+    pub fn get(s: impl AsRef<str>) -> Result<GitTag> {
+        let tags = Self::list()?;
+        for tag in tags {
+            if tag.as_str() == s.as_ref() {
+                return Ok(tag);
+            }
+        }
+        bail!("could not find tag '{}'", s.as_ref())
     }
 
     pub fn latest() -> Result<GitTag> {
@@ -1228,7 +1249,7 @@ impl Workflow {
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
                 let script = run.replace("\n", ";");
-                let mut cmd = Cmd::sh(&script).with_display(format!("Run {}", step.name));
+                let mut cmd = Cmd::sh(&script).with_display(format!("{}", step.name));
                 cmd.with_path(&dir);
 
                 cmd.with_env("REPO_NAME", repo.name.as_str());

@@ -45,7 +45,7 @@ impl Bucket {
     const MAX_SIZE: u64 = 32 << 20;
 
     /// Use Version to ensure that decode and encode are consistent.
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
 
     /// Return empty Bucket, with no repository data.
     fn empty() -> Self {
@@ -968,7 +968,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     /// Similar to [`Selector::one`], the difference is that an error is returned
     /// if the repository does not exist in the database.
     pub fn must_one(&self) -> Result<Rc<Repo>> {
-        todo!()
+        let (repo, exists) = self.one()?;
+        if !exists {
+            bail!("could not find matched repo");
+        }
+        Ok(repo)
     }
 
     /// Select one repository. See [`Selector`].

@@ -2,17 +2,23 @@ mod attach;
 mod branch;
 mod complete;
 mod detach;
+mod gc;
 mod get;
 mod home;
+mod import;
 mod init;
 mod merge;
 mod open;
 mod rebase;
+mod recover;
 mod remove;
 mod reset;
 mod run;
 mod squash;
 mod sync;
+mod tag;
+mod update;
+mod version;
 
 use std::collections::{HashMap, HashSet};
 
@@ -39,17 +45,23 @@ pub enum Commands {
     Branch(branch::BranchArgs),
     Complete(complete::CompleteArgs),
     Detach(detach::DetachArgs),
+    Gc(gc::GcArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
+    Import(import::ImportArgs),
     Init(init::InitArgs),
     Merge(merge::MergeArgs),
     Open(open::OpenArgs),
     Rebase(rebase::RebaseArgs),
+    Recover(recover::RecoverArgs),
     Remove(remove::RemoveArgs),
     Reset(reset::ResetArgs),
     Run(run::RunArgs),
     Squash(squash::SquashArgs),
     Sync(sync::SyncArgs),
+    Tag(tag::TagArgs),
+    Update(update::UpdateArgs),
+    Version(version::VersionArgs),
 }
 
 impl Commands {
@@ -59,6 +71,7 @@ impl Commands {
             "branch" => branch::BranchArgs::completion(),
             "get" => get::GetArgs::completion(),
             "home" => home::HomeArgs::completion(),
+            "import" => import::ImportArgs::completion(),
             "init" => init::InitArgs::completion(),
             "merge" => merge::MergeArgs::completion(),
             "rebase" => rebase::RebaseArgs::completion(),
@@ -66,7 +79,8 @@ impl Commands {
             "reset" => reset::ResetArgs::completion(),
             "run" => run::RunArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
-            "sync" => sync::SyncArgs::completion()
+            "sync" => sync::SyncArgs::completion(),
+            "tag" => tag::TagArgs::completion()
         ]
     }
 }
@@ -78,17 +92,23 @@ impl Run for App {
             Commands::Branch(args) => args.run(cfg),
             Commands::Complete(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
+            Commands::Gc(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),
+            Commands::Import(args) => args.run(cfg),
             Commands::Init(args) => args.run(cfg),
             Commands::Merge(args) => args.run(cfg),
             Commands::Open(args) => args.run(cfg),
             Commands::Rebase(args) => args.run(cfg),
+            Commands::Recover(args) => args.run(cfg),
             Commands::Remove(args) => args.run(cfg),
             Commands::Reset(args) => args.run(cfg),
             Commands::Run(args) => args.run(cfg),
             Commands::Squash(args) => args.run(cfg),
             Commands::Sync(args) => args.run(cfg),
+            Commands::Tag(args) => args.run(cfg),
+            Commands::Update(args) => args.run(cfg),
+            Commands::Version(args) => args.run(cfg),
         }
     }
 }
