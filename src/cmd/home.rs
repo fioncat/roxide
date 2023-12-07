@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -6,7 +7,7 @@ use std::rc::Rc;
 use anyhow::{Context, Result};
 use clap::Args;
 
-use crate::cmd::{BaseCompletion, Completion, CompletionResult, Run};
+use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
@@ -31,12 +32,25 @@ pub struct HomeArgs {
     /// Open repo in default browser rather than clone it.
     #[clap(short)]
     pub open: bool,
+
+    /// Update repo labels with this value.
+    #[clap(short)]
+    pub labels: Option<String>,
+
+    /// Clean labels for the repo.
+    #[clap(short = 'L')]
+    pub clean_labels: bool,
 }
 
 impl Run for HomeArgs {
-    fn run(&self) -> Result<()> {
-        let cfg = Config::load()?;
-        let mut db = Database::load(&cfg)?;
+    fn run(&self, cfg: &Config) -> Result<()> {
+        let mut db = Database::load(cfg)?;
+
+        let update_labels = if self.clean_labels {
+            Some(HashSet::new())
+        } else {
+            utils::parse_labels(&self.labels)
+        };
 
         let opts = SelectOptions::default()
             .with_force_search(self.search)
@@ -55,7 +69,7 @@ impl Run for HomeArgs {
             confirm!("Do you want to create {}", repo.name_with_owner());
         }
 
-        let path = repo.get_path(&cfg);
+        let path = repo.get_path(cfg);
         match fs::read_dir(&path) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -68,7 +82,7 @@ impl Run for HomeArgs {
 
         writeln!(io::stdout(), "{}", path.display()).context("write repo path to stdout")?;
 
-        db.update(repo, None);
+        db.update(repo, update_labels);
 
         db.save()?;
         Ok(())
@@ -118,25 +132,11 @@ impl HomeArgs {
         }
         Ok(())
     }
-}
 
-pub struct HomeCompletion {
-    base: BaseCompletion,
-}
-
-impl HomeCompletion {
-    pub fn load() -> Result<Box<dyn Completion>> {
-        let base = BaseCompletion::load()?;
-        Ok(Box::new(HomeCompletion { base }))
-    }
-}
-
-impl Completion for HomeCompletion {
-    fn args(&self, args: &[&str]) -> Result<CompletionResult> {
-        self.base.repo_args(args)
-    }
-
-    fn flag(&self, _flag: &str) -> Result<CompletionResult> {
-        todo!()
+    pub fn completion() -> Completion {
+        Completion {
+            args: Completion::repo_args,
+            flags: Some(Completion::labels),
+        }
     }
 }

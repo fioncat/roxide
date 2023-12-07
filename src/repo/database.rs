@@ -845,8 +845,8 @@ impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
     }
 
     /// Control the use of specified labels for filtering during search.
-    pub fn with_filter_labels(mut self, labels: HashSet<String>) -> Self {
-        self.filter_labels = Some(labels);
+    pub fn with_filter_labels(mut self, labels: Option<HashSet<String>>) -> Self {
+        self.filter_labels = labels;
         self
     }
 

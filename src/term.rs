@@ -150,7 +150,7 @@ pub fn show_json<T: Serialize>(value: T) -> Result<()> {
     let mut ser = Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser).context("serialize object")?;
     let json = String::from_utf8(buf).context("encode json utf8")?;
-    stderr!("{}", json);
+    println!("{json}");
     Ok(())
 }
 
@@ -571,6 +571,7 @@ impl<'a> Cmd<'_> {
     pub fn with_input(&mut self, input: String) -> &mut Self {
         self.input = Some(input);
         self.cmd.stdin(Stdio::piped());
+        self.cmd.stderr(Stdio::inherit());
         self
     }
 

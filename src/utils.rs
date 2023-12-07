@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::{fs, process};
@@ -53,7 +54,6 @@ macro_rules! hashset_strings {
     };
 }
 
-#[cfg(test)]
 #[macro_export]
 macro_rules! hashmap {
     ($($key:expr => $value:expr),*) => {{
@@ -445,6 +445,14 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
             Err(err) => return Err(err).with_context(|| format!("read dir '{}'", dir.display())),
         }
+    }
+}
+
+/// Parse labels flag to hashset, the format is: "[label0][,label1]...".
+pub fn parse_labels(labels: &Option<String>) -> Option<HashSet<String>> {
+    match labels {
+        Some(s) => Some(s.split(",").map(|s| s.to_string()).collect()),
+        None => None,
     }
 }
 

@@ -217,7 +217,9 @@ impl Github {
     where
         T: DeserializeOwned + ?Sized,
     {
-        let req = self.build_request(path, Method::GET, None).context("build Github request")?;
+        let req = self
+            .build_request(path, Method::GET, None)
+            .context("build Github request")?;
         self.execute(req)
     }
 
