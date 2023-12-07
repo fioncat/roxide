@@ -25,7 +25,7 @@ use serde_json::Serializer;
 use crate::api::Provider;
 use crate::config::{Config, WorkflowStep};
 use crate::errors::SilentExit;
-use crate::repo::{Remote, Repo};
+use crate::repo::Repo;
 use crate::utils;
 
 /// The macro for [`must_confirm`].
@@ -845,9 +845,7 @@ impl GitBranch {
 
     pub fn list() -> Result<Vec<GitBranch>> {
         let re = Self::get_regex();
-        let lines = Cmd::git(&["branch", "-vv"])
-            .with_display("List git branch info")
-            .lines()?;
+        let lines = Cmd::git(&["branch", "-vv"]).lines()?;
         let mut branches: Vec<GitBranch> = Vec::with_capacity(lines.len());
         for line in lines {
             let branch = Self::parse(&re, line)?;
@@ -1027,7 +1025,6 @@ impl GitRemote {
 
     pub fn from_upstream(
         cfg: &Config,
-        remote: &Remote,
         repo: &Rc<Repo>,
         provider: &Box<dyn Provider>,
     ) -> Result<GitRemote> {
@@ -1048,7 +1045,7 @@ impl GitRemote {
             );
         }
         let api_upstream = api_repo.upstream.unwrap();
-        let upstream = Repo::from_api_upstream(cfg, &remote.name, api_upstream)?;
+        let upstream = Repo::from_api_upstream(cfg, &repo.remote.name, api_upstream)?;
         let url = upstream.clone_url();
 
         confirm!(
@@ -1202,20 +1199,20 @@ impl GitTag {
     }
 }
 
-pub struct Workflow<'a> {
+pub struct Workflow {
     pub name: String,
-    steps: &'a Vec<WorkflowStep>,
+    steps: Vec<WorkflowStep>,
 
-    cfg: &'a Config,
+    cfg: Config,
 }
 
-impl<'a> Workflow<'_> {
+impl Workflow {
     pub fn new(cfg: &Config, name: impl AsRef<str>) -> Result<Workflow> {
         match cfg.workflows.get(name.as_ref()) {
             Some(steps) => Ok(Workflow {
                 name: name.as_ref().to_string(),
-                steps,
-                cfg,
+                steps: steps.clone(),
+                cfg: cfg.clone(),
             }),
             None => bail!("could not find workflow '{}'", name.as_ref()),
         }
@@ -1227,7 +1224,7 @@ impl<'a> Workflow<'_> {
             self.name,
             repo.name_with_remote()
         );
-        let dir = repo.get_path(self.cfg);
+        let dir = repo.get_path(&self.cfg);
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
                 let script = run.replace("\n", ";");

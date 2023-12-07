@@ -40,7 +40,6 @@ macro_rules! hashset {
     };
 }
 
-#[cfg(test)]
 #[macro_export]
 macro_rules! hashset_strings {
     ( $( $x:expr ),* ) => {

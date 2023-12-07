@@ -656,6 +656,14 @@ impl Database<'_> {
         }
     }
 
+    /// Remove a repository from database.
+    pub fn remove(&mut self, repo: Rc<Repo>) {
+        let pos = self.position(&repo);
+        if let Some(idx) = pos {
+            self.repos.remove(idx);
+        }
+    }
+
     /// Get the position of a repository.
     pub fn position(&self, repo: &Rc<Repo>) -> Option<usize> {
         let mut pos = None;

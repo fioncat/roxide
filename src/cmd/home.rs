@@ -84,8 +84,7 @@ impl Run for HomeArgs {
 
         db.update(repo, update_labels);
 
-        db.save()?;
-        Ok(())
+        db.save()
     }
 }
 

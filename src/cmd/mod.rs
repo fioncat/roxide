@@ -1,9 +1,20 @@
 #![allow(dead_code)]
 
+mod attach;
+mod branch;
 mod complete;
+mod detach;
 mod get;
 mod home;
 mod init;
+mod merge;
+mod open;
+mod rebase;
+mod remove;
+mod reset;
+mod run;
+mod squash;
+mod sync;
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,8 +23,9 @@ use clap::{Parser, Subcommand};
 use strum::EnumVariantNames;
 
 use crate::config::Config;
-use crate::hashmap;
 use crate::repo::database::{self, Database};
+use crate::term::{GitBranch, GitRemote};
+use crate::{api, hashmap, term};
 
 #[derive(Parser)]
 #[command(author, version = env!("ROXIDE_VERSION"), about)]
@@ -25,18 +37,38 @@ pub struct App {
 #[derive(Subcommand, EnumVariantNames)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Commands {
+    Attach(attach::AttachArgs),
+    Branch(branch::BranchArgs),
     Complete(complete::CompleteArgs),
-    Home(home::HomeArgs),
+    Detach(detach::DetachArgs),
     Get(get::GetArgs),
+    Home(home::HomeArgs),
     Init(init::InitArgs),
+    Merge(merge::MergeArgs),
+    Open(open::OpenArgs),
+    Rebase(rebase::RebaseArgs),
+    Remove(remove::RemoveArgs),
+    Reset(reset::ResetArgs),
+    Run(run::RunArgs),
+    Squash(squash::SquashArgs),
+    Sync(sync::SyncArgs),
 }
 
 impl Commands {
     pub fn get_completions() -> HashMap<&'static str, Completion> {
         hashmap![
-            "home" => home::HomeArgs::completion(),
+            "attach" => attach::AttachArgs::completion(),
+            "branch" => branch::BranchArgs::completion(),
             "get" => get::GetArgs::completion(),
-            "init" => init::InitArgs::completion()
+            "home" => home::HomeArgs::completion(),
+            "init" => init::InitArgs::completion(),
+            "merge" => merge::MergeArgs::completion(),
+            "rebase" => rebase::RebaseArgs::completion(),
+            "remove" => remove::RemoveArgs::completion(),
+            "reset" => reset::ResetArgs::completion(),
+            "run" => run::RunArgs::completion(),
+            "squash" => squash::SquashArgs::completion(),
+            "sync" => sync::SyncArgs::completion()
         ]
     }
 }
@@ -44,10 +76,21 @@ impl Commands {
 impl Run for App {
     fn run(&self, cfg: &Config) -> Result<()> {
         match &self.command {
+            Commands::Attach(args) => args.run(cfg),
+            Commands::Branch(args) => args.run(cfg),
             Commands::Complete(args) => args.run(cfg),
-            Commands::Home(args) => args.run(cfg),
+            Commands::Detach(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
+            Commands::Home(args) => args.run(cfg),
             Commands::Init(args) => args.run(cfg),
+            Commands::Merge(args) => args.run(cfg),
+            Commands::Open(args) => args.run(cfg),
+            Commands::Rebase(args) => args.run(cfg),
+            Commands::Remove(args) => args.run(cfg),
+            Commands::Reset(args) => args.run(cfg),
+            Commands::Run(args) => args.run(cfg),
+            Commands::Squash(args) => args.run(cfg),
+            Commands::Sync(args) => args.run(cfg),
         }
     }
 }
@@ -214,25 +257,60 @@ impl Completion {
             }
         }
 
-        let current_labels: HashSet<&str> = to_complete.split(',').collect();
-        for current_label in current_labels {
-            exists_labels.remove(current_label);
+        Self::multiple_values_flag(to_complete, exists_labels)
+    }
+
+    pub fn multiple_values_flag(
+        to_complete: &str,
+        mut candidates: HashSet<String>,
+    ) -> Result<Option<CompletionResult>> {
+        let current_items: HashSet<&str> = to_complete.split(',').collect();
+        for current_label in current_items {
+            candidates.remove(current_label);
         }
 
-        let mut items = Vec::with_capacity(exists_labels.len());
-        for label in exists_labels {
+        let mut items = Vec::with_capacity(candidates.len());
+        for item in candidates {
             let item = if to_complete != "" {
                 if to_complete.ends_with(",") {
-                    format!("{to_complete}{label}")
+                    format!("{to_complete}{item}")
                 } else {
-                    format!("{to_complete},{label}")
+                    format!("{to_complete},{item}")
                 }
             } else {
-                label
+                item
             };
             items.push(item);
         }
 
         Ok(Some(CompletionResult::from(items).no_space()))
+    }
+
+    pub fn branch_args(_cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
+        match args.len() {
+            0 | 1 => {
+                let branches = GitBranch::list()?;
+                let items: Vec<_> = branches
+                    .into_iter()
+                    .filter(|branch| !branch.current)
+                    .map(|branch| branch.name)
+                    .collect();
+                Ok(CompletionResult::from(items))
+            }
+            _ => Ok(CompletionResult::empty()),
+        }
+    }
+}
+
+pub fn get_git_remote(cfg: &Config, upstream: bool, force: bool) -> Result<GitRemote> {
+    term::ensure_no_uncommitted()?;
+    if upstream {
+        let db = Database::load(cfg)?;
+        let repo = db.must_get_current()?;
+        let provider = api::build_provider(cfg, &repo.remote, force)?;
+
+        GitRemote::from_upstream(cfg, &repo, &provider)
+    } else {
+        Ok(GitRemote::new())
     }
 }
