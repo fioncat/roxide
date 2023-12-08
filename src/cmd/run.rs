@@ -9,7 +9,7 @@ use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::term::Workflow;
-use crate::{confirm, stderrln, term, utils};
+use crate::{stderrln, term, utils};
 
 /// Run workflow
 #[derive(Args)]
