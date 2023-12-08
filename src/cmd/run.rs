@@ -91,7 +91,7 @@ impl RunArgs {
     pub fn completion() -> Completion {
         Completion {
             args: Completion::repo_args,
-            flags: Some(|cfg, flag, _to_complete| match flag {
+            flags: Some(|cfg, flag, to_complete| match flag {
                 'n' => {
                     let mut names: Vec<String> = cfg
                         .workflows
@@ -101,6 +101,7 @@ impl RunArgs {
                     names.sort();
                     Ok(Some(CompletionResult::from(names)))
                 }
+                'l' => Completion::labels_flag(cfg, to_complete),
                 _ => Ok(None),
             }),
         }

@@ -651,12 +651,11 @@ impl Database<'_> {
     /// # Arguments
     ///
     /// * `repo` - The repository to update.
-    /// * `labels` - If None, do not update labels, else, replace the labels with
-    /// the given labels. If `labels` is not None but has no elements (where
-    /// `is_empty` returns `true`), it will remove all the labels of the repository.
-    pub fn update(&mut self, repo: Rc<Repo>, labels: Option<HashSet<String>>) {
+    /// * `append_labels` - If None, do not update labels, else, append the labels
+    /// with the given labels.
+    pub fn update(&mut self, repo: Rc<Repo>, append_labels: Option<HashSet<String>>) {
         let pos = self.position(&repo);
-        let new_repo = repo.update(self.cfg, labels);
+        let new_repo = repo.update(self.cfg, append_labels);
         match pos {
             Some(idx) => self.repos[idx] = new_repo,
             None => self.repos.push(new_repo),

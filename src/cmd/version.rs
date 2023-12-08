@@ -5,7 +5,7 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::stderrln;
 
-/// Detach current path in database, don't remove directory
+/// Show version info.
 #[derive(Args)]
 pub struct VersionArgs {}
 

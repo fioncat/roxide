@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -33,24 +32,16 @@ pub struct HomeArgs {
     #[clap(short)]
     pub open: bool,
 
-    /// Update repo labels with this value.
+    /// Append repo labels with this value.
     #[clap(short)]
     pub labels: Option<String>,
-
-    /// Clean labels for the repo.
-    #[clap(short = 'L')]
-    pub clean_labels: bool,
 }
 
 impl Run for HomeArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
         let mut db = Database::load(cfg)?;
 
-        let update_labels = if self.clean_labels {
-            Some(HashSet::new())
-        } else {
-            utils::parse_labels(&self.labels)
-        };
+        let append_labels = utils::parse_labels(&self.labels);
 
         let opts = SelectOptions::default()
             .with_force_search(self.search)
@@ -82,7 +73,7 @@ impl Run for HomeArgs {
 
         println!("{}", path.display());
 
-        db.update(repo, update_labels);
+        db.update(repo, append_labels);
         db.save()
     }
 }

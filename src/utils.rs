@@ -445,6 +445,11 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
     }
 }
 
+/// Parse labels from string to set.
+pub fn parse_labels_str(str: impl AsRef<str>) -> HashSet<String> {
+    str.as_ref().split(",").map(|s| s.to_string()).collect()
+}
+
 /// Parse labels flag to hashset, the format is: "[label0][,label1]...".
 pub fn parse_labels(labels: &Option<String>) -> Option<HashSet<String>> {
     match labels {

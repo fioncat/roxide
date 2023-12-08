@@ -215,21 +215,26 @@ impl Repo {
     ///
     /// * `last_accessed`: Updated to the current time.
     /// * `accessed`: Incremented by 1.
-    /// * `labels`: Updated if the `labels` parameter is not [`None`]. Note that if
-    /// `labels` is `Some(HashSet::new())`, it will set `labels` to [`None`].
+    /// * `labels`: Append if the `labels` parameter is not [`None`].
     ///
     /// This function will return a new repository [`Rc`], but the new object's
     /// internal references to remote and owner will be shared with the original.
-    pub fn update(&self, cfg: &Config, labels: Option<HashSet<String>>) -> Rc<Repo> {
-        let new_labels = match labels {
-            Some(labels) => {
-                if labels.is_empty() {
-                    None
-                } else {
-                    Some(labels.into_iter().map(|label| Rc::new(label)).collect())
+    pub fn update(&self, cfg: &Config, append_labels: Option<HashSet<String>>) -> Rc<Repo> {
+        let append_labels: Option<HashSet<Rc<String>>> = match append_labels {
+            Some(labels) => Some(labels.into_iter().map(|label| Rc::new(label)).collect()),
+            None => None,
+        };
+
+        let new_labels = match self.labels.as_ref() {
+            Some(current_labels) => match append_labels {
+                Some(append_labels) => {
+                    let mut new_labels = current_labels.clone();
+                    new_labels.extend(append_labels);
+                    Some(new_labels)
                 }
-            }
-            None => self.labels.clone(),
+                None => Some(current_labels.clone()),
+            },
+            None => append_labels,
         };
         Rc::new(Repo {
             remote: Rc::clone(&self.remote),
@@ -240,6 +245,28 @@ impl Repo {
             accessed: self.accessed + 1.0,
             labels: new_labels,
         })
+    }
+
+    /// Update repo labels only, keep other info. Use [`Rc`] as labels type.
+    pub fn update_labels_rc(&self, labels: Option<HashSet<Rc<String>>>) -> Rc<Repo> {
+        Rc::new(Repo {
+            remote: Rc::clone(&self.remote),
+            owner: Rc::clone(&self.owner),
+            name: self.name.clone(),
+            path: self.path.clone(),
+            last_accessed: self.last_accessed,
+            accessed: self.accessed,
+            labels,
+        })
+    }
+
+    /// Update repo labels only, keep other info.
+    pub fn update_labels(&self, labels: Option<HashSet<String>>) -> Rc<Repo> {
+        let labels = match labels {
+            Some(labels) => Some(labels.into_iter().map(|label| Rc::new(label)).collect()),
+            None => None,
+        };
+        self.update_labels_rc(labels)
     }
 
     /// `score` is used to sort and prioritize multiple repositories. In scenarios
