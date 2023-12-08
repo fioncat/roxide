@@ -41,11 +41,6 @@ impl Run for RunArgs {
 
         if self.current {
             let repo = db.must_get_current()?;
-            confirm!(
-                "Run workflow '{}' for repo '{}'",
-                self.name,
-                repo.name_with_remote()
-            );
             return workflow.execute_repo(&repo);
         }
 
