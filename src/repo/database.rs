@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -635,6 +633,15 @@ impl Database<'_> {
         }
         owners.sort();
         owners
+    }
+
+    /// Add the repository to database, skip updating.
+    pub fn add(&mut self, repo: Rc<Repo>) {
+        let pos = self.position(&repo);
+        match pos {
+            Some(idx) => self.repos[idx] = repo,
+            None => self.repos.push(repo),
+        }
     }
 
     /// Update the repository data in the database. Call this after accessing a

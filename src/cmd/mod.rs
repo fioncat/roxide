@@ -1,11 +1,15 @@
 mod attach;
 mod branch;
+mod check;
 mod complete;
+mod config;
+mod copy;
 mod detach;
 mod gc;
 mod get;
 mod home;
 mod import;
+mod info;
 mod init;
 mod merge;
 mod open;
@@ -14,6 +18,7 @@ mod recover;
 mod remove;
 mod reset;
 mod run;
+mod snapshot;
 mod squash;
 mod sync;
 mod tag;
@@ -43,12 +48,16 @@ pub struct App {
 pub enum Commands {
     Attach(attach::AttachArgs),
     Branch(branch::BranchArgs),
+    Check(check::CheckArgs),
     Complete(complete::CompleteArgs),
+    Config(config::ConfigArgs),
+    Copy(copy::CopyArgs),
     Detach(detach::DetachArgs),
     Gc(gc::GcArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
     Import(import::ImportArgs),
+    Info(info::InfoArgs),
     Init(init::InitArgs),
     Merge(merge::MergeArgs),
     Open(open::OpenArgs),
@@ -57,6 +66,7 @@ pub enum Commands {
     Remove(remove::RemoveArgs),
     Reset(reset::ResetArgs),
     Run(run::RunArgs),
+    Snapshot(snapshot::SnapshotArgs),
     Squash(squash::SquashArgs),
     Sync(sync::SyncArgs),
     Tag(tag::TagArgs),
@@ -69,6 +79,7 @@ impl Commands {
         hashmap![
             "attach" => attach::AttachArgs::completion(),
             "branch" => branch::BranchArgs::completion(),
+            "copy" => copy::CopyArgs::completion(),
             "get" => get::GetArgs::completion(),
             "home" => home::HomeArgs::completion(),
             "import" => import::ImportArgs::completion(),
@@ -78,6 +89,7 @@ impl Commands {
             "remove" => remove::RemoveArgs::completion(),
             "reset" => reset::ResetArgs::completion(),
             "run" => run::RunArgs::completion(),
+            "snapshot" => snapshot::SnapshotArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
             "sync" => sync::SyncArgs::completion(),
             "tag" => tag::TagArgs::completion()
@@ -90,12 +102,16 @@ impl Run for App {
         match &self.command {
             Commands::Attach(args) => args.run(cfg),
             Commands::Branch(args) => args.run(cfg),
+            Commands::Check(args) => args.run(cfg),
             Commands::Complete(args) => args.run(cfg),
+            Commands::Config(args) => args.run(cfg),
+            Commands::Copy(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
             Commands::Gc(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),
             Commands::Import(args) => args.run(cfg),
+            Commands::Info(args) => args.run(cfg),
             Commands::Init(args) => args.run(cfg),
             Commands::Merge(args) => args.run(cfg),
             Commands::Open(args) => args.run(cfg),
@@ -104,6 +120,7 @@ impl Run for App {
             Commands::Remove(args) => args.run(cfg),
             Commands::Reset(args) => args.run(cfg),
             Commands::Run(args) => args.run(cfg),
+            Commands::Snapshot(args) => args.run(cfg),
             Commands::Squash(args) => args.run(cfg),
             Commands::Sync(args) => args.run(cfg),
             Commands::Tag(args) => args.run(cfg),

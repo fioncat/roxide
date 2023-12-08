@@ -1,6 +1,5 @@
-#![allow(dead_code)]
-
 pub mod database;
+pub mod snapshot;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -77,8 +76,6 @@ pub enum NameLevel {
     Owner,
     /// Display remote, owner and name: `{remote}:{owner}/{name}`
     Remote,
-    /// Display remote, owner, name and labels: `{remote}:{owner}/{name}@{labels}`
-    Labels,
 }
 
 impl Repo {
@@ -349,7 +346,6 @@ impl Repo {
             NameLevel::Name => self.name.clone(),
             NameLevel::Owner => self.name_with_owner(),
             NameLevel::Remote => self.name_with_remote(),
-            NameLevel::Labels => self.name_with_labels(),
         }
     }
 

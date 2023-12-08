@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub fn workspace() -> String {
     String::from("~/dev")
@@ -14,10 +14,6 @@ pub fn cmd() -> String {
 
 pub fn empty_map<K, V>() -> HashMap<K, V> {
     HashMap::new()
-}
-
-pub fn empty_set<K>() -> HashSet<K> {
-    HashSet::new()
 }
 
 pub fn release() -> HashMap<String, String> {

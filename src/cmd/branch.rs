@@ -5,7 +5,7 @@ use console::style;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::term::{BranchStatus, Cmd, GitBranch};
-use crate::{stderr, term};
+use crate::{stderrln, term};
 
 /// Git branch operations
 #[derive(Args)]
@@ -133,11 +133,11 @@ impl BranchArgs {
             }
         }
         if tasks.is_empty() {
-            stderr!("Nothing to sync");
+            stderrln!("Nothing to sync");
             return Ok(());
         }
 
-        stderr!("Backup branch is {}", style(back).magenta());
+        stderrln!("Backup branch is {}", style(back).magenta());
         let mut items = Vec::with_capacity(tasks.len());
         for task in &tasks {
             let msg = match task {
@@ -248,7 +248,7 @@ impl BranchArgs {
         self.fetch()?;
         let branches = GitBranch::list_remote("origin")?;
         if branches.is_empty() {
-            stderr!("No remote branch to switch");
+            stderrln!("No remote branch to switch");
             return Ok(());
         }
 

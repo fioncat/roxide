@@ -8,7 +8,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::Database;
-use crate::{info, stderr, term, utils};
+use crate::{info, stderrln, term, utils};
 
 /// Remove unused path in workspace
 #[derive(Args)]
@@ -57,7 +57,7 @@ impl Run for GcArgs {
         })?;
 
         if items.is_empty() {
-            stderr!("No orphan to remove");
+            stderrln!("No orphan to remove");
             return Ok(());
         }
 

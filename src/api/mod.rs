@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod alias;
 mod cache;
 pub mod github;

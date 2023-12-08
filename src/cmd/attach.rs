@@ -49,6 +49,7 @@ impl Run for AttachArgs {
         let path = format!("{}", cfg.get_current_dir().display());
         let opts = SelectOptions::default()
             .with_force_no_cache(self.force)
+            .with_force_remote(true)
             .with_repo_path(path);
 
         let head = Some(self.head.clone());

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashSet;
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -18,6 +16,7 @@ use pad::PadStr;
 use regex::{Captures, Regex};
 use reqwest::blocking::Client;
 use reqwest::{Method, Url};
+use semver::Version;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
@@ -93,6 +92,34 @@ macro_rules! info {
     };
 }
 
+/// The macro for [`write_stderrln`].
+///
+/// # Examples
+///
+/// ```
+/// stderrln!("Process repo done");
+/// stderrln!("Process repo {} done", "hello");
+/// ```
+#[macro_export]
+macro_rules! stderrln {
+    () => {
+        {
+            $crate::term::write_stderrln("");
+        }
+    };
+    ($dst:expr $(,)?) => {
+        {
+            $crate::term::write_stderrln($dst);
+        }
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        {
+            let msg = format!($fmt, $($arg)*);
+            $crate::term::write_stderrln(msg.as_str());
+        }
+    };
+}
+
 /// The macro for [`write_stderr`].
 ///
 /// # Examples
@@ -124,13 +151,23 @@ macro_rules! stderr {
 /// Display logs at the `exec` level.
 pub fn show_exec(msg: impl AsRef<str>) {
     let msg = format!("{} {}", style("==>").cyan(), msg.as_ref());
-    write_stderr(msg);
+    write_stderrln(msg);
 }
 
 /// Display logs at the `info` level.
 pub fn show_info(msg: impl AsRef<str>) {
     let msg = format!("{} {}", style("==>").green(), msg.as_ref());
-    write_stderr(msg);
+    write_stderrln(msg);
+}
+
+/// Output the content to `stderr`, with line break.
+pub fn write_stderrln(msg: impl AsRef<str>) {
+    if cfg!(test) {
+        // In testing, do not print anything
+        return;
+    }
+
+    _ = writeln!(io::stderr(), "{}", msg.as_ref());
 }
 
 /// Output the content to `stderr`.
@@ -140,7 +177,7 @@ pub fn write_stderr(msg: impl AsRef<str>) {
         return;
     }
 
-    _ = writeln!(io::stderr(), "{}", msg.as_ref());
+    _ = write!(io::stderr(), "{}", msg.as_ref());
 }
 
 /// Output the object in pretty JSON format in the terminal.
@@ -160,7 +197,7 @@ pub fn cursor_up() {
         return;
     }
     const CURSOR_UP_CHARS: &'static str = "\x1b[A\x1b[K";
-    _ = write!(io::stderr(), "{CURSOR_UP_CHARS}");
+    stderr!("{}", CURSOR_UP_CHARS);
 }
 
 /// Return the current terminal width size.
@@ -216,7 +253,7 @@ pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
     }
 
     let msg = format!(":: {}?", msg.as_ref());
-    _ = write!(io::stderr(), "{} [Y/n] ", style(msg).bold());
+    stderr!("{} [Y/n] ", style(msg).bold());
 
     let mut answer = String::new();
     scanf::scanf!("{}", answer).context("confirm: scan terminal stdin")?;
@@ -250,12 +287,12 @@ pub fn confirm_items(
     }
 
     if items.is_empty() {
-        stderr!("Nothing to {}", action);
+        stderrln!("Nothing to {}", action);
         return Ok(false);
     }
 
     info!("Require confirm to {}", action);
-    stderr!();
+    stderrln!();
 
     let term = Term::stdout();
     let (_, col_size) = term.size();
@@ -271,9 +308,9 @@ pub fn confirm_items(
         let item_size = console::measure_text_width(&item);
         if current_size == 0 {
             if idx == 0 {
-                _ = write!(io::stderr(), "{head}{item}");
+                stderr!("{}{}", head, item);
             } else {
-                _ = write!(io::stderr(), "{head_space}{item}");
+                stderr!("{}{}", head_space, item);
             }
             current_size = head_size + item_size;
             continue;
@@ -281,26 +318,26 @@ pub fn confirm_items(
 
         current_size += 2 + item_size;
         if current_size > col_size {
-            stderr!();
-            _ = write!(io::stderr(), "{head_space}{item}");
+            stderrln!();
+            stderr!("{}{}", head_space, item);
             current_size = head_size + item_size;
             continue;
         }
 
-        _ = write!(io::stderr(), "  {item}");
+        stderr!("  {}", item);
     }
-    stderr!("\n");
+    stderrln!("\n");
 
-    stderr!(
+    stderrln!(
         "Total {} {} to {}",
         items.len(),
         name.to_lowercase(),
         action
     );
-    stderr!();
+    stderrln!();
     let ok = confirm(format!("Proceed with {noun}"))?;
     if ok {
-        stderr!();
+        stderrln!();
     }
     Ok(ok)
 }
@@ -404,6 +441,50 @@ pub fn get_editor() -> Result<String> {
         bail!("could not get your default editor, please set env $EDITOR");
     }
     Ok(editor)
+}
+
+/// Get and parse git version from `git version` command.
+pub fn git_version() -> Result<Version> {
+    let version = Cmd::git(&["version"]).read()?;
+    let version = match version.trim().strip_prefix("git version") {
+        Some(v) => v.trim(),
+        None => bail!("unknown git version output: '{version}'"),
+    };
+
+    match Version::parse(&version) {
+        Ok(ver) => Ok(ver),
+        Err(_) => bail!("git version '{version}' is bad format"),
+    }
+}
+
+/// Get and parse fzf version from `fzf --version` command.
+pub fn fzf_version() -> Result<Version> {
+    let version = Cmd::with_args("fzf", &["--version"]).read()?;
+    let mut fields = version.split(" ");
+    let version = match fields.next() {
+        Some(v) => v.trim(),
+        None => bail!("Unknown fzf version output: '{version}'"),
+    };
+    match Version::parse(&version) {
+        Ok(ver) => Ok(ver),
+        Err(_) => bail!("fzf version '{version}' is bad format"),
+    }
+}
+
+/// Get shell type, like "bash", "zsh", from $SHELL env.
+pub fn shell_type() -> Result<String> {
+    let shell = env::var("SHELL").context("get $SHELL env")?;
+    if shell.is_empty() {
+        bail!("env $SHELL is empty");
+    }
+    let path = PathBuf::from(&shell);
+    match path.file_name() {
+        Some(name) => match name.to_str() {
+            Some(name) => Ok(String::from(name)),
+            None => bail!("bad $SHELL format: {shell}"),
+        },
+        None => bail!("bad $SHELL env: {shell}"),
+    }
 }
 
 /// Represents the result of a command execution, containing both the command
@@ -709,7 +790,7 @@ impl<'a> Cmd<'_> {
         if !display.is_empty() {
             exec!("{}", display);
         }
-        stderr!("{} {}", style("::").cyan().bold(), cmd_name);
+        stderrln!("{} {}", style("::").cyan().bold(), cmd_name);
         None
     }
 }
@@ -1279,8 +1360,8 @@ impl Workflow {
     where
         S: AsRef<str>,
     {
-        let long_name = format!("{}/{}", owner.as_ref(), name.as_ref());
-        let full_name = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
+        let name_with_owner = format!("{}/{}", owner.as_ref(), name.as_ref());
+        let name_with_remote = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
 
         for step in self.steps.iter() {
             if let Some(run) = &step.run {
@@ -1291,8 +1372,8 @@ impl Workflow {
                 cmd.with_env("REPO_NAME", name.as_ref());
                 cmd.with_env("REPO_OWNER", owner.as_ref());
                 cmd.with_env("REMOTE", remote.as_ref());
-                cmd.with_env("REPO_LONG", long_name.as_str());
-                cmd.with_env("REPO_FULL", full_name.as_str());
+                cmd.with_env("REPO_NAME_WITH_OWNER", name_with_owner.as_str());
+                cmd.with_env("REPO_NAME_WITH_REMOTE", name_with_remote.as_str());
 
                 cmd.execute_check()?;
                 continue;
@@ -1390,7 +1471,7 @@ impl<W: Write> ProgressWriter<W> {
             current: 0,
             total,
         };
-        write_stderr(pw.render());
+        write_stderrln(pw.render());
         pw
     }
 
@@ -1439,7 +1520,7 @@ impl<W: Write> Write for ProgressWriter<W> {
         if self.current >= self.total {
             self.current = self.total;
             cursor_up();
-            write_stderr(self.render());
+            write_stderrln(self.render());
             return Ok(size);
         }
 
@@ -1447,7 +1528,7 @@ impl<W: Write> Write for ProgressWriter<W> {
         let delta = now - self.last_report;
         if delta >= Self::REPORT_INTERVAL {
             cursor_up();
-            write_stderr(self.render());
+            write_stderrln(self.render());
             self.last_report = now;
         }
 

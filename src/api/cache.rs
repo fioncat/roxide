@@ -167,8 +167,6 @@ mod cache_tests {
     use crate::api::cache::*;
     use crate::config::config_tests;
 
-    const CACHE_PATH: &str = "/tmp/test-roxide-cache";
-
     #[test]
     fn test_cache_normal() {
         let cfg = config_tests::load_test_config("api_cache/normal");

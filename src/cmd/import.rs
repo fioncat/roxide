@@ -10,7 +10,7 @@ use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::{Remote, Repo};
 use crate::term::{self, Cmd, GitCmd};
-use crate::{stderr, utils};
+use crate::{stderrln, utils};
 
 /// Batch import repos
 #[derive(Args)]
@@ -46,7 +46,7 @@ impl Run for ImportArgs {
 
         let (remote, owner_name, names) = selector.many_remote()?;
         if names.is_empty() {
-            stderr!("No repo to import");
+            stderrln!("No repo to import");
             return Ok(());
         }
         term::must_confirm_items(&names, "import", "import", "Repo", "Repos")?;

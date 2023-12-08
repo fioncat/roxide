@@ -3,7 +3,7 @@ use clap::Args;
 
 use crate::cmd::Run;
 use crate::config::Config;
-use crate::stderr;
+use crate::stderrln;
 
 /// Detach current path in database, don't remove directory
 #[derive(Args)]
@@ -11,18 +11,18 @@ pub struct VersionArgs {}
 
 impl Run for VersionArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        stderr!("roxide {}", env!("ROXIDE_VERSION"));
-        stderr!(
+        stderrln!("roxide {}", env!("ROXIDE_VERSION"));
+        stderrln!(
             "rustc {}-{}-{}",
             env!("VERGEN_RUSTC_SEMVER"),
             env!("VERGEN_RUSTC_LLVM_VERSION"),
             env!("VERGEN_RUSTC_CHANNEL")
         );
-        stderr!();
-        stderr!("Build type:   {}", env!("ROXIDE_BUILD_TYPE"));
-        stderr!("Build target: {}", env!("ROXIDE_TARGET"));
-        stderr!("Commit SHA:   {}", env!("ROXIDE_SHA"));
-        stderr!("Build time:   {}", env!("VERGEN_BUILD_TIMESTAMP"));
+        stderrln!();
+        stderrln!("Build type:   {}", env!("ROXIDE_BUILD_TYPE"));
+        stderrln!("Build target: {}", env!("ROXIDE_TARGET"));
+        stderrln!("Commit SHA:   {}", env!("ROXIDE_SHA"));
+        stderrln!("Build time:   {}", env!("VERGEN_BUILD_TIMESTAMP"));
 
         let cfg_path = match Config::get_path()? {
             Some(path) => format!("{}", path.display()),

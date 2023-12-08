@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -8,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use console::style;
 
-use crate::{stderr, term};
+use crate::{stderrln, term};
 
 /// `Task` is used to represent a concurrent task that needs to be executed.
 ///
@@ -131,8 +129,8 @@ impl<R> Tracker<R> {
         };
 
         term::cursor_up();
-        stderr!();
-        stderr!(
+        stderrln!();
+        stderrln!(
             "{} result: {}. {} ok; {} failed; finished in {}",
             self.desc_pure,
             result,
@@ -141,12 +139,12 @@ impl<R> Tracker<R> {
             Self::format_elapsed(elapsed_time),
         );
         if let Some(fail_message) = self.fail_message.as_ref() {
-            stderr!();
-            stderr!("Error message:");
+            stderrln!();
+            stderrln!("Error message:");
             for (name, msg) in fail_message {
-                stderr!("  {}: {}", name, msg);
+                stderrln!("  {}: {}", name, msg);
             }
-            stderr!();
+            stderrln!();
         }
 
         self.done
@@ -162,7 +160,7 @@ impl<R> Tracker<R> {
         self.running.push((idx, name));
         let line = self.render();
         term::cursor_up();
-        stderr!("{}", line);
+        stderrln!("{}", line);
     }
 
     /// Print completed task on terminal.
@@ -183,11 +181,11 @@ impl<R> Tracker<R> {
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
-                stderr!("{} {} {}", self.desc_head, name, style("ok").green());
+                stderrln!("{} {} {}", self.desc_head, name, style("ok").green());
             }
             Err(err) => {
                 self.fail_count += 1;
-                stderr!("{} {} {}", self.desc_head, name, style("fail").red());
+                stderrln!("{} {} {}", self.desc_head, name, style("fail").red());
                 if self.show_fail {
                     let item = (name, format!("{}", err));
                     match self.fail_message.as_mut() {
@@ -199,7 +197,7 @@ impl<R> Tracker<R> {
         }
         self.done.push((idx, result));
         let line = self.render();
-        stderr!("{}", line);
+        stderrln!("{}", line);
     }
 
     /// Render tracing line. The format is:
@@ -383,7 +381,7 @@ where
         .bold()
         .cyan()
         .underlined();
-    stderr!("{}\n", title);
+    stderrln!("{}\n", title);
     let mut handlers = Vec::with_capacity(worker_len);
     for _ in 0..worker_len {
         let task_shared_rx = Arc::clone(&task_shared_rx);

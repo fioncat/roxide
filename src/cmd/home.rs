@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -80,10 +80,9 @@ impl Run for HomeArgs {
             }
         }
 
-        writeln!(io::stdout(), "{}", path.display()).context("write repo path to stdout")?;
+        println!("{}", path.display());
 
         db.update(repo, update_labels);
-
         db.save()
     }
 }

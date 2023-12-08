@@ -14,7 +14,7 @@ use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::{NameLevel, Remote, Repo};
 use crate::term::{self, BranchStatus, Cmd, GitBranch, GitCmd};
-use crate::{hashset_strings, stderr, utils};
+use crate::{hashset_strings, stderrln, utils};
 
 /// Sync repos git branches.
 #[derive(Args)]
@@ -85,7 +85,7 @@ impl Run for SyncArgs {
 
         let (repos, level) = selector.many_local()?;
         if repos.is_empty() {
-            stderr!("No repo to sync");
+            stderrln!("No repo to sync");
             return Ok(());
         }
 

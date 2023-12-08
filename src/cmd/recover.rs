@@ -9,7 +9,7 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::{self, Database};
 use crate::repo::Repo;
-use crate::{confirm, info, stderr, term, utils};
+use crate::{confirm, info, stderrln, term, utils};
 
 /// Recover database
 #[derive(Args)]
@@ -43,7 +43,7 @@ impl Run for RecoverArgs {
             .collect();
 
         if to_add.is_empty() {
-            stderr!("Nothing to recover");
+            stderrln!("Nothing to recover");
             return Ok(());
         }
 

@@ -1,9 +1,7 @@
-#![allow(dead_code)]
-
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::{fs, process};
+use std::{env, fs, process};
 
 use anyhow::{bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
@@ -452,6 +450,16 @@ pub fn parse_labels(labels: &Option<String>) -> Option<HashSet<String>> {
     match labels {
         Some(s) => Some(s.split(",").map(|s| s.to_string()).collect()),
         None => None,
+    }
+}
+
+/// Get home dir, that is env $HOME. Not supported on Windows.
+pub fn get_home_dir() -> Result<PathBuf> {
+    match env::var_os("HOME") {
+        Some(home) => Ok(PathBuf::from(home)),
+        None => bail!(
+            "$HOME env not found in your system, please make sure that you are in an UNIX system"
+        ),
     }
 }
 

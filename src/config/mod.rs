@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod defaults;
 
 use std::collections::{HashMap, HashSet};
@@ -293,12 +291,7 @@ impl Config {
             };
         }
 
-        let home = match env::var_os("HOME") {
-            Some(home) => PathBuf::from(home),
-            None => bail!(
-                "$HOME env not found in your system, please make sure that you are in an UNIX system"
-            ),
-        };
+        let home = utils::get_home_dir()?;
         let dir = home.join(".config").join("roxide");
         let ents = match fs::read_dir(&dir) {
             Ok(ents) => ents,
@@ -349,6 +342,7 @@ impl Config {
         Ok(cfg)
     }
 
+    #[cfg(test)]
     pub fn read_data(data: &[u8]) -> Result<Config> {
         let mut cfg: Config = serde_yaml::from_slice(data).context("parse config data")?;
         cfg.validate().context("validate config content")?;
