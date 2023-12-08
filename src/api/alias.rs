@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::api::types::{ApiRepo, MergeOptions, Provider};
+use crate::api::{ApiRepo, MergeOptions, Provider};
 
 pub struct Alias {
     upstream: Box<dyn Provider>,
@@ -14,12 +14,6 @@ pub struct Alias {
 }
 
 impl Provider for Alias {
-    fn get_repo(&self, raw_owner: &str, raw_name: &str) -> Result<ApiRepo> {
-        let owner = self.alias_owner(raw_owner);
-        let name = self.alias_repo(owner, raw_name);
-        self.upstream.get_repo(owner, name)
-    }
-
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let owner = self.alias_owner(owner);
         let names = self.upstream.list_repos(owner)?;
@@ -28,6 +22,12 @@ impl Provider for Alias {
             .map(|name| self.raw_repo(owner, name))
             .collect();
         Ok(names)
+    }
+
+    fn get_repo(&self, raw_owner: &str, raw_name: &str) -> Result<ApiRepo> {
+        let owner = self.alias_owner(raw_owner);
+        let name = self.alias_repo(owner, raw_name);
+        self.upstream.get_repo(owner, name)
     }
 
     fn get_merge(&self, mut merge: MergeOptions) -> Result<Option<String>> {
@@ -113,14 +113,10 @@ impl Alias {
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
-
-    use crate::api::types::tests::StaticProvider;
-
-    use super::*;
+    use crate::api::alias::*;
+    use crate::api::api_tests::StaticProvider;
 
     #[test]
-    #[serial]
     fn test_alias() {
         let mut owner_map = HashMap::with_capacity(1);
         owner_map.insert(String::from("test-alias"), String::from("fioncat"));

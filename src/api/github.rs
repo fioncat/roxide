@@ -6,8 +6,8 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::types::{ApiRepo, ApiUpstream, MergeOptions, Provider};
-use crate::config::types::Remote;
+use crate::api::{ApiRepo, ApiUpstream, MergeOptions, Provider};
+use crate::repo::Remote;
 
 #[derive(Debug, Deserialize)]
 struct Repo {
@@ -94,23 +94,22 @@ struct PullRequestBody {
 impl From<MergeOptions> for PullRequestOptions {
     fn from(merge: MergeOptions) -> Self {
         let MergeOptions {
-            mut owner,
-            mut name,
+            owner,
+            name,
             upstream,
             source,
             target,
         } = merge;
 
-        let (head, head_search) = match upstream {
+        let (head, head_search, owner, name) = match upstream {
             Some(upstream) => {
                 let head = format!("{owner}:{source}");
                 let head_search = format!("{owner}/{source}");
-                (owner, name) = (upstream.owner, upstream.name);
-                (head, head_search)
+                (head, head_search, upstream.owner, upstream.name)
             }
             None => {
                 let head_search = source.clone();
-                (source, head_search)
+                (source, head_search, owner, name)
             }
         };
         PullRequestOptions {
@@ -191,13 +190,13 @@ impl Provider for Github {
 }
 
 impl Github {
-    const API_VERSION: &str = "2022-11-28";
+    const API_VERSION: &'static str = "2022-11-28";
 
     pub fn new(remote: &Remote) -> Box<dyn Provider> {
         let client = super::build_common_client(remote);
         Box::new(Github {
-            token: remote.token.clone(),
-            per_page: remote.list_limit,
+            token: remote.cfg.token.clone(),
+            per_page: remote.cfg.list_limit,
             client,
         })
     }
@@ -218,7 +217,9 @@ impl Github {
     where
         T: DeserializeOwned + ?Sized,
     {
-        let req = self.build_request(path, Method::GET, None)?;
+        let req = self
+            .build_request(path, Method::GET, None)
+            .context("build Github request")?;
         self.execute(req)
     }
 
@@ -227,7 +228,7 @@ impl Github {
         B: Serialize,
         R: DeserializeOwned + ?Sized,
     {
-        let body = serde_json::to_vec(&body).context("Encode Github request body")?;
+        let body = serde_json::to_vec(&body).context("encode Github request body")?;
         let req = self.build_request(path, Method::POST, Some(body))?;
         self.execute(req)
     }
@@ -238,24 +239,24 @@ impl Github {
     {
         let resp = self.client.execute(req).context("Github http request")?;
         let ok = resp.status().is_success();
-        let data = resp.bytes().context("Read Github response body")?;
+        let data = resp.bytes().context("read Github response body")?;
         if ok {
-            return serde_json::from_slice(&data).context("Decode Github response data");
+            return serde_json::from_slice(&data).context("decode Github response data");
         }
 
         match serde_json::from_slice::<Error>(&data) {
             Ok(err) => bail!("Github api error: {}", err.message),
             Err(_err) => bail!(
-                "Unknown Github api error: {}",
+                "unknown GitHub api error: {}",
                 String::from_utf8(data.to_vec())
-                    .context("Decode Github response to UTF-8 string")?
+                    .context("decode Github response to UTF-8 string")?
             ),
         }
     }
 
     fn build_request(&self, path: &str, method: Method, body: Option<Vec<u8>>) -> Result<Request> {
         let url = format!("https://api.github.com/{path}");
-        let url = Url::parse(url.as_str()).with_context(|| format!("Parse url {url}"))?;
+        let url = Url::parse(url.as_str()).with_context(|| format!("parse url {url}"))?;
         let mut builder = self.client.request(method, url);
         builder = builder
             .header("Accept", "application/vnd.github+json")
@@ -268,7 +269,7 @@ impl Github {
         if let Some(body) = body {
             builder = builder.body(body);
         }
-        builder.build().context("Build Github request")
+        builder.build().context("build request")
     }
 
     pub fn get_latest_tag(&self, owner: &str, name: &str) -> Result<String> {

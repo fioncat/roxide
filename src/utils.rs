@@ -1,19 +1,74 @@
-use std::env;
-use std::fs::{self, Metadata, OpenOptions};
-use std::io::{ErrorKind, Write};
+use std::collections::HashSet;
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process;
-use std::time::{Duration, SystemTime};
+use std::{env, fs, process};
 
-use anyhow::{anyhow, bail, Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use chrono::{Local, LocalResult, TimeZone};
 use console::{self, style};
-use file_lock::{FileLock, FileOptions};
 use regex::Regex;
 
-use crate::config;
+use crate::config::Config;
 use crate::errors::SilentExit;
 use crate::info;
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! vec_strings {
+    ( $( $s:expr ),* ) => {
+        vec![
+            $(
+                String::from($s),
+            )*
+        ]
+    };
+}
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! hashset {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut set = HashSet::new();
+            $(
+                set.insert($x);
+            )*
+            set
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! hashset_strings {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut set = HashSet::new();
+            $(
+                set.insert(String::from($x));
+            )*
+            set
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! hashmap {
+    ($($key:expr => $value:expr),*) => {{
+        let mut map = HashMap::new();
+        $(map.insert($key, $value);)*
+        map
+    }};
+}
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! hashmap_strings {
+    ($($key:expr => $value:expr),*) => {{
+        let mut map = HashMap::new();
+        $(map.insert(String::from($key), String::from($value));)*
+        map
+    }};
+}
 
 pub const SECOND: u64 = 1;
 pub const MINUTE: u64 = 60 * SECOND;
@@ -23,49 +78,119 @@ pub const WEEK: u64 = 7 * DAY;
 pub const MONTH: u64 = 30 * DAY;
 pub const YEAR: u64 = 365 * DAY;
 
+/// If the file directory doesn't exist, create it; if it exists, take no action.
 pub fn ensure_dir(path: &PathBuf) -> Result<()> {
     if let Some(dir) = path.parent() {
         match fs::read_dir(dir) {
             Ok(_) => Ok(()),
-            Err(err) if err.kind() == ErrorKind::NotFound => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 fs::create_dir_all(dir)
-                    .with_context(|| format!("Create directory {}", dir.display()))?;
+                    .with_context(|| format!("create directory {}", dir.display()))?;
                 Ok(())
             }
-            Err(err) => Err(err).with_context(|| format!("Read directory {}", dir.display())),
+            Err(err) => Err(err).with_context(|| format!("read directory {}", dir.display())),
         }
     } else {
         Ok(())
     }
 }
 
+/// Write the content to a file; if the file doesn't exist, create it. If the
+/// directory where the file is located doesn't exist, create it as well.
 pub fn write_file(path: &PathBuf, data: &[u8]) -> Result<()> {
     ensure_dir(path)?;
-    let mut opts = OpenOptions::new();
+    let mut opts = fs::OpenOptions::new();
     opts.create(true).truncate(true).write(true);
     let mut file = opts
         .open(path)
-        .with_context(|| format!("Open file {}", path.display()))?;
+        .with_context(|| format!("open file {}", path.display()))?;
     file.write_all(data)
-        .with_context(|| format!("Write file {}", path.display()))?;
+        .with_context(|| format!("write file {}", path.display()))?;
     Ok(())
 }
 
-pub fn current_time() -> Result<Duration> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .context("System clock set to invalid time")
+/// UNIX file lock are utilized to lock an entire process during an operation,
+/// enabling certain process-level atomic operations. Once a process acquires a file
+/// lock, any attempts by other identical processes to acquire the lock will fail.
+/// There's no need for manual release of the file lock; it automatically releases
+/// upon object release.
+///
+/// See: [`file_lock`] and [`file_lock::FileLock`].
+pub struct FileLock {
+    _path: PathBuf,
+    /// Wrap the `file_lock` crate
+    _file_lock: file_lock::FileLock,
 }
 
-pub fn current_dir() -> Result<PathBuf> {
-    env::current_dir().context("Get current directory")
+impl FileLock {
+    const RESOURCE_TEMPORARILY_UNAVAILABLE_CODE: i32 = 11;
+
+    /// Attempt to acquire the file lock; this function will fail if there are
+    /// issues with the filesystem or if another process has already acquired the
+    /// lock. We will create a `lock_{name}` file lock under the metadir directory,
+    /// which will store the current process's PID.
+    ///
+    /// # Arguments
+    ///
+    /// * `cfg` - We will create file lock under `cfg.metadir`.
+    /// * `name` - File lock name, you can use this to create locks at different
+    /// granularity to lock different processes.
+    pub fn acquire(cfg: &Config, name: impl AsRef<str>) -> Result<FileLock> {
+        let path = cfg.get_meta_dir().join(format!("lock_{}", name.as_ref()));
+        ensure_dir(&path)?;
+
+        let lock_opts = file_lock::FileOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true);
+        let mut file_lock = match file_lock::FileLock::lock(&path, false, lock_opts) {
+            Ok(lock) => lock,
+            Err(err) => match err.raw_os_error() {
+                Some(code) if code == Self::RESOURCE_TEMPORARILY_UNAVAILABLE_CODE => {
+                    bail!("acquire file lock error, {} is occupied by another roxide, please wait for it to complete", name.as_ref());
+                }
+                _ => {
+                    return Err(err).with_context(|| format!("acquire file lock {}", name.as_ref()))
+                }
+            },
+        };
+
+        // Write current pid to file lock.
+        let pid = process::id();
+        let pid = format!("{pid}");
+
+        file_lock
+            .file
+            .write_all(pid.as_bytes())
+            .with_context(|| format!("write pid to lock file {}", path.display()))?;
+        file_lock
+            .file
+            .flush()
+            .with_context(|| format!("flush pid to lock file {}", path.display()))?;
+
+        // The file lock will be released after file_lock dropped.
+        Ok(FileLock {
+            _path: path,
+            _file_lock: file_lock,
+        })
+    }
 }
 
+/// See: [`shellexpand::full`].
+pub fn expandenv(s: impl AsRef<str>) -> Result<String> {
+    let s = shellexpand::full(s.as_ref())
+        .with_context(|| format!("expand env for '{}'", s.as_ref()))?;
+    Ok(s.to_string())
+}
+
+/// Exit the process with error.
 pub fn error_exit(err: Error) {
-    _ = writeln!(std::io::stderr(), "{}: {err:#}", style("error").red());
+    _ = writeln!(io::stderr(), "{}: {err:#}", style("error").red());
     process::exit(2);
 }
 
+/// If there are no errors, exit zero. If there is an error, print the error and
+/// exit with none-zero.
 pub fn handle_result(result: Result<()>) {
     match result {
         Ok(()) => {}
@@ -76,6 +201,7 @@ pub fn handle_result(result: Result<()>) {
     }
 }
 
+/// Open url in default web browser, see: [`open`].
 pub fn open_url(url: impl AsRef<str>) -> Result<()> {
     open::that(url.as_ref()).with_context(|| {
         format!(
@@ -85,8 +211,9 @@ pub fn open_url(url: impl AsRef<str>) -> Result<()> {
     })
 }
 
-pub fn format_since(time: u64) -> String {
-    let duration = config::now_secs().saturating_sub(time);
+/// Return the duration in a human-readable form from the current time to `time`.
+pub fn format_since(cfg: &Config, time: u64) -> String {
+    let duration = cfg.now().saturating_sub(time);
 
     let unit: &str;
     let value: u64;
@@ -123,17 +250,39 @@ pub fn format_since(time: u64) -> String {
     }
 }
 
+/// Convert a Unix timestamp to a human-readable time.
 pub fn format_time(time: u64) -> Result<String> {
     match Local.timestamp_opt(time as i64, 0) {
-        LocalResult::None => bail!("Invalid timestamp {time}"),
-        LocalResult::Ambiguous(_, _) => bail!("Ambiguous parse timestamp {time}"),
+        LocalResult::None => bail!("invalid timestamp {time}"),
+        LocalResult::Ambiguous(_, _) => bail!("ambiguous parse timestamp {time}"),
         LocalResult::Single(time) => Ok(time.format("%Y-%m-%d %H:%M:%S").to_string()),
     }
 }
 
+/// Convert the user-provided duration string to seconds. The basic format for
+/// duration is: `{number}{unit}`.
+///
+/// Available units:
+///
+/// - `s`: seconds.
+/// - `m`: minutes.
+/// - `h`: hours.
+/// - `d`: days.
+///
+/// `{number}` must be a positive integer, and higher or lower granularity is not
+/// supported.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(parse_duration_secs("32s").unwrap(), 32)
+/// assert_eq!(parse_duration_secs("2m").unwrap(), 120)
+/// assert_eq!(parse_duration_secs("1h").unwrap(), 3600)
+/// assert_eq!(parse_duration_secs("2d").unwrap(), 3600*24*2)
+/// ```
 pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
     let parse_err = format!(
-        "Invalid duration {}, the format should be <number><s|m|h|d>",
+        "invalid duration '{}', the format should be <number><s|m|h|d>",
         style(s.as_ref()).yellow()
     );
 
@@ -153,11 +302,10 @@ pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
         bail!(parse_err);
     }
     let number = match caps.get(1) {
-        Some(num) => num
-            .as_str()
-            .parse::<u64>()
-            .with_context(|| format!("Invalid duration number {}", style(num.as_str()).yellow()))?,
-        None => bail!("Missing number in duration"),
+        Some(num) => num.as_str().parse::<u64>().with_context(|| {
+            format!("invalid duration number '{}'", style(num.as_str()).yellow())
+        })?,
+        None => bail!("missing number in duration"),
     };
     if number == 0 {
         bail!("duration cannot be zero");
@@ -165,7 +313,7 @@ pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
 
     let unit = match caps.get(2) {
         Some(unit) => unit.as_str(),
-        None => bail!("Missing unit in duration"),
+        None => bail!("missing unit in duration"),
     };
 
     let secs = match unit {
@@ -173,46 +321,57 @@ pub fn parse_duration_secs(s: impl AsRef<str>) -> Result<u64> {
         "m" => number * MINUTE,
         "h" => number * HOUR,
         "d" => number * DAY,
-        _ => bail!("Invalid unit {}", unit),
+        _ => bail!("invalid unit '{}'", unit),
     };
 
     Ok(secs)
 }
 
-pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
-    match fs::read_dir(&path) {
-        Ok(_) => {}
-        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-        Err(err) => return Err(err).with_context(|| format!("Read repo dir {}", path.display())),
-    }
-    info!("Remove dir {}", path.display());
-    fs::remove_dir_all(&path).context("Remove directory")?;
-
-    let dir = path.parent();
-    if let None = dir {
-        return Ok(());
-    }
-    let mut dir = dir.unwrap();
-    loop {
-        match fs::read_dir(dir) {
-            Ok(dir_read) => {
-                let count = dir_read.count();
-                if count > 0 {
-                    return Ok(());
-                }
-                info!("Remove dir {}", dir.display());
-                fs::remove_dir(dir).context("Remove directory")?;
-                match dir.parent() {
-                    Some(parent) => dir = parent,
-                    None => return Ok(()),
-                }
+/// Recursively walk all entries in a directory and call the provided `handle`
+/// function for each entry.
+pub fn walk_dir<F>(root: PathBuf, mut handle: F) -> Result<()>
+where
+    F: FnMut(&PathBuf, fs::Metadata) -> Result<bool>,
+{
+    let mut stack = vec![root];
+    while !stack.is_empty() {
+        let dir = stack.pop().unwrap();
+        let dir_read = match fs::read_dir(&dir) {
+            Ok(dir_read) => dir_read,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err).with_context(|| format!("read dir '{}'", dir.display())),
+        };
+        for entry in dir_read.into_iter() {
+            let entry = entry.with_context(|| format!("read sub dir for '{}'", dir.display()))?;
+            let sub = dir.join(entry.file_name());
+            let meta = entry
+                .metadata()
+                .with_context(|| format!("read metadata for '{}'", sub.display()))?;
+            let is_dir = meta.is_dir();
+            let next = handle(&sub, meta)?;
+            if next && is_dir {
+                stack.push(sub);
             }
-            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
         }
     }
+    Ok(())
 }
 
+/// Recursively traverse the entire directory and return the size of the entire
+/// directory.
+pub fn dir_size(dir: PathBuf) -> Result<u64> {
+    let mut total_size: u64 = 0;
+    walk_dir(dir, |_path, meta| {
+        if meta.is_file() {
+            total_size += meta.len();
+        }
+        Ok(true)
+    })?;
+
+    Ok(total_size)
+}
+
+/// Convert a size to a human-readable string, for example, "32KB".
 pub fn human_bytes<T: Into<u64>>(bytes: T) -> String {
     const BYTES_UNIT: f64 = 1000.0;
     const BYTES_SUFFIX: [&str; 9] = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
@@ -230,80 +389,15 @@ pub fn human_bytes<T: Into<u64>>(bytes: T) -> String {
     [&result, BYTES_SUFFIX[base.floor() as usize]].join("")
 }
 
-pub fn dir_size(dir: PathBuf) -> Result<u64> {
-    let mut total_size: u64 = 0;
-    walk_dir(dir, |_path, meta| {
-        if meta.is_file() {
-            total_size += meta.len();
-        }
-        Ok(true)
-    })?;
-
-    Ok(total_size)
-}
-
-pub struct Lock {
-    path: PathBuf,
-    _file_lock: FileLock,
-}
-
-impl Lock {
-    const RESOURCE_TEMPORARILY_UNAVAILABLE_CODE: i32 = 11;
-
-    pub fn acquire(name: impl AsRef<str>) -> Result<Lock> {
-        let dir = PathBuf::from(config::base().metadir.as_str());
-        let path = dir.join(format!("lock_{}", name.as_ref()));
-        ensure_dir(&path)?;
-
-        let lock_opts = FileOptions::new().write(true).create(true).truncate(true);
-        let mut file_lock = match FileLock::lock(&path, false, lock_opts) {
-            Ok(lock) => lock,
-            Err(err) => match err.raw_os_error() {
-                Some(code) if code == Self::RESOURCE_TEMPORARILY_UNAVAILABLE_CODE => {
-                    bail!("Acquire file lock error, {} is occupied by another roxide, please wait for it to complete", name.as_ref());
-                }
-                _ => {
-                    return Err(err).with_context(|| format!("Acquire file lock {}", name.as_ref()))
-                }
-            },
-        };
-
-        let pid = process::id();
-        let pid = format!("{pid}");
-
-        file_lock
-            .file
-            .write_all(pid.as_bytes())
-            .with_context(|| format!("Write pid to lock file {}", path.display()))?;
-        file_lock
-            .file
-            .flush()
-            .with_context(|| format!("Flush pid to lock file {}", path.display()))?;
-
-        Ok(Lock {
-            path,
-            _file_lock: file_lock,
-        })
-    }
-}
-
-impl Drop for Lock {
-    fn drop(&mut self) {
-        match fs::remove_file(&self.path) {
-            Ok(_) => {}
-            Err(err) => error_exit(anyhow!(
-                "Delete lock file {} error: {err}",
-                self.path.display()
-            )),
-        }
-    }
-}
-
+/// If the length of `vec` is less than or equal to 1, return `name` itself; if
+/// greater than 1, return the plural form of `name`.
 pub fn plural<T>(vec: &Vec<T>, name: &str) -> String {
     let plural = format!("{name}s");
     plural_full(vec, name, plural.as_str())
 }
 
+/// Similar to [`plural`] but allows manually specifying the plural word. Suitable
+/// for special plural scenarios.
 pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
     if vec.is_empty() {
         return format!("0 {}", name);
@@ -315,42 +409,66 @@ pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
     }
 }
 
-pub fn walk_dir<F>(root: PathBuf, mut handle: F) -> Result<()>
-where
-    F: FnMut(&PathBuf, Metadata) -> Result<bool>,
-{
-    let mut stack = vec![root];
-    while !stack.is_empty() {
-        let dir = stack.pop().unwrap();
-        let dir_read = match fs::read_dir(&dir) {
-            Ok(dir_read) => dir_read,
-            Err(err) if err.kind() == ErrorKind::NotFound => continue,
-            Err(err) => return Err(err).with_context(|| format!("Read dir {}", dir.display())),
-        };
-        for entry in dir_read.into_iter() {
-            let entry = entry.with_context(|| format!("Read subdir for {}", dir.display()))?;
-            let sub = dir.join(entry.file_name());
-            let meta = entry
-                .metadata()
-                .with_context(|| format!("Read metadata for {}", sub.display()))?;
-            let is_dir = meta.is_dir();
-            let next = handle(&sub, meta)?;
-            if next && is_dir {
-                stack.push(sub);
+/// Remove a directory, recursively deleting until reaching a non-empty parent
+/// directory.
+pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
+    match fs::read_dir(&path) {
+        Ok(_) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err).with_context(|| format!("read repo dir '{}'", path.display())),
+    }
+    info!("Remove dir {}", path.display());
+    fs::remove_dir_all(&path).context("remove directory")?;
+
+    let dir = path.parent();
+    if let None = dir {
+        return Ok(());
+    }
+    let mut dir = dir.unwrap();
+    loop {
+        match fs::read_dir(dir) {
+            Ok(dir_read) => {
+                let count = dir_read.count();
+                if count > 0 {
+                    return Ok(());
+                }
+                info!("Remove dir {}", dir.display());
+                fs::remove_dir(dir).context("remove directory")?;
+                match dir.parent() {
+                    Some(parent) => dir = parent,
+                    None => return Ok(()),
+                }
             }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err).with_context(|| format!("read dir '{}'", dir.display())),
         }
     }
-    Ok(())
+}
+
+/// Parse labels flag to hashset, the format is: "[label0][,label1]...".
+pub fn parse_labels(labels: &Option<String>) -> Option<HashSet<String>> {
+    match labels {
+        Some(s) => Some(s.split(",").map(|s| s.to_string()).collect()),
+        None => None,
+    }
+}
+
+/// Get home dir, that is env $HOME. Not supported on Windows.
+pub fn get_home_dir() -> Result<PathBuf> {
+    match env::var_os("HOME") {
+        Some(home) => Ok(PathBuf::from(home)),
+        None => bail!(
+            "$HOME env not found in your system, please make sure that you are in an UNIX system"
+        ),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use serial_test::serial;
-
-    use super::*;
+mod utils_tests {
+    use crate::config::config_tests;
+    use crate::utils::*;
 
     #[test]
-    #[serial]
     fn test_format_since() {
         let cases = [
             (10, "now"),
@@ -367,10 +485,10 @@ mod tests {
             (10 * YEAR, "10 years ago"),
         ];
 
-        let now = config::now_secs();
+        let cfg = config_tests::load_test_config("utils/format_since");
         for (secs, expect) in cases {
-            let time = now.saturating_sub(secs);
-            let format = format_since(time);
+            let time = cfg.now().saturating_sub(secs);
+            let format = format_since(&cfg, time);
             if expect != format.as_str() {
                 panic!("Expect {expect}, Found {format}");
             }
@@ -378,15 +496,14 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_format_time() {
-        let now = config::now_secs();
+        let cfg = config_tests::load_test_config("utils/format_time");
+        let now = cfg.now();
         let time = format_time(now).unwrap();
-        println!("{time}");
+        assert!(!time.is_empty());
     }
 
     #[test]
-    #[serial]
     fn test_parse_duration() {
         let cases = [
             ("3s", 3),
@@ -407,7 +524,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_remove_dir_recursively() {
         const PATH: &str = "/tmp/test-roxide/sub01/sub02/sub03";
         fs::create_dir_all(PATH).unwrap();
@@ -415,15 +531,15 @@ mod tests {
 
         match fs::read_dir(PATH) {
             Ok(_) => panic!("Expect path {PATH} be deleted, but it is still exists"),
-            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => panic!("{err}"),
         }
     }
 
     #[test]
-    #[serial]
     fn test_walk_dir() {
-        let root = config::current_dir().clone();
-        walk_dir(root, |_path, _meta| Ok(true)).unwrap();
+        let cfg = config_tests::load_test_config("utils/format_time");
+        let path = cfg.get_current_dir().clone();
+        walk_dir(path, |_path, _meta| Ok(true)).unwrap();
     }
 }

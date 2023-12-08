@@ -8,9 +8,10 @@ use bincode::Options;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::api::types::{ApiRepo, MergeOptions, Provider};
-use crate::config;
-use crate::utils::{self, Lock};
+use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::config::Config;
+use crate::repo::Remote;
+use crate::utils::{self, FileLock};
 
 pub struct Cache {
     dir: PathBuf,
@@ -21,22 +22,12 @@ pub struct Cache {
 
     force: bool,
 
-    _lock: Lock,
+    _lock: FileLock,
+
+    now: u64,
 }
 
 impl Provider for Cache {
-    fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
-        let path = self.get_repo_path(owner, name);
-        if !self.force {
-            if let Some(repo) = self.read(&path)? {
-                return Ok(repo);
-            }
-        }
-        let repo = self.upstream.get_repo(owner, name)?;
-        self.write(&repo, &path)?;
-        Ok(repo)
-    }
-
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = self.list_repos_path(owner);
         if !self.force {
@@ -47,6 +38,18 @@ impl Provider for Cache {
         let repos = self.upstream.list_repos(owner)?;
         self.write(&repos, &path)?;
         Ok(repos)
+    }
+
+    fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
+        let path = self.get_repo_path(owner, name);
+        if !self.force {
+            if let Some(repo) = self.read(&path)? {
+                return Ok(repo);
+            }
+        }
+        let repo = self.upstream.get_repo(owner, name)?;
+        self.write(&repo, &path)?;
+        Ok(repo)
     }
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
@@ -72,20 +75,22 @@ impl Provider for Cache {
 
 impl Cache {
     pub fn new(
-        dir: PathBuf,
-        hours: u64,
-        p: Box<dyn Provider>,
+        cfg: &Config,
+        remote: &Remote,
+        upstream: Box<dyn Provider>,
         force: bool,
-    ) -> Result<Box<dyn Provider>> {
-        let lock = Lock::acquire("cache")?;
-        let expire = Duration::from_secs(hours * 3600);
-        Ok(Box::new(Cache {
+    ) -> Result<Cache> {
+        let lock = FileLock::acquire(cfg, "cache")?;
+        let expire = Duration::from_secs(remote.cfg.cache_hours as u64 * 3600);
+        let dir = cfg.get_meta_dir().join("cache").join(&remote.name);
+        Ok(Cache {
             dir,
             expire,
-            upstream: p,
+            upstream,
             force,
             _lock: lock,
-        }))
+            now: cfg.now(),
+        })
     }
 
     fn list_repos_path(&self, owner: &str) -> PathBuf {
@@ -112,7 +117,7 @@ impl Cache {
             Ok(data) => data,
             Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
             Err(err) => {
-                return Err(err).with_context(|| format!("Read cache file {}", path.display()))
+                return Err(err).with_context(|| format!("read cache file {}", path.display()))
             }
         };
 
@@ -120,23 +125,23 @@ impl Cache {
         let mut update_time: u64 = 0;
         let update_time_size = decoder.serialized_size(&update_time).unwrap() as usize;
         if data.len() < update_time_size {
-            bail!("Corrupted cache data in {}", path.display());
+            bail!("corrupted cache data in {}", path.display());
         }
 
         let (update_time_data, cache_data) = data.split_at(update_time_size);
         update_time = decoder
             .deserialize(update_time_data)
-            .context("Decode cache last_updated data")?;
+            .context("decode cache last_updated data")?;
         let expire_duration = Duration::from_secs(update_time) + self.expire;
-        if config::now() >= &expire_duration {
+        if self.now >= expire_duration.as_secs() {
             fs::remove_file(path)
-                .with_context(|| format!("Remove cache file {}", path.display()))?;
+                .with_context(|| format!("remove cache file {}", path.display()))?;
             return Ok(None);
         }
 
         let cache = decoder
             .deserialize::<T>(cache_data)
-            .context("Decode cache data")?;
+            .context("decode cache data")?;
         Ok(Some(cache))
     }
 
@@ -144,41 +149,37 @@ impl Cache {
     where
         T: Serialize + ?Sized,
     {
-        let now = config::now_secs();
+        let now = self.now;
         let buffer_size =
             bincode::serialized_size(&now).unwrap() + bincode::serialized_size(value).unwrap();
         let mut buffer = Vec::with_capacity(buffer_size as usize);
 
-        bincode::serialize_into(&mut buffer, &now).context("Encode now")?;
-        bincode::serialize_into(&mut buffer, value).context("Encode cache data")?;
+        bincode::serialize_into(&mut buffer, &now).context("encode now")?;
+        bincode::serialize_into(&mut buffer, value).context("encode cache data")?;
 
         utils::write_file(path, &buffer)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use serial_test::serial;
-
-    use crate::api::types::tests::StaticProvider;
-
-    use super::*;
-
-    const CACHE_PATH: &str = "/tmp/test-roxide-cache";
+mod cache_tests {
+    use crate::api::api_tests::StaticProvider;
+    use crate::api::cache::*;
+    use crate::config::config_tests;
 
     #[test]
-    #[serial]
     fn test_cache_normal() {
+        let cfg = config_tests::load_test_config("api_cache/normal");
         let upstream = StaticProvider::mock();
         let expect_repos = upstream.list_repos("fioncat").unwrap();
-
-        let mut cache = Cache {
-            dir: PathBuf::from(CACHE_PATH),
-            expire: Duration::from_secs(20),
-            force: true,
-            upstream,
-            _lock: Lock::acquire("test-cache-01").unwrap(),
+        let remote_cfg = cfg.must_get_remote("github").unwrap();
+        let remote = &Remote {
+            name: String::from("github"),
+            cfg: remote_cfg.clone(),
         };
+
+        let mut cache = Cache::new(&cfg, &remote, upstream, true).unwrap();
+
         assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
 
         let upstream = StaticProvider::new(vec![("fioncat", vec!["hello0", "hello1", "hello2"])]);
@@ -189,22 +190,23 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_cache_expire() {
+        let cfg = config_tests::load_test_config("api_cache/expire");
         let upstream = StaticProvider::mock();
         let expect_repos = upstream.list_repos("kubernetes").unwrap();
-
-        let mut cache = Cache {
-            dir: PathBuf::from(CACHE_PATH),
-            expire: Duration::from_secs(1),
-            force: true,
-            upstream,
-            _lock: Lock::acquire("test-cache-02").unwrap(),
+        let remote_cfg = cfg.must_get_remote("github").unwrap();
+        let remote = &Remote {
+            name: String::from("github"),
+            cfg: remote_cfg.clone(),
         };
+
+        let mut cache = Cache::new(&cfg, &remote, upstream, true).unwrap();
+        // Set a small expire time to simulate expiration.
+        cache.expire = Duration::from_secs(100);
         assert_eq!(cache.list_repos("kubernetes").unwrap(), expect_repos);
 
-        let fake_now = utils::current_time().unwrap() + Duration::from_secs(200);
-        config::set_now(fake_now);
+        let fake_now = cfg.now() + Duration::from_secs(200).as_secs();
+        cache.now = fake_now;
 
         let expect_repos = vec!["hello0", "hello1", "hello2"];
         let upstream = StaticProvider::new(vec![("kubernetes", expect_repos.clone())]);

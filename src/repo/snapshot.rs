@@ -1,11 +1,14 @@
-use std::{fs, io::ErrorKind, path::PathBuf};
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::{fs, io};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
 
-use crate::{config, utils};
+use crate::config::Config;
+use crate::utils;
 
 pub struct Snapshot {
     pub name: String,
@@ -26,44 +29,49 @@ pub struct Item {
     pub path: Option<String>,
 
     pub last_accessed: u64,
-    pub acceseed: f64,
+    pub accessed: f64,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub labels: Option<HashSet<String>>,
 }
 
 impl Snapshot {
-    pub fn new(name: String, items: Vec<Item>) -> Snapshot {
-        let path = PathBuf::from(&config::base().metadir)
+    pub fn new(cfg: &Config, name: String, items: Vec<Item>) -> Snapshot {
+        let path = cfg
+            .get_meta_dir()
             .join("snapshot")
             .join(format!("{}.json", name));
         Snapshot { name, items, path }
     }
 
-    pub fn read(name: String) -> Result<Snapshot> {
-        let path = PathBuf::from(&config::base().metadir)
+    pub fn read(cfg: &Config, name: String) -> Result<Snapshot> {
+        let path = cfg
+            .get_meta_dir()
             .join("snapshot")
             .join(format!("{}.json", name));
         let data = match fs::read(&path) {
             Ok(data) => data,
-            Err(err) if err.kind() == ErrorKind::NotFound => {
-                bail!("Could not find snapshot {}", name)
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                bail!("could not find snapshot {}", name)
             }
             Err(err) => {
-                return Err(err).with_context(|| format!("Read snapshot path {}", path.display()))
+                return Err(err).with_context(|| format!("read snapshot path {}", path.display()))
             }
         };
 
-        let items: Vec<Item> = serde_json::from_slice(&data).context("Decode snapshot data")?;
+        let items: Vec<Item> = serde_json::from_slice(&data).context("decode snapshot data")?;
 
         Ok(Snapshot { name, items, path })
     }
 
-    pub fn list() -> Result<Vec<String>> {
-        let dir = PathBuf::from(&config::base().metadir).join("snapshot");
+    pub fn list(cfg: &Config) -> Result<Vec<String>> {
+        let dir = cfg.get_meta_dir().join("snapshot");
         match fs::read_dir(&dir) {
             Ok(dir_read) => {
                 let mut snapshots = Vec::new();
                 for entry in dir_read {
                     let entry =
-                        entry.with_context(|| format!("Read subdir for {}", dir.display()))?;
+                        entry.with_context(|| format!("Read sub dir for {}", dir.display()))?;
                     let name = entry.file_name();
                     let name = match name.to_str() {
                         Some(s) => s,
@@ -82,7 +90,7 @@ impl Snapshot {
                 }
                 Ok(snapshots)
             }
-            Err(err) if err.kind() == ErrorKind::NotFound => Ok(vec![]),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(vec![]),
             Err(err) => Err(err).with_context(|| format!("Read snapshot dir {}", dir.display())),
         }
     }
@@ -93,7 +101,7 @@ impl Snapshot {
         let mut ser = Serializer::with_formatter(&mut buf, formatter);
         self.items
             .serialize(&mut ser)
-            .context("Serialize snapshot")?;
+            .context("serialize snapshot")?;
         utils::write_file(&self.path, &buf)
     }
 }

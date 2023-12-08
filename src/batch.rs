@@ -6,45 +6,82 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use console::style;
 
-use crate::term;
+use crate::{stderrln, term};
 
+/// `Task` is used to represent a concurrent task that needs to be executed.
+///
+/// Generally pass a vector of objects that implement this trait to [`run`] for batch
+/// concurrent execution of tasks.
 pub trait Task<R: Send> {
+    /// Represents the function that needs to be executed concurrently for a task.
+    ///
+    /// # Attentions
+    ///
+    /// Please note that this function will be concurrently called by different
+    /// threads, and the caller needs to ensure thread safety.
     fn run(&self) -> Result<R>;
 }
 
+/// Used by [`Tracker`] for reporting the execution results of tasks from worker
+/// threads to the main thread.
 enum Report<R> {
+    /// Indicates that the task is still in progress, where `usize` is the current
+    /// task index and `String` is the name of the current task.
     Running(usize, String),
+
+    /// Indicates that the task has been completed. `usize` is the current task
+    /// index, and `Result<R>` represents the execution result of the task.
     Done(usize, Result<R>),
 }
 
+/// `Tracker` is used to track the execution status of batch tasks and output the
+/// status to the terminal in real-time.
 struct Tracker<R> {
+    /// total tasks length.
     total: usize,
+    /// padding size for `total`.
     total_pad: usize,
-    running: Vec<(usize, String)>,
 
+    /// running tasks.
+    running: Vec<(usize, String)>,
+    /// done tasks.
     done: Vec<(usize, Result<R>)>,
 
+    /// task description, such as "Run"
     desc: String,
+    /// task description without style
     desc_pure: String,
+    /// task description string length
     desc_size: usize,
+    /// task description head, such as "Running"
     desc_head: String,
 
     ok_count: usize,
     fail_count: usize,
 
+    /// If tasks failed, display their error messages.
     show_fail: bool,
     fail_message: Option<Vec<(String, String)>>,
 }
 
 impl<R> Tracker<R> {
-    const SPACE: &str = " ";
-    const SEP: &str = ", ";
-    const OMIT: &str = ", ...";
+    const SPACE: &'static str = " ";
+    const SEP: &'static str = ", ";
+    const OMIT: &'static str = ", ...";
 
     const SPACE_SIZE: usize = Self::SPACE.len();
     const SEP_SIZE: usize = Self::SEP.len();
     const OMIT_SIZE: usize = Self::OMIT.len();
 
+    /// Create a Tracker, call [`Tracker::wait`] later to start tracking.
+    ///
+    /// # Arguments
+    ///
+    /// * `desc` - A descriptive string for the task, which will be printed in the
+    ///   terminal.
+    /// * `total` - The expected number of tasks. Tracking will stop when the number
+    ///   of completed tasks reaches this value.
+    /// * `show_fail` - If `true`, show error messages for tasks after they fail.
     fn new(desc: &str, total: usize, show_fail: bool) -> Tracker<R> {
         let desc_pure = String::from(desc);
         let desc = style(desc).cyan().bold().to_string();
@@ -68,6 +105,12 @@ impl<R> Tracker<R> {
         }
     }
 
+    /// Receive the execution results of tasks from `rx` and track them in real-time.
+    /// This function will block the main thread until the expected number of
+    /// completed tasks is reached and return the task execution results.
+    ///
+    /// If `show_fail` passed to [`Tracker::new`] is `true`, error messages will be
+    /// printed when tasks fail.
     fn wait(mut self, rx: Receiver<Report<R>>) -> Vec<Result<R>> {
         let start = Instant::now();
         while self.done.len() < self.total {
@@ -85,9 +128,9 @@ impl<R> Tracker<R> {
             style("ok").green().to_string()
         };
 
-        term::cursor_up_stdout();
-        println!();
-        println!(
+        term::cursor_up();
+        stderrln!();
+        stderrln!(
             "{} result: {}. {} ok; {} failed; finished in {}",
             self.desc_pure,
             result,
@@ -96,12 +139,12 @@ impl<R> Tracker<R> {
             Self::format_elapsed(elapsed_time),
         );
         if let Some(fail_message) = self.fail_message.as_ref() {
-            println!();
-            println!("Error message:");
+            stderrln!();
+            stderrln!("Error message:");
             for (name, msg) in fail_message {
-                println!("  {name}: {msg}");
+                stderrln!("  {}: {}", name, msg);
             }
-            println!();
+            stderrln!();
         }
 
         self.done
@@ -112,13 +155,15 @@ impl<R> Tracker<R> {
         results
     }
 
+    /// Print running task on terminal.
     fn trace_running(&mut self, idx: usize, name: String) {
         self.running.push((idx, name));
         let line = self.render();
-        term::cursor_up_stdout();
-        println!("{line}");
+        term::cursor_up();
+        stderrln!("{}", line);
     }
 
+    /// Print completed task on terminal.
     fn trace_done(&mut self, idx: usize, result: Result<R>) {
         let name = match self
             .running
@@ -132,15 +177,15 @@ impl<R> Tracker<R> {
             None => return,
         };
 
-        term::cursor_up_stdout();
+        term::cursor_up();
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
-                println!("{} {name} {}", self.desc_head, style("ok").green());
+                stderrln!("{} {} {}", self.desc_head, name, style("ok").green());
             }
             Err(err) => {
                 self.fail_count += 1;
-                println!("{} {name} {}", self.desc_head, style("fail").red());
+                stderrln!("{} {} {}", self.desc_head, name, style("fail").red());
                 if self.show_fail {
                     let item = (name, format!("{}", err));
                     match self.fail_message.as_mut() {
@@ -152,21 +197,31 @@ impl<R> Tracker<R> {
         }
         self.done.push((idx, result));
         let line = self.render();
-        println!("{line}");
+        stderrln!("{}", line);
     }
 
+    /// Render tracing line. The format is:
+    ///
+    /// * `{desc} {progress_bar} ({current_num}/{total_num}) {running}...`
+    ///
+    /// The tracing line will adaptively change based on the current terminal width.
+    /// If the terminal width is too small, some information at the end will be
+    /// replaced with ellipsis.
     fn render(&self) -> String {
         let term_size = term::size();
         if self.desc_size > term_size {
+            // The terminal is too small, no space to print info, just print "....".
             return ".".repeat(term_size);
         }
 
+        // Render desc (with color).
         let mut line = self.desc.clone();
         if self.desc_size + Self::SPACE_SIZE > term_size || term::bar_size() == 0 {
             return line;
         }
         line.push_str(Self::SPACE);
 
+        // Render progress bar.
         let bar = term::render_bar(self.done.len(), self.total);
         let bar_size = Self::get_size(&bar);
         if Self::get_size(&line) + bar_size > term_size {
@@ -179,6 +234,7 @@ impl<R> Tracker<R> {
         }
         line.push_str(Self::SPACE);
 
+        // Render tag.
         let tag = self.render_tag();
         let tag_size = Self::get_size(&bar);
         if Self::get_size(&line) + tag_size > term_size {
@@ -196,17 +252,20 @@ impl<R> Tracker<R> {
             return line;
         }
 
+        // Render running items
         let list = self.render_list(left);
         line.push_str(&list);
         line
     }
 
+    /// The tracing tag, `({current}/{total})`.
     fn render_tag(&self) -> String {
         let pad = self.total_pad;
         let current = format!("{:pad$}", self.done.len(), pad = pad);
         format!("({current}/{})", self.total)
     }
 
+    /// The running items, `item0, item1, ...`.
     fn render_list(&self, size: usize) -> String {
         let mut list = String::with_capacity(size);
         for (idx, (_, name)) in self.running.iter().enumerate() {
@@ -238,10 +297,12 @@ impl<R> Tracker<R> {
         list
     }
 
+    /// See: [`console::measure_text_width`].
     fn get_size(s: impl AsRef<str>) -> usize {
         console::measure_text_width(s.as_ref())
     }
 
+    /// Show elapsed time.
     fn format_elapsed(d: Duration) -> String {
         let elapsed_time = d.as_secs_f64();
 
@@ -260,6 +321,8 @@ impl<R> Tracker<R> {
     }
 }
 
+/// Similar to [`run`], but if any task encounters an error during execution, the
+/// entire function returns an error.
 pub fn must_run<T, R>(desc: &str, tasks: Vec<(String, T)>) -> Result<Vec<R>>
 where
     R: Send + 'static,
@@ -272,6 +335,20 @@ where
     Ok(results.into_iter().map(|r| r.unwrap()).collect())
 }
 
+/// Concurrently execute multiple tasks, block the current main thread until all
+/// tasks are completed or an error occurs. Return the execution results of these
+/// tasks.
+///
+/// We will start working threads equal to the number of CPU cores on the current
+/// machine to execute tasks.
+///
+/// For how to define the execution function for tasks, see: [`Task`].
+///
+/// # Arguments
+///
+/// * `desc` - A descriptive string for the task, which will be printed in the terminal.
+/// * `tasks` - The tasks list to execute.
+/// * `show_fail` - If `true`, show error messages for tasks after they fail.
 pub fn run<T, R>(desc: &str, tasks: Vec<(String, T)>, show_fail: bool) -> Vec<Result<R>>
 where
     R: Send + 'static,
@@ -304,7 +381,7 @@ where
         .bold()
         .cyan()
         .underlined();
-    println!("{title}\n");
+    stderrln!("{}\n", title);
     let mut handlers = Vec::with_capacity(worker_len);
     for _ in 0..worker_len {
         let task_shared_rx = Arc::clone(&task_shared_rx);
@@ -356,6 +433,7 @@ where
     results
 }
 
+/// Returns `true` if all tasks are ok.
 pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
     for result in results {
         if let Err(_) = result {
@@ -366,12 +444,10 @@ pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod batch_tests {
     use std::time::Duration;
 
-    use serial_test::serial;
-
-    use super::*;
+    use crate::batch::*;
 
     struct TestTask {
         idx: usize,
@@ -385,7 +461,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_run() {
         const COUNT: usize = 30;
         let mut tasks = Vec::with_capacity(COUNT);

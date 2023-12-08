@@ -4,16 +4,16 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::types::{ApiRepo, MergeOptions, Provider};
-use crate::config::default;
-use crate::config::types::Remote;
+use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::config::defaults;
+use crate::repo::Remote;
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
     pub path: String,
     pub path_with_namespace: String,
 
-    #[serde(default = "default::empty_string")]
+    #[serde(default = "defaults::empty_string")]
     pub default_branch: String,
 
     pub web_url: String,
@@ -76,7 +76,7 @@ impl Provider for Gitlab {
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
         if let Some(_) = merge.upstream {
-            bail!("Gitlab now does not support upstream");
+            bail!("GitLab now does not support upstream");
         }
         let id = format!("{}/{}", merge.owner, merge.name);
         let id_encode = urlencoding::encode(&id);
@@ -93,7 +93,7 @@ impl Provider for Gitlab {
 
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
         if let Some(_) = merge.upstream {
-            bail!("Gitlab now does not support upstream");
+            bail!("GitLab now does not support upstream");
         }
         let id = format!("{}/{}", merge.owner, merge.name);
         let id_encode = urlencoding::encode(&id);
@@ -125,7 +125,7 @@ impl Gitlab {
 
     pub fn new(remote: &Remote) -> Box<dyn Provider> {
         let client = super::build_common_client(remote);
-        let domain = match &remote.api_domain {
+        let domain = match &remote.cfg.api_domain {
             Some(domain) => domain.clone(),
             None => String::from("gitlab.com"),
         };
@@ -133,10 +133,10 @@ impl Gitlab {
         let url = format!("https://{domain}/api/v{}", Self::API_VERSION);
 
         Box::new(Gitlab {
-            token: remote.token.clone(),
+            token: remote.cfg.token.clone(),
             client,
             url,
-            per_page: remote.list_limit,
+            per_page: remote.cfg.list_limit,
         })
     }
 
@@ -153,7 +153,7 @@ impl Gitlab {
         B: Serialize,
         R: DeserializeOwned + ?Sized,
     {
-        let body = serde_json::to_vec(&body).context("Encode Github request body")?;
+        let body = serde_json::to_vec(&body).context("encode GitLab request body")?;
         let req = self.build_request(path, Method::POST, Some(body))?;
         self.execute(req)
     }
@@ -162,26 +162,26 @@ impl Gitlab {
     where
         T: DeserializeOwned + ?Sized,
     {
-        let resp = self.client.execute(req).context("Gitlab http request")?;
+        let resp = self.client.execute(req).context("GitLab http request")?;
         let ok = resp.status().is_success();
-        let data = resp.bytes().context("Read Gitlab response body")?;
+        let data = resp.bytes().context("read GitLab response body")?;
         if ok {
-            return serde_json::from_slice(&data).context("Decode Gitlab response data");
+            return serde_json::from_slice(&data).context("decode GitLab response data");
         }
 
         match serde_json::from_slice::<GitlabError>(&data) {
-            Ok(err) => bail!("Gitlab api error: {}", err.error),
+            Ok(err) => bail!("GitLab api error: {}", err.error),
             Err(_err) => bail!(
-                "Unknown Gitlab api error: {}",
+                "unknown GitLab api error: {}",
                 String::from_utf8(data.to_vec())
-                    .context("Decode Gitlab response to UTF-8 string")?
+                    .context("decode GitLab response to UTF-8 string")?
             ),
         }
     }
 
     fn build_request(&self, path: &str, method: Method, body: Option<Vec<u8>>) -> Result<Request> {
         let url = format!("{}/{path}", self.url);
-        let url = Url::parse(url.as_str()).with_context(|| format!("Parse gitlab url {url}"))?;
+        let url = Url::parse(url.as_str()).with_context(|| format!("parse GitLab url {url}"))?;
         let mut builder = self.client.request(method, url);
         builder = builder.header("User-Agent", "roxide-client");
         if let Some(token) = &self.token {
@@ -193,6 +193,6 @@ impl Gitlab {
                 .header("Content-Type", "application/json");
         }
 
-        builder.build().context("Build Gitlab request")
+        builder.build().context("build GitLab request")
     }
 }
