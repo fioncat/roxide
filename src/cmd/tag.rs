@@ -124,7 +124,15 @@ impl TagArgs {
                 }
                 _ => Ok(CompletionResult::empty()),
             },
-            flags: None,
+            flags: Some(|cfg, flag, _to_complete| match flag {
+                'r' => {
+                    let mut rules: Vec<_> =
+                        cfg.release.iter().map(|(key, _)| key.to_string()).collect();
+                    rules.sort();
+                    Ok(Some(CompletionResult::from(rules)))
+                }
+                _ => Ok(None),
+            }),
         }
     }
 }
