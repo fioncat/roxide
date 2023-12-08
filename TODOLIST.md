@@ -5,6 +5,8 @@
 - [x] `copy` command, copy current repo to another remote/group.
 - [x] `home` support clone url (both HTTPS and SSH).
 - [x] `home` support use keywork to do fuzzy seaching on remote, usage: `ro home github xxx -s`
+- [x] Support `labels`, the `sync`, `remove`, etc will use them to filter repos.
+- [x] Rebuild code, better hint.
 
 ## v0.8.0
 
