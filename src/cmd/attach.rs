@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use anyhow::{bail, Result};
 use clap::Args;
 
@@ -20,22 +18,14 @@ pub struct AttachArgs {
     #[clap(short)]
     pub force: bool,
 
-    /// Update repo labels with this value.
+    /// Append labels.
     #[clap(short)]
     pub labels: Option<String>,
-
-    /// Clean labels for the repo.
-    #[clap(short = 'L')]
-    pub clean_labels: bool,
 }
 
 impl Run for AttachArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        let update_labels = if self.clean_labels {
-            Some(HashSet::new())
-        } else {
-            utils::parse_labels(&self.labels)
-        };
+        let append_labels = utils::parse_labels(&self.labels);
 
         let mut db = Database::load(cfg)?;
 
@@ -81,7 +71,7 @@ impl Run for AttachArgs {
         }
 
         info!("Attach current directory to {}", repo.name_with_remote());
-        db.update(repo, update_labels);
+        db.update(repo, append_labels);
 
         db.save()
     }

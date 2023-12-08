@@ -11,6 +11,7 @@ mod home;
 mod import;
 mod info;
 mod init;
+mod label;
 mod merge;
 mod open;
 mod rebase;
@@ -65,6 +66,7 @@ pub enum Commands {
     Recover(recover::RecoverArgs),
     Remove(remove::RemoveArgs),
     Reset(reset::ResetArgs),
+    Label(label::LabelArgs),
     Run(run::RunArgs),
     Snapshot(snapshot::SnapshotArgs),
     Squash(squash::SquashArgs),
@@ -89,6 +91,7 @@ impl Commands {
             "remove" => remove::RemoveArgs::completion(),
             "reset" => reset::ResetArgs::completion(),
             "run" => run::RunArgs::completion(),
+            "label" => label::LabelArgs::completion(),
             "snapshot" => snapshot::SnapshotArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
             "sync" => sync::SyncArgs::completion(),
@@ -104,6 +107,7 @@ impl Run for App {
             Commands::Branch(args) => args.run(cfg),
             Commands::Check(args) => args.run(cfg),
             Commands::Complete(args) => args.run(cfg),
+            Commands::Label(args) => args.run(cfg),
             Commands::Config(args) => args.run(cfg),
             Commands::Copy(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
@@ -291,17 +295,24 @@ impl Completion {
         }
 
         let mut items = Vec::with_capacity(candidates.len());
-        for item in candidates {
-            let item = if to_complete != "" {
-                if to_complete.ends_with(",") {
-                    format!("{to_complete}{item}")
-                } else {
-                    format!("{to_complete},{item}")
+        if to_complete.ends_with(",") {
+            for item in candidates {
+                let item = format!("{to_complete}{item}");
+                items.push(item);
+            }
+        } else {
+            let last_to_complete = to_complete.split(",").last();
+            match last_to_complete {
+                Some(last) => {
+                    for item in candidates {
+                        if let Some(suffix) = item.strip_prefix(last) {
+                            let item = format!("{to_complete}{suffix}");
+                            items.push(item);
+                        }
+                    }
                 }
-            } else {
-                item
-            };
-            items.push(item);
+                None => items = candidates.into_iter().collect(),
+            }
         }
 
         Ok(Some(CompletionResult::from(items).no_space()))
