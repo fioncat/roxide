@@ -11,7 +11,7 @@ use crate::repo::database::{self, Database};
 use crate::repo::Repo;
 use crate::{confirm, info, stderrln, term, utils};
 
-/// Recover database
+/// Recover the database, useful when the database is broken.
 #[derive(Args)]
 pub struct RecoverArgs {}
 

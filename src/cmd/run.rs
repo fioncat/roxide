@@ -11,17 +11,20 @@ use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::term::Workflow;
 use crate::{stderrln, term, utils};
 
-/// Run workflow
+/// Run workflow in repository.
 #[derive(Args)]
 pub struct RunArgs {
+    /// Repository selection head.
     pub head: Option<String>,
+
+    /// Repository selection query.
     pub query: Option<String>,
 
-    /// Use editor to filter items.
+    /// Use editor to filter items before running.
     #[clap(short)]
     pub edit: bool,
 
-    /// If true, run workflow for current repo.
+    /// Run workflow for current repository.
     #[clap(short)]
     pub current: bool,
 
@@ -29,7 +32,7 @@ pub struct RunArgs {
     #[clap(short, default_value = "default")]
     pub name: String,
 
-    /// Use the labels to filter repo.
+    /// Use the labels to filter repository.
     #[clap(short)]
     pub labels: Option<String>,
 }

@@ -16,24 +16,28 @@ use crate::repo::{NameLevel, Remote, Repo};
 use crate::term::{self, BranchStatus, Cmd, GitBranch, GitCmd};
 use crate::{hashset_strings, stderrln, utils};
 
-/// Sync repos git branches.
+/// Sync repositories (filter with "sync" label) git branches.
 #[derive(Args)]
 pub struct SyncArgs {
+    /// Repository selection head.
     pub head: Option<String>,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
     /// Commit message if have uncommitted changes in current branch.
     #[clap(short)]
     pub message: Option<String>,
 
+    /// Use editor to filter items before sync.
     #[clap(short)]
     pub edit: bool,
 
-    /// Only show effects, skip running
+    /// Only show effects, skip running.
     #[clap(short)]
     pub dry_run: bool,
 
+    /// The operations to perform. Avaliable: [push, pull, add, delete, force].
     #[clap(short, default_value = "push,pull,add,delete")]
     pub ops: String,
 
@@ -41,6 +45,7 @@ pub struct SyncArgs {
     #[clap(short)]
     pub force: bool,
 
+    /// Use the labels to filter repository.
     #[clap(short)]
     pub labels: Option<String>,
 }

@@ -10,7 +10,7 @@ use crate::config::Config;
 use crate::repo::database::Database;
 use crate::{info, stderrln, term, utils};
 
-/// Remove unused path in workspace
+/// Remove unused file(s) and dir(s) in workspace
 #[derive(Args)]
 pub struct GcArgs {}
 

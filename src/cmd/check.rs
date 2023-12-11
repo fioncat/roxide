@@ -11,7 +11,7 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::{stderr, stderrln, term, utils};
 
-/// Check your machine env
+/// Check system environment.
 #[derive(Args)]
 pub struct CheckArgs {}
 

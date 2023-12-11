@@ -13,18 +13,20 @@ use crate::repo::Repo;
 use crate::term::{Cmd, Workflow};
 use crate::{api, confirm, utils};
 
-/// Enter the home path of a repo.
+/// Enter a repository.
 #[derive(Args)]
 pub struct HomeArgs {
+    /// Repository selection head.
     pub head: Option<String>,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
-    /// If true, use search instead of fuzzy matching.
+    /// Use search instead of fuzzy matching.
     #[clap(short)]
     pub search: bool,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 
@@ -32,7 +34,7 @@ pub struct HomeArgs {
     #[clap(short)]
     pub open: bool,
 
-    /// Append repo labels with this value.
+    /// Append these labels to the database.
     #[clap(short)]
     pub labels: Option<String>,
 }

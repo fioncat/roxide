@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::confirm;
 use crate::repo::database::Database;
 
-/// Detach current path in database, don't remove directory
+/// Remove the current repository in database, don't remove directory
 #[derive(Args)]
 pub struct DetachArgs {}
 

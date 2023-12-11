@@ -4,7 +4,7 @@ use console::style;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
-use crate::term::{BranchStatus, Cmd, GitBranch};
+use crate::term::{BranchStatus, Cmd, GitBranch, Table};
 use crate::{stderrln, term};
 
 /// Git branch operations
@@ -13,9 +13,13 @@ pub struct BranchArgs {
     /// Branch name, optional
     pub name: Option<String>,
 
-    /// Show all info, include branch status
+    /// Including remote branches for switching and listing
     #[clap(short)]
     pub all: bool,
+
+    /// Only remote branches for switching and listing
+    #[clap(short)]
+    pub remote: bool,
 
     /// Sync branch with remote
     #[clap(short)]
@@ -33,9 +37,9 @@ pub struct BranchArgs {
     #[clap(short)]
     pub push: bool,
 
-    /// Search and switch to remote branch
+    /// List branch
     #[clap(short)]
-    pub remote: bool,
+    pub list: bool,
 }
 
 enum SyncBranchTask<'a> {
@@ -47,10 +51,7 @@ impl Run for BranchArgs {
     fn run(&self, _cfg: &Config) -> Result<()> {
         if self.sync {
             term::ensure_no_uncommitted()?;
-            self.fetch()?;
-        }
-        if self.remote {
-            return self.search_and_switch_remote();
+            self.fetch(false)?;
         }
         let branches = GitBranch::list().context("list branch")?;
         if self.sync {
@@ -62,24 +63,31 @@ impl Run for BranchArgs {
         if !self.create && self.push {
             return self.push(&branches);
         }
-        if let None = &self.name {
-            self.show(&branches);
-            return Ok(());
-        }
-        let name = self.name.as_ref().unwrap();
-        if self.create {
-            Cmd::git(&["checkout", "-b", name.as_str()])
-                .with_display_cmd()
-                .execute_check()?;
-        } else {
-            Cmd::git(&["checkout", name.as_str()])
-                .with_display_cmd()
-                .execute_check()?;
-        }
-        if self.push {
-            Cmd::git(&["push", "--set-upstream", "origin", name.as_str()])
-                .with_display_cmd()
-                .execute_check()?;
+        match self.name.as_ref() {
+            Some(name) => {
+                if self.create {
+                    Cmd::git(&["checkout", "-b", name.as_str()])
+                        .with_display_cmd()
+                        .execute_check()?;
+                } else {
+                    Cmd::git(&["checkout", name.as_str()])
+                        .with_display_cmd()
+                        .execute_check()?;
+                }
+                if self.push {
+                    Cmd::git(&["push", "--set-upstream", "origin", name.as_str()])
+                        .with_display_cmd()
+                        .execute_check()?;
+                }
+            }
+
+            None => {
+                if self.list {
+                    self.show(&branches)?;
+                    return Ok(());
+                }
+                self.search_and_switch(&branches)?;
+            }
         }
 
         Ok(())
@@ -87,19 +95,50 @@ impl Run for BranchArgs {
 }
 
 impl BranchArgs {
-    fn show(&self, branches: &Vec<GitBranch>) {
+    fn show(&self, branches: &Vec<GitBranch>) -> Result<()> {
         if branches.is_empty() {
-            return;
+            stderrln!("No branch to list");
+            return Ok(());
         }
-        if !self.all {
-            for branch in branches {
-                println!("{}", branch.name);
+
+        if self.remote {
+            self.fetch(true)?;
+            let remote_branches = GitBranch::list_remote("origin")?;
+            for branch in remote_branches {
+                println!("{branch}");
             }
-            return;
+            return Ok(());
         }
+
+        let mut table = Table::with_capacity(branches.len() + 1);
+        table.add(vec![
+            String::from(""),
+            String::from("NAME"),
+            String::from("STATUS"),
+        ]);
         for branch in branches {
-            println!("{} {}", branch.name.as_str(), branch.status.display(),);
+            let cur = if branch.current {
+                String::from("*")
+            } else {
+                String::new()
+            };
+            let status = format!("{}", branch.status.display());
+            let row = vec![cur, branch.name.clone(), status];
+            table.add(row);
         }
+
+        if self.all {
+            self.fetch(true)?;
+            let remote_branches = GitBranch::list_remote("origin")?;
+            let status = format!("{}", BranchStatus::Detached.display());
+            for branch in remote_branches {
+                let row = vec![String::new(), branch, status.clone()];
+                table.add(row);
+            }
+        }
+
+        table.show();
+        Ok(())
     }
 
     fn sync(&self, branches: &Vec<GitBranch>) -> Result<()> {
@@ -189,10 +228,12 @@ impl BranchArgs {
         Ok(())
     }
 
-    fn fetch(&self) -> Result<()> {
-        Cmd::git(&["fetch", "origin", "--prune"])
-            .with_display_cmd()
-            .execute_check()
+    fn fetch(&self, mute: bool) -> Result<()> {
+        let mut cmd = Cmd::git(&["fetch", "origin", "--prune"]);
+        if !mute {
+            cmd = cmd.with_display_cmd();
+        }
+        cmd.execute_check()
     }
 
     fn delete(&self, branches: &Vec<GitBranch>) -> Result<()> {
@@ -244,8 +285,40 @@ impl BranchArgs {
         }
     }
 
+    fn search_and_switch(&self, branches: &Vec<GitBranch>) -> Result<()> {
+        if self.remote {
+            return self.search_and_switch_remote();
+        }
+
+        let mut items: Vec<_> = branches
+            .iter()
+            .filter_map(|b| {
+                if b.current {
+                    None
+                } else {
+                    Some(b.name.clone())
+                }
+            })
+            .collect();
+        if self.all {
+            self.fetch(false)?;
+            let remote_branches = GitBranch::list_remote("origin")?;
+            items.extend(remote_branches);
+        }
+        if items.is_empty() {
+            stderrln!("No branch to switch");
+            return Ok(());
+        }
+
+        let idx = term::fzf_search(&items)?;
+
+        let target = items[idx].as_str();
+
+        Cmd::git(&["checkout", target]).execute_check()
+    }
+
     fn search_and_switch_remote(&self) -> Result<()> {
-        self.fetch()?;
+        self.fetch(false)?;
         let branches = GitBranch::list_remote("origin")?;
         if branches.is_empty() {
             stderrln!("No remote branch to switch");
@@ -255,7 +328,7 @@ impl BranchArgs {
         let idx = term::fzf_search(&branches)?;
         let target = branches[idx].as_str();
 
-        Cmd::git(&["checkout", target]).execute()?.check()
+        Cmd::git(&["checkout", target]).execute_check()
     }
 
     pub fn completion() -> Completion {

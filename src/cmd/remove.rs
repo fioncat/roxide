@@ -9,27 +9,29 @@ use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
 use crate::{confirm, stderrln, term, utils};
 
-/// Remove repo(s) from database and disk.
+/// Remove repository from database and disk.
 #[derive(Args)]
 pub struct RemoveArgs {
+    /// Repository selection head.
     pub head: Option<String>,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
-    /// Remove multiple repos.
+    /// Remove multiple.
     #[clap(short)]
     pub recursive: bool,
 
-    /// Remove repos whose last access interval is greater than or equal to
+    /// Remove repositories whose last access interval is greater than or equal to
     /// this value.
     #[clap(short)]
     pub duration: Option<String>,
 
-    /// Remove repos whose access times are less than this value.
+    /// Remove repositories whose access times are less than this value.
     #[clap(short)]
     pub access: Option<u64>,
 
-    /// Use editor to filter items.
+    /// Use editor to filter items before removing.
     #[clap(short)]
     pub edit: bool,
 
@@ -37,7 +39,7 @@ pub struct RemoveArgs {
     #[clap(short)]
     pub force: bool,
 
-    /// Use the labels to filter repo.
+    /// Use the labels to filter repository.
     #[clap(short)]
     pub labels: Option<String>,
 }
