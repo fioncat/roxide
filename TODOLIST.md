@@ -6,6 +6,8 @@
 - [x] `home` support clone url (both HTTPS and SSH).
 - [x] `home` support use keywork to do fuzzy seaching on remote, usage: `ro home github xxx -s`
 - [x] Support `labels`, the `sync`, `remove`, etc will use them to filter repos.
+- [ ] Update database to `v2` to support `labels`.
+- [ ] Workflow now support running commands in `docker`.
 - [x] Rebuild code, better hint.
 
 ## v0.8.0
