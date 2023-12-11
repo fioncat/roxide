@@ -1309,7 +1309,7 @@ impl Workflow {
         match cfg.workflows.get(name.as_ref()) {
             Some(steps) => Ok(Workflow {
                 name: name.as_ref().to_string(),
-                steps: steps.clone(),
+                steps: steps.steps.clone(),
                 cfg: cfg.clone(),
             }),
             None => bail!("could not find workflow '{}'", name.as_ref()),

@@ -16,6 +16,10 @@ pub fn empty_map<K, V>() -> HashMap<K, V> {
     HashMap::new()
 }
 
+pub fn empty_vec<T>() -> Vec<T> {
+    vec![]
+}
+
 pub fn release() -> HashMap<String, String> {
     let mut map = HashMap::with_capacity(5);
     map.insert(String::from("patch"), String::from("v{0}.{1}.{2+}"));
