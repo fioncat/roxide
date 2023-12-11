@@ -8,7 +8,7 @@ use crate::repo::database::Database;
 use crate::term::{self, GitBranch, GitRemote};
 use crate::{api, confirm, info, stderrln, utils};
 
-/// Create or open PullRequest (MergeRequest for Gitlab)
+/// Create or open MergeRequest (PullRequest for Github)
 #[derive(Args)]
 pub struct MergeArgs {
     /// Target branch, default will use HEAD branch
@@ -18,7 +18,7 @@ pub struct MergeArgs {
     #[clap(short)]
     pub upstream: bool,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 }

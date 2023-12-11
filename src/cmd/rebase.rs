@@ -5,7 +5,7 @@ use crate::cmd::{self, Completion, Run};
 use crate::config::Config;
 use crate::term::Cmd;
 
-/// Rebase current branch
+/// Rebase the current branch
 #[derive(Args)]
 pub struct RebaseArgs {
     /// Rebase source (optional), default will use HEAD branch
@@ -15,7 +15,7 @@ pub struct RebaseArgs {
     #[clap(short)]
     pub upstream: bool,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 }

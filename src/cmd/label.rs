@@ -6,18 +6,20 @@ use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::utils;
 
-/// Add or remove labels for repo
+/// Add or remove labels for repository
 #[derive(Args)]
 pub struct LabelArgs {
+    /// Repository selection head.
     pub head: Option<String>,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
-    /// If true, use search instead of fuzzy matching.
+    /// Use search instead of fuzzy matching.
     #[clap(short)]
     pub search: bool,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 

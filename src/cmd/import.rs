@@ -12,23 +12,24 @@ use crate::repo::{Remote, Repo};
 use crate::term::{self, Cmd, GitCmd};
 use crate::{stderrln, utils};
 
-/// Batch import repos
+/// Import repositories from remote in batches.
 #[derive(Args)]
 pub struct ImportArgs {
-    /// The remote to import.
+    /// Repository selection head.
     pub head: String,
 
     /// The owner to import.
     pub owner: String,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 
+    /// Use editor to filter items before importing.
     #[clap(short)]
     pub edit: bool,
 
-    /// Update repo labels with this value.
+    /// Append these labels to the database.
     #[clap(short)]
     pub labels: Option<String>,
 }

@@ -11,11 +11,13 @@ use crate::repo::{NameLevel, Repo};
 use crate::term::Table;
 use crate::{term, utils};
 
-/// Get or list repo info.
+/// Show repository info.
 #[derive(Args)]
 pub struct GetArgs {
+    /// Repository selection head.
     pub head: Option<String>,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
     /// Show size in list info. If your workspace is large, this can cause

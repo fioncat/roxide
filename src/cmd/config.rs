@@ -8,7 +8,7 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::{term, utils};
 
-/// Edit roxide config file in terminal.
+/// Edit config file in terminal.
 #[derive(Args)]
 pub struct ConfigArgs {}
 

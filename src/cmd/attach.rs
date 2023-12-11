@@ -7,18 +7,20 @@ use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::term::Cmd;
 use crate::{confirm, info, utils};
 
-/// Attach current directory to a repo.
+/// Attach the current directory to a repository.
 #[derive(Args)]
 pub struct AttachArgs {
+    /// Repository selection head.
     pub head: String,
 
+    /// Repository selection query.
     pub query: Option<String>,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 
-    /// Append labels.
+    /// Append these labels to the database.
     #[clap(short)]
     pub labels: Option<String>,
 }

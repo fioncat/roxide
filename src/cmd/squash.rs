@@ -24,7 +24,7 @@ pub struct SquashArgs {
     #[clap(short)]
     pub message: Option<String>,
 
-    /// If true, the cache will not be used when calling the API search.
+    /// When calling the remote API, ignore caches that are not expired.
     #[clap(short)]
     pub force: bool,
 }

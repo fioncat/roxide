@@ -12,7 +12,7 @@ use crate::repo::Repo;
 use crate::term::{Cmd, GitRemote};
 use crate::{confirm, info, utils};
 
-/// Copy the current repo to workspace (clone).
+/// Copy the current repository to another new repository.
 #[derive(Args)]
 pub struct CopyArgs {
     /// The remote name.
@@ -21,7 +21,7 @@ pub struct CopyArgs {
     /// The target repo name.
     pub name: Option<String>,
 
-    /// Update repo labels with this value.
+    /// Append these labels to the database for the new repository.
     #[clap(short)]
     pub labels: Option<String>,
 }

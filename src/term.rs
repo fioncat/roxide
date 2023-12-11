@@ -948,9 +948,7 @@ impl GitBranch {
     }
 
     pub fn list_remote(remote: &str) -> Result<Vec<String>> {
-        let lines = Cmd::git(&["branch", "-al"])
-            .with_display("List remote git branch")
-            .lines()?;
+        let lines = Cmd::git(&["branch", "-al"]).lines()?;
         let remote_prefix = format!("{remote}/");
         let mut items = Vec::with_capacity(lines.len());
         for line in lines {
@@ -975,9 +973,7 @@ impl GitBranch {
             items.push(item.to_string());
         }
 
-        let lines = Cmd::git(&["branch"])
-            .with_display("List local git branch")
-            .lines()?;
+        let lines = Cmd::git(&["branch"]).lines()?;
         let mut local_branch_map = HashSet::with_capacity(lines.len());
         for line in lines {
             let mut line = line.trim();
