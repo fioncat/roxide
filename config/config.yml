@@ -94,28 +94,30 @@ remotes:
 
 # Workflow can execute some pre-defined scripts on the repo.
 workflows:
-  # Indicates an execution step in Workflow, which can be writing a file or
-  # executing a shell command.
   init-gomod:
-    # If the Step is to write to a file, then name is the file name. If Step
-    # is an execution command, name is the name of the step. (required)
-    - name: main.go
-      # If not empty, it is the file content.
-      file: |
-        package main
+    # Indicates an execution step in Workflow, which can be writing a file or
+    # executing a shell command.
+    steps:
+      # If the Step is to write to a file, then name is the file name. If Step
+      # is an execution command, name is the name of the step. (required)
+      - name: main.go
+        # If not empty, it is the file content.
+        file: |
+          package main
 
-        import "fmt"
+          import "fmt"
 
-        func main() {
-        \tfmt.Println("hello, world!")
-        }
-    - name: Init go module
-      # If not empty, it is the command to execute.
-      run: go mod init ${REPO_NAME}
+          func main() {
+          \tfmt.Println("hello, world!")
+          }
+      - name: Init go module
+        # If not empty, it is the command to execute.
+        run: go mod init ${REPO_NAME}
 
   init-cargo:
-    - name: Init cargo
-      run: cargo init
+    steps:
+      - name: Init cargo
+        run: cargo init
 
 # The tag release rule.
 release:

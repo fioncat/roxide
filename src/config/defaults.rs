@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::config::Docker;
+
 pub fn workspace() -> String {
     String::from("~/dev")
 }
@@ -12,8 +14,27 @@ pub fn cmd() -> String {
     String::from("ro")
 }
 
+pub fn docker() -> Docker {
+    Docker {
+        cmd: docker_cmd(),
+        shell: docker_shell(),
+    }
+}
+
+pub fn docker_cmd() -> String {
+    String::from("docker")
+}
+
+pub fn docker_shell() -> String {
+    String::from("sh")
+}
+
 pub fn empty_map<K, V>() -> HashMap<K, V> {
     HashMap::new()
+}
+
+pub fn empty_vec<T>() -> Vec<T> {
+    vec![]
 }
 
 pub fn release() -> HashMap<String, String> {

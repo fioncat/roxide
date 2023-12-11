@@ -6,6 +6,7 @@ mod errors;
 mod repo;
 mod term;
 mod utils;
+mod workflow;
 
 use anyhow::Result;
 use clap::Parser;

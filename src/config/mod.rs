@@ -26,6 +26,9 @@ pub struct Config {
     #[serde(default = "defaults::cmd")]
     pub cmd: String,
 
+    #[serde(default = "defaults::docker")]
+    pub docker: Docker,
+
     /// The remotes config.
     #[serde(default = "defaults::empty_map")]
     pub remotes: HashMap<String, RemoteConfig>,
@@ -36,7 +39,7 @@ pub struct Config {
 
     /// Workflow can execute some pre-defined scripts on the repo.
     #[serde(default = "defaults::empty_map")]
-    pub workflows: HashMap<String, Vec<WorkflowStep>>,
+    pub workflows: HashMap<String, WorkflowConfig>,
 
     #[serde(skip)]
     current_dir: Option<PathBuf>,
@@ -51,6 +54,47 @@ pub struct Config {
     meta_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct Docker {
+    #[serde(default = "defaults::docker_cmd")]
+    pub cmd: String,
+
+    #[serde(default = "defaults::docker_shell")]
+    pub shell: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct WorkflowConfig {
+    #[serde(default = "defaults::empty_vec")]
+    pub env: Vec<WorkflowEnv>,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub steps: Vec<WorkflowStep>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct WorkflowEnv {
+    pub name: String,
+
+    pub value: Option<String>,
+
+    pub from_repo: Option<WorkflowFromRepo>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub enum WorkflowFromRepo {
+    #[serde(rename = "name")]
+    Name,
+    #[serde(rename = "owner")]
+    Owner,
+    #[serde(rename = "remote")]
+    Remote,
+    #[serde(rename = "path")]
+    Path,
+    #[serde(rename = "clone")]
+    Clone,
+}
+
 /// Indicates an execution step in Workflow, which can be writing a file or
 /// executing a shell command.
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -59,11 +103,22 @@ pub struct WorkflowStep {
     /// is an execution command, name is the name of the step. (required)
     pub name: String,
 
+    pub image: Option<String>,
+
+    pub ssh: Option<String>,
+
+    pub work_dir: Option<String>,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub env: Vec<WorkflowEnv>,
+
     /// If not empty, it is the file content.
     pub file: Option<String>,
 
     /// If not empty, it is the command to execute.
     pub run: Option<String>,
+
+    pub capture_output: Option<String>,
 }
 
 /// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
@@ -177,6 +232,15 @@ pub enum ProviderType {
     Github,
     #[serde(rename = "gitlab")]
     Gitlab,
+}
+
+impl WorkflowStep {
+    pub fn is_capture(&self) -> bool {
+        match self.capture_output.as_ref() {
+            Some(_) => true,
+            None => false,
+        }
+    }
 }
 
 impl RemoteConfig {
@@ -353,6 +417,7 @@ impl Config {
         let mut cfg = Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
+            docker: defaults::docker(),
             cmd: defaults::cmd(),
             remotes: HashMap::new(),
             release: defaults::release(),
@@ -519,25 +584,40 @@ remotes:
 
 workflows:
   golang:
-  - name: main.go
-    file: |
-      package main
+    env:
+      - name: MODULE_DOMAIN
+        from_repo: clone
+      - name: MODULE_OWNER
+        from_repo: owner
+      - name: MODULE_NAME
+        from_repo: name
+    steps:
+      - name: main.go
+        file: |
+          package main
 
-      import "fmt"
+          import "fmt"
 
-      func main() {
-      \tfmt.Println("hello, world!")
-      }
-  - name: go module
-    run: go mod init ${REPO_NAME}
+          func main() {
+          \tfmt.Println("hello, world!")
+          }
+      - name: Init go module
+        run: go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}
 
   rust:
-  - name: init cargo
-    run: cargo init
+    steps:
+      - name: Init cargo
+        run: cargo init
 
-  fetch:
-  - name: fetch git
-    run: git fetch --all
+  build-go:
+    steps:
+      - name: Build go
+        image: "golang:latest"
+        env:
+          - name: GO111MODULE
+            value: "on"
+        run: go build ./...
+
 "#;
 
     pub fn load_test_config(name: &str) -> Config {
@@ -700,33 +780,90 @@ func main() {
     fn test_workflows() {
         let cfg = load_test_config("config_workflow");
 
-        let w0 = vec![
+        let w0_steps = vec![
             WorkflowStep {
                 name: format!("main.go"),
                 file: Some(format!("{}", TEST_MAIN_GO_CONTENT)),
                 run: None,
+                image: None,
+                env: vec![],
+                ssh: None,
+                work_dir: None,
+                capture_output: None,
             },
             WorkflowStep {
-                name: format!("go module"),
+                name: format!("Init go module"),
                 file: None,
-                run: Some(String::from("go mod init ${REPO_NAME}")),
+                run: Some(String::from(
+                    "go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}",
+                )),
+                image: None,
+                env: vec![],
+                ssh: None,
+                work_dir: None,
+                capture_output: None,
             },
         ];
-        let w1 = vec![WorkflowStep {
-            name: format!("init cargo"),
+        let w0_env = vec![
+            WorkflowEnv {
+                name: format!("MODULE_DOMAIN"),
+                from_repo: Some(WorkflowFromRepo::Clone),
+                value: None,
+            },
+            WorkflowEnv {
+                name: format!("MODULE_OWNER"),
+                from_repo: Some(WorkflowFromRepo::Owner),
+                value: None,
+            },
+            WorkflowEnv {
+                name: format!("MODULE_NAME"),
+                from_repo: Some(WorkflowFromRepo::Name),
+                value: None,
+            },
+        ];
+        let w0 = WorkflowConfig {
+            env: w0_env,
+            steps: w0_steps,
+        };
+
+        let w1_steps = vec![WorkflowStep {
+            name: format!("Init cargo"),
             file: None,
             run: Some(String::from("cargo init")),
+            image: None,
+            env: vec![],
+            ssh: None,
+            work_dir: None,
+            capture_output: None,
         }];
-        let w2 = vec![WorkflowStep {
-            name: format!("fetch git"),
+        let w1 = WorkflowConfig {
+            env: vec![],
+            steps: w1_steps,
+        };
+
+        let w2_steps = vec![WorkflowStep {
+            name: format!("Build go"),
             file: None,
-            run: Some(String::from("git fetch --all")),
+            image: Some(format!("golang:latest")),
+            ssh: None,
+            work_dir: None,
+            env: vec![WorkflowEnv {
+                name: format!("GO111MODULE"),
+                value: Some(format!("on")),
+                from_repo: None,
+            }],
+            run: Some(String::from("go build ./...")),
+            capture_output: None,
         }];
+        let w2 = WorkflowConfig {
+            env: vec![],
+            steps: w2_steps,
+        };
 
         let wf = hashmap![
             format!("golang") => w0,
             format!("rust") => w1,
-            format!("fetch") => w2
+            format!("build-go") => w2
         ];
 
         assert_eq!(cfg.workflows, wf);
