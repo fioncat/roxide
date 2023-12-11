@@ -22,7 +22,7 @@ use serde_json::ser::PrettyFormatter;
 use serde_json::Serializer;
 
 use crate::api::Provider;
-use crate::config::{Config, WorkflowStep};
+use crate::config::Config;
 use crate::errors::SilentExit;
 use crate::repo::Repo;
 use crate::utils;
@@ -680,13 +680,18 @@ impl<'a> Cmd<'_> {
     /// ## Compatibility
     ///
     /// This function is only supported on Unix system.
-    pub fn sh(script: &str) -> Cmd {
+    pub fn sh(script: &str, capture: bool) -> Cmd<'static> {
         let raw = script.to_string();
-        // FIXME: We add `> /dev/stderr` at the end of the script to ensure that
-        // the script does not output any content to stdout. This method is not
-        // applicable to Windows and a more universal method is needed.
-        let script = format!("{script} > /dev/stderr");
-        let mut cmd = Self::with_args("sh", &["-c", script.as_str()]);
+        let mut cmd = if capture {
+            Self::with_args("sh", &["-c", script])
+        } else {
+            // FIXME: We add `> /dev/stderr` at the end of the script to ensure
+            // that the script does not output any content to stdout.
+            // This method is not applicable to Windows and a more universal method
+            // is needed.
+            let script = format!("{script} > /dev/stderr");
+            Self::with_args("sh", &["-c", script.as_str()])
+        };
         cmd.script = Some(raw);
         cmd
     }
@@ -770,7 +775,7 @@ impl<'a> Cmd<'_> {
 
     fn show(&self) -> Option<String> {
         let cmd_name = match self.script.as_ref() {
-            Some(script) => format!("sh -c '{}'", style(script).underlined()),
+            Some(script) => format!("sh: {}", style(script).bold()),
             None => {
                 let mut cmd_args = Vec::with_capacity(1);
                 cmd_args.push(self.cmd.get_program().to_str().unwrap());
@@ -1294,97 +1299,6 @@ impl GitTag {
         }
 
         Ok(GitTag(result))
-    }
-}
-
-pub struct Workflow {
-    pub name: String,
-    steps: Vec<WorkflowStep>,
-
-    cfg: Config,
-}
-
-impl Workflow {
-    pub fn new(cfg: &Config, name: impl AsRef<str>) -> Result<Workflow> {
-        match cfg.workflows.get(name.as_ref()) {
-            Some(steps) => Ok(Workflow {
-                name: name.as_ref().to_string(),
-                steps: steps.steps.clone(),
-                cfg: cfg.clone(),
-            }),
-            None => bail!("could not find workflow '{}'", name.as_ref()),
-        }
-    }
-
-    pub fn execute_repo(&self, repo: &Rc<Repo>) -> Result<()> {
-        info!(
-            "Execute workflow '{}' for '{}'",
-            self.name,
-            repo.name_with_remote()
-        );
-        let dir = repo.get_path(&self.cfg);
-        for step in self.steps.iter() {
-            if let Some(run) = &step.run {
-                let script = run.replace("\n", ";");
-                let mut cmd = Cmd::sh(&script).with_display(format!("{}", step.name));
-                cmd.with_path(&dir);
-
-                cmd.with_env("REPO_NAME", repo.name.as_str());
-                cmd.with_env("REPO_OWNER", repo.owner.name.as_str());
-                cmd.with_env("REMOTE", repo.remote.name.as_str());
-                cmd.with_env("REPO_NAME_WITH_OWNER", repo.name_with_owner());
-                cmd.with_env("REPO_NAME_WITH_REMOTE", repo.name_with_remote());
-
-                cmd.execute_check()?;
-                continue;
-            }
-            if let None = step.file {
-                continue;
-            }
-
-            let content = step.file.as_ref().unwrap();
-            let content = content.replace("\\t", "\t");
-
-            exec!("Create file '{}'", step.name);
-            let path = dir.join(&step.name);
-            utils::write_file(&path, content.as_bytes())?;
-        }
-        Ok(())
-    }
-
-    pub fn execute_task<S>(&self, dir: &PathBuf, remote: S, owner: S, name: S) -> Result<()>
-    where
-        S: AsRef<str>,
-    {
-        let name_with_owner = format!("{}/{}", owner.as_ref(), name.as_ref());
-        let name_with_remote = format!("{}:{}/{}", remote.as_ref(), owner.as_ref(), name.as_ref());
-
-        for step in self.steps.iter() {
-            if let Some(run) = &step.run {
-                let script = run.replace("\n", ";");
-                let mut cmd = Cmd::sh(&script);
-                cmd.with_path(&dir);
-
-                cmd.with_env("REPO_NAME", name.as_ref());
-                cmd.with_env("REPO_OWNER", owner.as_ref());
-                cmd.with_env("REMOTE", remote.as_ref());
-                cmd.with_env("REPO_NAME_WITH_OWNER", name_with_owner.as_str());
-                cmd.with_env("REPO_NAME_WITH_REMOTE", name_with_remote.as_str());
-
-                cmd.execute_check()?;
-                continue;
-            }
-            if let None = step.file {
-                continue;
-            }
-
-            let content = step.file.as_ref().unwrap();
-            let content = content.replace("\\t", "\t");
-
-            let path = dir.join(&step.name);
-            utils::write_file(&path, content.as_bytes())?;
-        }
-        Ok(())
     }
 }
 

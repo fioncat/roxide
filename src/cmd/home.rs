@@ -6,11 +6,13 @@ use std::rc::Rc;
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::batch::Task;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
-use crate::term::{Cmd, Workflow};
+use crate::term::Cmd;
+use crate::workflow::Workflow;
 use crate::{api, confirm, utils};
 
 /// Enter a repository.
@@ -95,8 +97,8 @@ impl HomeArgs {
         if let Some(owner) = repo.remote.cfg.owners.get(repo.owner.name.as_str()) {
             if let Some(workflow_names) = &owner.on_create {
                 for workflow_name in workflow_names.iter() {
-                    let wf = Workflow::new(cfg, workflow_name)?;
-                    wf.execute_repo(repo)?;
+                    let wf = Workflow::load(cfg, repo, workflow_name)?;
+                    wf.run()?;
                 }
             }
         }

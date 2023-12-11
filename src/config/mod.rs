@@ -26,6 +26,9 @@ pub struct Config {
     #[serde(default = "defaults::cmd")]
     pub cmd: String,
 
+    #[serde(default = "defaults::docker")]
+    pub docker: Docker,
+
     /// The remotes config.
     #[serde(default = "defaults::empty_map")]
     pub remotes: HashMap<String, RemoteConfig>,
@@ -49,6 +52,15 @@ pub struct Config {
 
     #[serde(skip)]
     meta_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct Docker {
+    #[serde(default = "defaults::docker_cmd")]
+    pub cmd: String,
+
+    #[serde(default = "defaults::docker_shell")]
+    pub shell: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -105,6 +117,8 @@ pub struct WorkflowStep {
 
     /// If not empty, it is the command to execute.
     pub run: Option<String>,
+
+    pub capture_output: Option<String>,
 }
 
 /// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
@@ -218,6 +232,15 @@ pub enum ProviderType {
     Github,
     #[serde(rename = "gitlab")]
     Gitlab,
+}
+
+impl WorkflowStep {
+    pub fn is_capture(&self) -> bool {
+        match self.capture_output.as_ref() {
+            Some(_) => true,
+            None => false,
+        }
+    }
 }
 
 impl RemoteConfig {
@@ -394,6 +417,7 @@ impl Config {
         let mut cfg = Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
+            docker: defaults::docker(),
             cmd: defaults::cmd(),
             remotes: HashMap::new(),
             release: defaults::release(),
@@ -765,6 +789,7 @@ func main() {
                 env: vec![],
                 ssh: None,
                 work_dir: None,
+                capture_output: None,
             },
             WorkflowStep {
                 name: format!("Init go module"),
@@ -776,6 +801,7 @@ func main() {
                 env: vec![],
                 ssh: None,
                 work_dir: None,
+                capture_output: None,
             },
         ];
         let w0_env = vec![
@@ -808,6 +834,7 @@ func main() {
             env: vec![],
             ssh: None,
             work_dir: None,
+            capture_output: None,
         }];
         let w1 = WorkflowConfig {
             env: vec![],
@@ -826,6 +853,7 @@ func main() {
                 from_repo: None,
             }],
             run: Some(String::from("go build ./...")),
+            capture_output: None,
         }];
         let w2 = WorkflowConfig {
             env: vec![],
