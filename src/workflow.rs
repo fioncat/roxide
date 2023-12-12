@@ -87,13 +87,13 @@ impl Env {
 
 impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
     fn run(&self) -> Result<()> {
-        let mut global_env = self.env.global.clone();
+        let mut extra_env = HashMap::new();
 
         if let Some(hint) = self.display.as_ref() {
             exec!("{}", hint);
         }
         for (idx, step) in self.cfg.as_ref().steps.iter().enumerate() {
-            self.run_step(idx, step, &mut global_env)
+            self.run_step(idx, step, &mut extra_env)
                 .with_context(|| format!("run step '{}' failed", step.name))?;
         }
         Ok(())
@@ -256,22 +256,18 @@ impl Workflow<Arc<WorkflowConfig>> {
         repo: &Rc<Repo>,
         name: impl AsRef<str>,
         wf_cfg: Arc<WorkflowConfig>,
-    ) -> Workflow<Arc<WorkflowConfig>> {
+    ) -> Self {
         Workflow::new(cfg, repo, name, wf_cfg, true)
     }
 }
 
-impl Workflow<Rc<WorkflowConfig>> {
-    pub fn load(
-        cfg: &Config,
-        repo: &Rc<Repo>,
-        name: impl AsRef<str>,
-    ) -> Result<Workflow<Box<WorkflowConfig>>> {
+impl<'a> Workflow<Cow<'a, WorkflowConfig>> {
+    pub fn load(cfg: &'a Config, repo: &Rc<Repo>, name: impl AsRef<str>) -> Result<Self> {
         let wf_cfg = match cfg.workflows.get(name.as_ref()) {
-            Some(wf_cfg) => wf_cfg.clone(),
+            Some(wf_cfg) => wf_cfg,
             None => bail!("could not find workflow '{}'", name.as_ref()),
         };
-        let wf_cfg = Box::new(wf_cfg);
+        let wf_cfg = Cow::Borrowed(wf_cfg);
 
         Ok(Workflow::new(cfg, repo, name, wf_cfg, false))
     }
