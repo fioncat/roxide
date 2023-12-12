@@ -53,7 +53,7 @@ impl Run for TagArgs {
 
         if self.create {
             let tag = match self.tag.as_ref() {
-                Some(tag) => GitTag::get(tag)?,
+                Some(tag) => GitTag::new(tag),
                 None => bail!("please provide tag to create"),
             };
             return self.create_tag(tag);
@@ -103,9 +103,12 @@ impl Run for TagArgs {
 
 impl TagArgs {
     fn create_tag(&self, tag: GitTag) -> Result<()> {
-        Cmd::git(&["tag", tag.as_str()])
-            .with_display_cmd()
-            .execute_check()?;
+        let tags = GitTag::list()?;
+        if let None = tags.iter().find(|t| t.as_str() == tag.as_str()) {
+            Cmd::git(&["tag", tag.as_str()])
+                .with_display_cmd()
+                .execute_check()?;
+        }
         if self.push {
             Cmd::git(&["push", "origin", tag.as_str()])
                 .with_display_cmd()

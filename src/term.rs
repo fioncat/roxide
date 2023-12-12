@@ -1226,7 +1226,6 @@ impl GitTag {
 
     pub fn list() -> Result<Vec<GitTag>> {
         let tags: Vec<_> = Cmd::git(&["tag"])
-            .with_display("Get git tags")
             .lines()?
             .iter()
             .filter(|line| !line.trim().is_empty())
@@ -1243,6 +1242,10 @@ impl GitTag {
             }
         }
         bail!("could not find tag '{}'", s.as_ref())
+    }
+
+    pub fn new(s: impl AsRef<str>) -> GitTag {
+        GitTag(s.as_ref().to_string())
     }
 
     pub fn latest() -> Result<GitTag> {
