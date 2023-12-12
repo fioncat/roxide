@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -133,7 +134,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         &self,
         idx: usize,
         step: &WorkflowStep,
-        global_env: &mut HashMap<String, String>,
+        extra_env: &mut HashMap<String, String>,
     ) -> Result<()> {
         if let Some(content) = step.file.as_ref() {
             if let Some(_) = self.display.as_ref() {
@@ -152,13 +153,16 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         }
 
         let mut cmd = if let Some(_) = step.image {
-            self.docker_cmd(idx, step, &global_env)
+            self.docker_cmd(idx, step, &extra_env)
         } else if let Some(_) = step.ssh {
             self.ssh_cmd(step)
         } else {
             Cmd::sh(step.run.as_ref().unwrap().as_str(), step.is_capture())
         };
-        for (k, v) in global_env.iter() {
+        for (k, v) in extra_env.iter() {
+            cmd.with_env(k, v);
+        }
+        for (k, v) in self.env.global.iter() {
             cmd.with_env(k, v);
         }
         if let Some(envs) = self.env.steps.get(&idx) {
@@ -177,7 +181,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
             let env_name = step.capture_output.as_ref().unwrap().clone();
             let output = cmd.read()?;
             info!("Capture the command output to env '{}'", env_name.as_str());
-            global_env.insert(env_name, output);
+            extra_env.insert(env_name, output);
             Ok(())
         } else {
             cmd.execute_check()
@@ -188,52 +192,49 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         &self,
         idx: usize,
         step: &WorkflowStep,
-        global_env: &HashMap<String, String>,
+        extra_env: &HashMap<String, String>,
     ) -> Cmd {
-        let mut args = Vec::new();
-        args.push(self.docker.cmd.as_str());
-        args.push("run");
+        let mut args: Vec<Cow<str>> = Vec::new();
+        args.push(Cow::Borrowed(self.docker.cmd.as_str()));
+        args.push(Cow::Borrowed("run"));
 
-        let global_envs: Vec<String> = global_env.iter().map(|(k, v)| format!("{k}={v}")).collect();
-        for env in global_envs.iter() {
-            args.push("--env");
-            args.push(env.as_str());
-        }
-
-        let step_envs: Option<Vec<String>> = match self.env.steps.get(&idx) {
-            Some(envs) => Some(envs.iter().map(|(k, v)| format!("{k}={v}")).collect()),
-            None => None,
-        };
-        if let Some(envs) = step_envs.as_ref() {
-            for env in envs.iter() {
-                args.push("--env");
-                args.push(env.as_str());
+        let mut append_env = |env_map: &HashMap<String, String>| {
+            let envs: Vec<String> = env_map.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            for env in envs {
+                args.push(Cow::Borrowed("--env"));
+                args.push(Cow::Owned(env));
             }
+        };
+
+        append_env(&self.env.global);
+        append_env(&extra_env);
+        if let Some(step_env) = self.env.steps.get(&idx) {
+            append_env(step_env);
         }
 
-        args.push("--entrypoint");
-        args.push(&self.docker.shell);
+        args.push(Cow::Borrowed("--entrypoint"));
+        args.push(Cow::Borrowed(&self.docker.shell));
 
         let workdir = match step.work_dir.as_ref() {
             Some(dir) => dir.as_str(),
             None => "/work",
         };
-        args.push("--workdir");
-        args.push(workdir);
+        args.push(Cow::Borrowed("--workdir"));
+        args.push(Cow::Borrowed(workdir));
 
-        args.push("--volume");
+        args.push(Cow::Borrowed("--volume"));
         let vol = format!("{}:{}", self.path.display(), workdir);
-        args.push(vol.as_str());
+        args.push(Cow::Borrowed(vol.as_str()));
 
-        args.push("--rm");
-        args.push("-it");
+        args.push(Cow::Borrowed("--rm"));
+        args.push(Cow::Borrowed("-it"));
 
-        args.push(step.image.as_ref().unwrap().as_str());
+        args.push(Cow::Borrowed(step.image.as_ref().unwrap().as_str()));
 
-        args.push("-c");
+        args.push(Cow::Borrowed("-c"));
         let script = step.run.as_ref().unwrap().as_str().replace("'", "\\'");
         let script = format!("'{script}'");
-        args.push(&script);
+        args.push(Cow::Owned(script));
 
         Cmd::sh(args.join(" ").as_str(), step.is_capture())
     }
@@ -265,12 +266,12 @@ impl Workflow<Rc<WorkflowConfig>> {
         cfg: &Config,
         repo: &Rc<Repo>,
         name: impl AsRef<str>,
-    ) -> Result<Workflow<Rc<WorkflowConfig>>> {
+    ) -> Result<Workflow<Box<WorkflowConfig>>> {
         let wf_cfg = match cfg.workflows.get(name.as_ref()) {
             Some(wf_cfg) => wf_cfg.clone(),
             None => bail!("could not find workflow '{}'", name.as_ref()),
         };
-        let wf_cfg = Rc::new(wf_cfg);
+        let wf_cfg = Box::new(wf_cfg);
 
         Ok(Workflow::new(cfg, repo, name, wf_cfg, false))
     }
