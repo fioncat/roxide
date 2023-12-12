@@ -1,5 +1,11 @@
 # TODOList
 
+## v0.10.0
+
+- [ ] Use `Cow`, to further reduce memory `clone` overhead.
+- [ ] Add `index` in database, to optimize query speed.
+- [ ] Use insertion sort when updating the repo instead of sorting the entire database every time the bucket is read.
+
 ## v0.9.0
 
 - [x] `copy` command, copy current repo to another remote/group.
