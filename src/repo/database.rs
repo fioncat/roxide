@@ -993,18 +993,6 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     ///
     /// See also: [`Selector::must_one`]
     pub fn one(&self) -> Result<(Rc<Repo>, bool)> {
-        if self.opts.force_remote {
-            if self.head.is_empty() {
-                bail!("internal error, when select one from provider, the head cannot be empty");
-            }
-            let remote_cfg = self.db.cfg.must_get_remote(self.head)?;
-            let remote = Remote {
-                name: self.head.to_string(),
-                cfg: remote_cfg.clone(),
-            };
-            return self.one_from_provider(&remote);
-        }
-
         if self.head.is_empty() {
             let repo = match self.opts.mode {
                 SelectMode::Fuzzy => self.db.must_get_latest(""),
@@ -1233,7 +1221,19 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 &remote,
                 self.opts.force_no_cache,
             )?;
-            let api_repos = provider.list_repos(owner)?;
+            let mut api_repos = provider.list_repos(owner)?;
+
+            if self.opts.force_remote {
+                // force remote, don't show exists repos
+                let owner_repos = self.db.list_by_owner(remote_name, owner, &None);
+                let repos_set: HashSet<&str> =
+                    owner_repos.iter().map(|repo| repo.name.as_str()).collect();
+                api_repos = api_repos
+                    .into_iter()
+                    .filter(|name| !repos_set.contains(name.as_str()))
+                    .collect();
+            }
+
             let idx = self.opts.terminal_helper.search(&api_repos)?;
             let name = &api_repos[idx];
             return self.get_or_create_repo(remote_name, owner, name);
