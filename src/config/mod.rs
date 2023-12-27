@@ -231,10 +231,8 @@ pub enum ProviderType {
 
 impl Config {
     pub fn get_remote<'a>(&'a self, remote: impl AsRef<str>) -> Option<Cow<'a, RemoteConfig>> {
-        match self.remotes.get(remote.as_ref()) {
-            Some(remote_cfg) => Some(Cow::Borrowed(remote_cfg)),
-            None => None,
-        }
+        let remote_cfg = self.remotes.get(remote.as_ref())?;
+        Some(Cow::Borrowed(remote_cfg))
     }
 
     pub fn get_owner<'a, R, O>(&'a self, remote: R, owner: O) -> Option<Cow<'a, OwnerConfig>>
@@ -242,12 +240,20 @@ impl Config {
         R: AsRef<str>,
         O: AsRef<str>,
     {
-        match self.remotes.get(remote.as_ref()) {
-            Some(remote_cfg) => match remote_cfg.owners.get(owner.as_ref()) {
-                Some(owner_cfg) => Some(Cow::Borrowed(owner_cfg)),
-                None => None,
-            },
-            None => None,
-        }
+        let remote_cfg = self.remotes.get(remote.as_ref())?;
+        let owner_cfg = remote_cfg.owners.get(owner.as_ref())?;
+        Some(Cow::Borrowed(owner_cfg))
+    }
+
+    pub fn get_workspace_dir(&self) -> &PathBuf {
+        self.workspace_path.as_ref().unwrap()
+    }
+
+    pub fn get_meta_dir(&self) -> &PathBuf {
+        self.meta_path.as_ref().unwrap()
+    }
+
+    pub fn get_current_dir(&self) -> &PathBuf {
+        self.current_dir.as_ref().unwrap()
     }
 }
