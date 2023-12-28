@@ -200,6 +200,9 @@ pub struct RemoteConfig {
     pub owners: HashMap<String, OwnerConfig>,
 
     #[serde(skip)]
+    name: Option<String>,
+
+    #[serde(skip)]
     alias_owner_map: Option<HashMap<String, String>>,
 
     #[serde(skip)]
@@ -246,7 +249,7 @@ impl WorkflowStep {
 
 impl RemoteConfig {
     pub fn get_name(&self) -> &str {
-        todo!()
+        self.name.as_ref().unwrap().as_str()
     }
 
     pub fn has_alias(&self) -> bool {
@@ -411,6 +414,24 @@ impl Config {
         Ok(cfg)
     }
 
+    pub fn default() -> Result<Config> {
+        let mut cfg = Config {
+            workspace: defaults::workspace(),
+            metadir: defaults::metadir(),
+            docker: defaults::docker(),
+            cmd: defaults::cmd(),
+            remotes: HashMap::new(),
+            release: defaults::release(),
+            workflows: defaults::empty_map(),
+            current_dir: None,
+            now: None,
+            workspace_path: None,
+            meta_path: None,
+        };
+        cfg.validate().context("validate config content")?;
+        Ok(cfg)
+    }
+
     #[cfg(test)]
     pub fn read_data(data: &[u8]) -> Result<Config> {
         let mut cfg: Config = serde_yaml::from_slice(data).context("parse config data")?;
@@ -450,6 +471,7 @@ impl Config {
             remote
                 .validate()
                 .with_context(|| format!("validate config remote '{}'", name))?;
+            remote.name = Some(name.clone());
         }
 
         let current_dir = env::current_dir().context("get current work directory")?;
@@ -472,6 +494,18 @@ impl Config {
     pub fn get_remote<'a>(&'a self, remote: impl AsRef<str>) -> Option<Cow<'a, RemoteConfig>> {
         let remote_cfg = self.remotes.get(remote.as_ref())?;
         Some(Cow::Borrowed(remote_cfg))
+    }
+
+    pub fn must_get_remote<'a>(&'a self, remote: impl AsRef<str>) -> Result<Cow<'a, RemoteConfig>> {
+        match self.get_remote(remote.as_ref()) {
+            Some(remote) => Ok(remote),
+            None => bail!("could not find remote '{}' in config", remote.as_ref()),
+        }
+    }
+
+    pub fn get_remote_or_default<'a>(&'a self, remote: impl AsRef<str>) -> Cow<'a, RemoteConfig> {
+        self.get_remote(remote.as_ref())
+            .unwrap_or(Cow::Owned(defaults::remote(remote)))
     }
 
     pub fn get_owner<'a, R, O>(&'a self, remote: R, owner: O) -> Option<Cow<'a, OwnerConfig>>
@@ -672,8 +706,10 @@ workflows:
                 format!("fioncat") => owner0,
                 format!("kubernetes")  => owner1
             ],
+
+            name: Some(format!("github")),
         };
-        assert_eq!(cfg.get_remote("github").unwrap().clone(), github_remote);
+        assert_eq!(cfg.get_remote("github").unwrap().as_ref(), &github_remote);
 
         let owner2 = OwnerConfig {
             labels: Some(hashset_strings!["sync", "pin"]),
@@ -699,8 +735,10 @@ workflows:
 
             alias_owner_map: None,
             alias_repo_map: None,
+
+            name: Some(format!("gitlab")),
         };
-        assert_eq!(cfg.get_remote("gitlab").unwrap().clone(), gitlab_remote);
+        assert_eq!(cfg.get_remote("gitlab").unwrap().as_ref(), &gitlab_remote);
 
         let owner3 = OwnerConfig {
             on_create: Some(vec![format!("golang")]),
@@ -737,8 +775,10 @@ workflows:
 
             alias_owner_map: None,
             alias_repo_map: None,
+
+            name: Some(format!("test")),
         };
-        assert_eq!(cfg.get_remote("test").unwrap().clone(), test_remote);
+        assert_eq!(cfg.get_remote("test").unwrap().as_ref(), &test_remote);
     }
 
     const TEST_MAIN_GO_CONTENT: &'static str = r#"package main

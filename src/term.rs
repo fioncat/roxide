@@ -4,7 +4,6 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -1118,7 +1117,7 @@ impl GitRemote {
 
     pub fn from_upstream(
         cfg: &Config,
-        repo: &Rc<Repo>,
+        repo: &Repo,
         provider: &Box<dyn Provider>,
     ) -> Result<GitRemote> {
         let remotes = Self::list()?;
