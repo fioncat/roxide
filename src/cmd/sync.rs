@@ -126,39 +126,35 @@ impl SyncArgs {
         let ops = Arc::new(ops);
 
         let mut tasks = Vec::with_capacity(repos.len());
-        let mut remotes: HashMap<String, Arc<RemoteConfig>> = HashMap::new();
-        let mut owners: HashMap<String, Arc<String>> = HashMap::new();
+        let mut remotes: HashMap<&str, Arc<RemoteConfig>> = HashMap::new();
+        let mut owners: HashMap<&str, Arc<String>> = HashMap::new();
 
-        for repo in repos {
-            let remote = match remotes.get(repo.remote.as_ref()) {
-                Some(remote) => Arc::clone(remote),
+        for repo in repos.iter() {
+            let (remote, remote_cfg) = match remotes.remove_entry(repo.remote.as_ref()) {
+                Some((remote, cfg)) => (remote, cfg),
                 None => {
                     let remote_cfg = cfg.must_get_remote(repo.remote.as_ref())?;
                     let remote_cfg = Arc::new(remote_cfg.into_owned());
-                    let ret = Arc::clone(&remote_cfg);
-                    remotes.insert(repo.remote.to_string(), remote_cfg);
-                    ret
+                    (repo.remote.as_ref(), remote_cfg)
                 }
             };
 
-            let owner = match owners.get(repo.owner.as_ref()) {
-                Some(owner) => Arc::clone(owner),
-                None => {
-                    let owner = repo.owner.to_string();
-                    let owner_arc = Arc::new(owner.clone());
-                    let ret = Arc::clone(&owner_arc);
-                    owners.insert(owner, owner_arc);
-                    ret
-                }
-            };
+            let task_remote_cfg = Arc::clone(&remote_cfg);
+            remotes.insert(remote, remote_cfg);
+
+            let (owner, owner_arc) = owners
+                .remove_entry(repo.owner.as_ref())
+                .unwrap_or((repo.owner.as_ref(), Arc::new(repo.owner.to_string())));
+            let task_owner = Arc::clone(&owner_arc);
+            owners.insert(owner, owner_arc);
 
             let path = repo.get_path(cfg);
 
             tasks.push((
                 repo.to_string(level),
                 SyncTask {
-                    remote_cfg: remote,
-                    owner,
+                    remote_cfg: task_remote_cfg,
+                    owner: task_owner,
                     name: repo.name.to_string(),
                     path,
                     ops: Arc::clone(&ops),

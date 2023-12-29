@@ -153,16 +153,18 @@ impl SnapshotArgs {
         let mut tasks = Vec::with_capacity(items.len());
         let mut remotes: HashMap<String, Arc<RemoteConfig>> = HashMap::new();
         for item in items.iter() {
-            let remote_cfg = match remotes.get(item.remote.as_str()) {
-                Some(remote) => remote.clone(),
+            let (remote, remote_cfg) = match remotes.remove_entry(item.remote.as_str()) {
+                Some((remote, cfg)) => (remote, cfg),
                 None => {
                     let remote_cfg = cfg.must_get_remote(item.remote.as_str())?;
                     let remote_cfg = Arc::new(remote_cfg.into_owned());
-                    let ret = Arc::clone(&remote_cfg);
-                    remotes.insert(item.remote.clone(), remote_cfg);
-                    ret
+                    (item.remote.clone(), remote_cfg)
                 }
             };
+
+            let task_remote_cfg = Arc::clone(&remote_cfg);
+            remotes.insert(remote, remote_cfg);
+
             let path = match item.path.as_ref() {
                 Some(path) => PathBuf::from(path),
                 None => Repo::get_workspace_path(cfg, &item.remote, &item.owner, &item.name),
@@ -171,7 +173,7 @@ impl SnapshotArgs {
             tasks.push((
                 show_name,
                 RestoreSnapshotTask {
-                    remote_cfg,
+                    remote_cfg: task_remote_cfg,
                     path,
                     branch: if self.skip_checkout {
                         None
