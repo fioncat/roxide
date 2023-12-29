@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::{fs, io};
 
@@ -11,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::api::Provider;
 use crate::config::{Config, RemoteConfig};
 use crate::repo::{NameLevel, Repo};
-use crate::term;
 use crate::utils::{self, FileLock};
+use crate::{info, term};
 
 pub fn get_path<S, R, O, N>(cfg: &Config, path: &Option<S>, remote: R, owner: O, name: N) -> PathBuf
 where
@@ -31,27 +32,74 @@ where
         .join(name.as_ref())
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct RemoteBucket(HashMap<String, OwnerBucket>);
+pub fn backup_replace(cfg: &Config, name: &str) -> Result<()> {
+    let old_path = cfg.get_meta_dir().join("database");
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct OwnerBucket(HashMap<String, RepoBucket>);
+    let name = format!("{name}_{}", cfg.now());
+    let new_path = cfg.get_meta_dir().join("database_backup").join(&name);
+    utils::ensure_dir(&new_path)?;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct RepoBucket {
-    path: Option<String>,
-    labels: Option<HashSet<u64>>,
+    fs::rename(&old_path, &new_path).with_context(|| {
+        format!(
+            "rename '{}' to '{}'",
+            old_path.display(),
+            new_path.display()
+        )
+    })?;
 
-    last_accessed: u64,
-    accessed: u64,
+    info!("Generate backup database: '{}'", name);
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Bucket {
-    data: HashMap<String, RemoteBucket>,
+pub struct RemoteBucket(HashMap<String, OwnerBucket>);
 
-    label_index: u64,
-    labels: HashMap<u64, String>,
+impl Deref for RemoteBucket {
+    type Target = HashMap<String, OwnerBucket>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for RemoteBucket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct OwnerBucket(HashMap<String, RepoBucket>);
+
+impl Deref for OwnerBucket {
+    type Target = HashMap<String, RepoBucket>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for OwnerBucket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct RepoBucket {
+    pub path: Option<String>,
+    pub labels: Option<HashSet<u64>>,
+
+    pub last_accessed: u64,
+    pub accessed: u64,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Bucket {
+    pub data: HashMap<String, RemoteBucket>,
+
+    pub label_index: u64,
+    pub labels: HashMap<u64, String>,
 }
 
 impl Bucket {
@@ -60,7 +108,7 @@ impl Bucket {
     const MAX_SIZE: u64 = 32 << 20;
 
     /// Use Version to ensure that decode and encode are consistent.
-    const VERSION: u32 = 3;
+    pub const VERSION: u32 = 3;
 
     /// Return empty Bucket, with no repository data.
     fn empty() -> Self {
@@ -162,8 +210,8 @@ impl Database<'_> {
         N: AsRef<str>,
     {
         let (remote, remote_bucket) = self.bucket.data.get_key_value(remote.as_ref())?;
-        let (owner, owner_bucket) = remote_bucket.0.get_key_value(owner.as_ref())?;
-        let (name, repo_bucket) = owner_bucket.0.get_key_value(name.as_ref())?;
+        let (owner, owner_bucket) = remote_bucket.get_key_value(owner.as_ref())?;
+        let (name, repo_bucket) = owner_bucket.get_key_value(name.as_ref())?;
 
         Some(self.build_repo(remote, owner, name, repo_bucket))
     }
@@ -323,8 +371,7 @@ impl Database<'_> {
     pub fn list_owners(&self, remote: impl AsRef<str>) -> Vec<String> {
         (|| {
             let remote_bucket = self.bucket.data.get(remote.as_ref())?;
-            let mut owners: Vec<String> =
-                remote_bucket.0.keys().map(|key| key.to_string()).collect();
+            let mut owners: Vec<String> = remote_bucket.keys().map(|key| key.to_string()).collect();
             owners.sort_unstable();
             Some(owners)
         })()
@@ -341,15 +388,13 @@ impl Database<'_> {
                 RemoteBucket(HashMap::with_capacity(1)),
             ));
 
-        let (owner, mut owner_bucket) = remote_bucket
-            .0
-            .remove_entry(repo.owner.as_ref())
-            .unwrap_or((
+        let (owner, mut owner_bucket) =
+            remote_bucket.remove_entry(repo.owner.as_ref()).unwrap_or((
                 repo.owner.to_string(),
                 OwnerBucket(HashMap::with_capacity(1)),
             ));
 
-        let (name, mut repo_bucket) = owner_bucket.0.remove_entry(repo.name.as_ref()).unwrap_or((
+        let (name, mut repo_bucket) = owner_bucket.remove_entry(repo.name.as_ref()).unwrap_or((
             repo.name.to_string(),
             RepoBucket {
                 path: None,
@@ -369,8 +414,8 @@ impl Database<'_> {
         repo_bucket.last_accessed = repo.last_accessed;
         repo_bucket.accessed = repo.accessed;
 
-        owner_bucket.0.insert(name, repo_bucket);
-        remote_bucket.0.insert(owner, owner_bucket);
+        owner_bucket.insert(name, repo_bucket);
+        remote_bucket.insert(owner, owner_bucket);
         self.bucket.data.insert(remote, remote_bucket);
     }
 
@@ -378,20 +423,19 @@ impl Database<'_> {
         if let Some((remote, mut remote_bucket)) =
             self.bucket.data.remove_entry(repo.remote.as_ref())
         {
-            if let Some((owner, mut owner_bucket)) =
-                remote_bucket.0.remove_entry(repo.owner.as_ref())
+            if let Some((owner, mut owner_bucket)) = remote_bucket.remove_entry(repo.owner.as_ref())
             {
-                if let Some(bucket) = owner_bucket.0.remove(repo.name.as_ref()) {
+                if let Some(bucket) = owner_bucket.remove(repo.name.as_ref()) {
                     if let Some(_) = bucket.labels {
                         self.clean_labels = true;
                     }
                 };
-                if !owner_bucket.0.is_empty() {
-                    remote_bucket.0.insert(owner, owner_bucket);
+                if !owner_bucket.is_empty() {
+                    remote_bucket.insert(owner, owner_bucket);
                 }
             }
 
-            if !remote_bucket.0.is_empty() {
+            if !remote_bucket.is_empty() {
                 self.bucket.data.insert(remote, remote_bucket);
             }
         }
@@ -418,43 +462,66 @@ impl Database<'_> {
     }
 
     /// Save the database changes to the disk file.
-    pub fn save(self) -> Result<()> {
+    pub fn save(mut self) -> Result<()> {
+        self.do_clean_labels();
         let Database {
-            mut bucket,
-            clean_labels,
+            bucket,
+            clean_labels: _,
             path,
             lock,
             cfg: _,
         } = self;
 
-        if clean_labels {
-            let mut use_labels = HashSet::new();
-            for (_, remote_bucket) in bucket.data.iter() {
-                for (_, owner_bucket) in remote_bucket.0.iter() {
-                    for (_, repo_bucket) in owner_bucket.0.iter() {
-                        if let Some(labels) = repo_bucket.labels.as_ref() {
-                            use_labels.extend(labels.clone());
-                        }
-                    }
-                }
-            }
-
-            let mut to_remove = HashSet::new();
-            for (id, _) in bucket.labels.iter() {
-                if !use_labels.contains(id) {
-                    to_remove.insert(*id);
-                }
-            }
-
-            for id in to_remove {
-                bucket.labels.remove(&id);
-            }
-        }
-
         bucket.save(&path)?;
         // Drop lock to release file lock after write done.
         drop(lock);
         Ok(())
+    }
+
+    pub fn set_bucket(&mut self, bucket: Bucket) {
+        self.bucket = bucket;
+    }
+
+    pub fn close(mut self) -> Bucket {
+        self.do_clean_labels();
+        let Database {
+            bucket,
+            clean_labels: _,
+            path: _,
+            lock,
+            cfg: _,
+        } = self;
+
+        drop(lock);
+
+        bucket
+    }
+
+    fn do_clean_labels(&mut self) {
+        if !self.clean_labels {
+            return;
+        }
+        let mut use_labels = HashSet::new();
+        for (_, remote_bucket) in self.bucket.data.iter() {
+            for (_, owner_bucket) in remote_bucket.iter() {
+                for (_, repo_bucket) in owner_bucket.iter() {
+                    if let Some(labels) = repo_bucket.labels.as_ref() {
+                        use_labels.extend(labels.clone());
+                    }
+                }
+            }
+        }
+
+        let mut to_remove = HashSet::new();
+        for (id, _) in self.bucket.labels.iter() {
+            if !use_labels.contains(id) {
+                to_remove.insert(*id);
+            }
+        }
+
+        for id in to_remove {
+            self.bucket.labels.remove(&id);
+        }
     }
 
     #[inline]
@@ -528,7 +595,7 @@ impl Database<'_> {
             return Some(repos);
         }
 
-        let (owner, owner_bucket) = remote_bucket.0.get_key_value(owner.as_ref())?;
+        let (owner, owner_bucket) = remote_bucket.get_key_value(owner.as_ref())?;
         let (repos, _) = self.scan_owner(remote, owner, owner_bucket, &filter);
         Some(repos)
     }
@@ -544,7 +611,7 @@ impl Database<'_> {
         F: Fn(&String, &String, &String, &RepoBucket) -> Option<bool>,
     {
         let mut repos = Vec::new();
-        for (owner, owner_bucket) in remote_bucket.0.iter() {
+        for (owner, owner_bucket) in remote_bucket.iter() {
             let (sub_repos, next) = self.scan_owner(remote, owner, owner_bucket, filter);
             if !next {
                 return (sub_repos, false);
@@ -566,7 +633,7 @@ impl Database<'_> {
         F: Fn(&String, &String, &String, &RepoBucket) -> Option<bool>,
     {
         let mut repos = Vec::new();
-        for (name, repo_bucket) in owner_bucket.0.iter() {
+        for (name, repo_bucket) in owner_bucket.iter() {
             match filter(remote, owner, name, repo_bucket) {
                 Some(ok) => {
                     if !ok {
