@@ -2,9 +2,9 @@
 
 ## v0.10.0
 
-- [ ] Use `Cow`, to further reduce memory `clone` overhead.
-- [ ] Add `index` in database, to optimize query speed.
-- [ ] Use insertion sort when updating the repo instead of sorting the entire database every time the bucket is read.
+- [x] Use `Cow`, to further reduce memory `clone` overhead.
+- [x] Change the data structure of the database to HashMap to optimize query, update database version to `v3`.
+- [x] Rebuild `snapshot` command, don't affect workspace.
 
 ## v0.9.0
 
