@@ -1,5 +1,14 @@
 mod attach;
+mod branch;
+mod check;
+mod complete;
+mod config;
+mod copy;
+mod detach;
+mod gc;
+mod get;
 mod home;
+mod import;
 mod recover;
 mod remove;
 

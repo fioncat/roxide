@@ -56,6 +56,7 @@ pub enum NameLevel {
 }
 
 impl Repo<'_> {
+    #[inline]
     pub fn new<'a>(
         cfg: &'a Config,
         remote: Cow<'a, str>,
@@ -101,6 +102,7 @@ impl Repo<'_> {
         })
     }
 
+    #[inline]
     pub fn update<'a>(self) -> Repo<'a> {
         Repo {
             remote: Cow::Owned(self.remote.to_string()),
@@ -121,6 +123,7 @@ impl Repo<'_> {
     }
 
     /// Use [`ApiUpstream`] to build a repository object.
+    #[inline]
     pub fn from_api_upstream(cfg: &Config, remote: impl AsRef<str>, upstream: ApiUpstream) -> Repo {
         let owner_cfg = cfg.get_owner(remote.as_ref(), &upstream.owner);
         Repo {
