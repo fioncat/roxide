@@ -20,9 +20,9 @@ impl Run for RecoverArgs {
         match Database::load(cfg) {
             Ok(_) => {}
             Err(err) => {
-                info!("Database has problem: '{}', replace it with a new one. The old one will be saved to '{}/database.back'", err, cfg.get_meta_dir().display());
+                info!("Database has problem: '{}', replace it with a new one", err);
                 confirm!("Continue");
-                Self::replace_database(cfg)?;
+                database::backup_replace(cfg, "recover")?;
             }
         };
 
@@ -59,19 +59,6 @@ impl Run for RecoverArgs {
 }
 
 impl RecoverArgs {
-    fn replace_database(cfg: &Config) -> Result<()> {
-        let old_path = cfg.get_meta_dir().join("database");
-        let new_path = cfg.get_meta_dir().join("database.back");
-        fs::rename(&old_path, &new_path).with_context(|| {
-            format!(
-                "rename '{}' to '{}'",
-                old_path.display(),
-                new_path.display()
-            )
-        })?;
-        Ok(())
-    }
-
     fn scan_workspace(cfg: &Config) -> Result<Vec<Repo>> {
         info!("Scanning workspace");
         let mut repos = Vec::new();
