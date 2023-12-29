@@ -310,17 +310,17 @@ impl RemoteConfig {
 
         let mut owner_alias = HashMap::new();
         let mut repo_alias = HashMap::new();
-        for (owner_name, owner) in self.owners.iter() {
-            if let Some(alias) = owner.alias.as_ref() {
-                owner_alias.insert(alias.clone(), owner_name.clone());
+        for (owner, owner_cfg) in self.owners.iter() {
+            if let Some(alias) = owner_cfg.alias.as_ref() {
+                owner_alias.insert(alias.clone(), owner.clone());
             }
-            if !owner.repo_alias.is_empty() {
-                let map: HashMap<String, String> = owner
+            if !owner_cfg.repo_alias.is_empty() {
+                let map: HashMap<String, String> = owner_cfg
                     .repo_alias
                     .iter()
                     .map(|(key, val)| (val.clone(), key.clone()))
                     .collect();
-                repo_alias.insert(owner_name.clone(), map);
+                repo_alias.insert(owner.clone(), map);
             }
         }
 
@@ -485,30 +485,30 @@ impl Config {
         Ok(())
     }
 
-    pub fn list_remote_names(&self) -> Vec<String> {
+    pub fn list_remotes(&self) -> Vec<String> {
         let mut names: Vec<_> = self.remotes.iter().map(|(key, _)| key.clone()).collect();
         names.sort();
         names
     }
 
-    pub fn get_remote<'a>(&'a self, remote: impl AsRef<str>) -> Option<Cow<'a, RemoteConfig>> {
+    pub fn get_remote(&self, remote: impl AsRef<str>) -> Option<Cow<RemoteConfig>> {
         let remote_cfg = self.remotes.get(remote.as_ref())?;
         Some(Cow::Borrowed(remote_cfg))
     }
 
-    pub fn must_get_remote<'a>(&'a self, remote: impl AsRef<str>) -> Result<Cow<'a, RemoteConfig>> {
+    pub fn must_get_remote(&self, remote: impl AsRef<str>) -> Result<Cow<RemoteConfig>> {
         match self.get_remote(remote.as_ref()) {
             Some(remote) => Ok(remote),
             None => bail!("could not find remote '{}' in config", remote.as_ref()),
         }
     }
 
-    pub fn get_remote_or_default<'a>(&'a self, remote: impl AsRef<str>) -> Cow<'a, RemoteConfig> {
+    pub fn get_remote_or_default(&self, remote: impl AsRef<str>) -> Cow<RemoteConfig> {
         self.get_remote(remote.as_ref())
             .unwrap_or(Cow::Owned(defaults::remote(remote)))
     }
 
-    pub fn get_owner<'a, R, O>(&'a self, remote: R, owner: O) -> Option<Cow<'a, OwnerConfig>>
+    pub fn get_owner<R, O>(&self, remote: R, owner: O) -> Option<Cow<OwnerConfig>>
     where
         R: AsRef<str>,
         O: AsRef<str>,
@@ -647,7 +647,7 @@ workflows:
 
         assert_eq!(cfg.get_workspace_dir(), &expect_workspace);
         assert_eq!(cfg.get_meta_dir(), &expect_meta);
-        assert_eq!(cfg.cmd, format!("rox"));
+        assert_eq!(cfg.cmd, "rox".to_string());
     }
 
     #[test]
@@ -667,7 +667,7 @@ workflows:
             ssh: Some(true),
         };
         let owner1 = OwnerConfig {
-            alias: Some(format!("k8s")),
+            alias: Some("k8s".to_string()),
             labels: Some(hashset_strings!["huge"]),
             on_create: None,
             repo_alias: hashmap_strings![
@@ -676,9 +676,9 @@ workflows:
             ssh: None,
         };
         let github_remote = RemoteConfig {
-            clone: Some(format!("github.com")),
-            user: Some(format!("fioncat")),
-            email: Some(format!("lazycat7706@gmail.com")),
+            clone: Some("github.com".to_string()),
+            user: Some("fioncat".to_string()),
+            email: Some("lazycat7706@gmail.com".to_string()),
             ssh: false,
             labels: Some(hashset_strings!["sync"]),
             provider: Some(ProviderType::Github),
@@ -687,11 +687,11 @@ workflows:
                 "k8s" => "kubernetes"
             ]),
             alias_repo_map: Some(hashmap![
-                format!("fioncat") => hashmap_strings![
+                "fioncat".to_string() => hashmap_strings![
                     "vim" => "spacenvim",
                     "rox" => "roxide"
                 ],
-                format!("kubernetes") => hashmap_strings![
+                "kubernetes".to_string() => hashmap_strings![
                     "k8s" => "kubernetes"
                 ]
             ]),
@@ -703,11 +703,11 @@ workflows:
             token: None,
 
             owners: hashmap![
-                format!("fioncat") => owner0,
-                format!("kubernetes")  => owner1
+                "fioncat".to_string() => owner0,
+                "kubernetes".to_string()  => owner1
             ],
 
-            name: Some(format!("github")),
+            name: Some("github".to_string()),
         };
         assert_eq!(cfg.get_remote("github").unwrap().as_ref(), &github_remote);
 
@@ -720,28 +720,28 @@ workflows:
             ssh: None,
         };
         let gitlab_remote = RemoteConfig {
-            clone: Some(format!("gitlab.com")),
-            user: Some(format!("test")),
-            email: Some(format!("test-email@test.com")),
+            clone: Some("gitlab.com".to_string()),
+            user: Some("test".to_string()),
+            email: Some("test-email@test.com".to_string()),
             ssh: false,
             provider: Some(ProviderType::Gitlab),
-            token: Some(format!("test-token-gitlab")),
+            token: Some("test-token-gitlab".to_string()),
             cache_hours: 100,
             list_limit: 500,
             api_timeout: 30,
-            api_domain: Some(format!("gitlab.com")),
-            owners: hashmap![format!("test") => owner2],
+            api_domain: Some("gitlab.com".to_string()),
+            owners: hashmap!["test".to_string() => owner2],
             labels: None,
 
             alias_owner_map: None,
             alias_repo_map: None,
 
-            name: Some(format!("gitlab")),
+            name: Some("gitlab".to_string()),
         };
         assert_eq!(cfg.get_remote("gitlab").unwrap().as_ref(), &gitlab_remote);
 
         let owner3 = OwnerConfig {
-            on_create: Some(vec![format!("golang")]),
+            on_create: Some(vec!["golang".to_string()]),
 
             alias: None,
             labels: None,
@@ -749,7 +749,7 @@ workflows:
             ssh: None,
         };
         let owner4 = OwnerConfig {
-            on_create: Some(vec![format!("rust")]),
+            on_create: Some(vec!["rust".to_string()]),
 
             alias: None,
             labels: None,
@@ -768,15 +768,15 @@ workflows:
             list_limit: defaults::list_limit(),
             api_domain: None,
             owners: hashmap![
-                format!("golang") => owner3,
-                format!("rust") => owner4
+                "golang".to_string() => owner3,
+                "rust".to_string() => owner4
             ],
             labels: None,
 
             alias_owner_map: None,
             alias_repo_map: None,
 
-            name: Some(format!("test")),
+            name: Some("test".to_string()),
         };
         assert_eq!(cfg.get_remote("test").unwrap().as_ref(), &test_remote);
     }
@@ -796,7 +796,7 @@ func main() {
 
         let w0_steps = vec![
             WorkflowStep {
-                name: format!("main.go"),
+                name: "main.go".to_string(),
                 file: Some(format!("{}", TEST_MAIN_GO_CONTENT)),
                 run: None,
                 image: None,
@@ -806,7 +806,7 @@ func main() {
                 capture_output: None,
             },
             WorkflowStep {
-                name: format!("Init go module"),
+                name: "Init go module".to_string(),
                 file: None,
                 run: Some(String::from(
                     "go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}",
@@ -820,17 +820,17 @@ func main() {
         ];
         let w0_env = vec![
             WorkflowEnv {
-                name: format!("MODULE_DOMAIN"),
+                name: "MODULE_DOMAIN".to_string(),
                 from_repo: Some(WorkflowFromRepo::Clone),
                 value: None,
             },
             WorkflowEnv {
-                name: format!("MODULE_OWNER"),
+                name: "MODULE_OWNER".to_string(),
                 from_repo: Some(WorkflowFromRepo::Owner),
                 value: None,
             },
             WorkflowEnv {
-                name: format!("MODULE_NAME"),
+                name: "MODULE_NAME".to_string(),
                 from_repo: Some(WorkflowFromRepo::Name),
                 value: None,
             },
@@ -841,7 +841,7 @@ func main() {
         };
 
         let w1_steps = vec![WorkflowStep {
-            name: format!("Init cargo"),
+            name: "Init cargo".to_string(),
             file: None,
             run: Some(String::from("cargo init")),
             image: None,
@@ -856,14 +856,14 @@ func main() {
         };
 
         let w2_steps = vec![WorkflowStep {
-            name: format!("Build go"),
+            name: "Build go".to_string(),
             file: None,
-            image: Some(format!("golang:latest")),
+            image: Some("golang:latest".to_string()),
             ssh: None,
             work_dir: None,
             env: vec![WorkflowEnv {
-                name: format!("GO111MODULE"),
-                value: Some(format!("on")),
+                name: "GO111MODULE".to_string(),
+                value: Some("on".to_string()),
                 from_repo: None,
             }],
             run: Some(String::from("go build ./...")),
@@ -875,9 +875,9 @@ func main() {
         };
 
         let wf = hashmap![
-            format!("golang") => w0,
-            format!("rust") => w1,
-            format!("build-go") => w2
+            "golang".to_string() => w0,
+            "rust".to_string() => w1,
+            "build-go".to_string() => w2
         ];
 
         assert_eq!(cfg.workflows, wf);

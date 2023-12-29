@@ -188,10 +188,10 @@ impl SnapshotArgs {
         stderrln!();
 
         let mut skip_remote = HashSet::new();
-        for remote_name in cfg.list_remote_names() {
-            let remote_cfg = cfg.must_get_remote(&remote_name)?;
+        for remote in cfg.list_remotes() {
+            let remote_cfg = cfg.must_get_remote(&remote)?;
             if let None = remote_cfg.clone.as_ref() {
-                skip_remote.insert(remote_name);
+                skip_remote.insert(remote);
             }
         }
 

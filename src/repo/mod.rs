@@ -237,14 +237,12 @@ impl Repo<'_> {
         N: AsRef<str>,
     {
         if remote_cfg.has_alias() {
-            let owner = match remote_cfg.alias_owner(owner.as_ref()) {
-                Some(name) => name,
-                None => owner.as_ref(),
-            };
-            let name = match remote_cfg.alias_repo(owner, name.as_ref()) {
-                Some(name) => name,
-                None => name.as_ref(),
-            };
+            let owner = remote_cfg
+                .alias_owner(owner.as_ref())
+                .unwrap_or_else(|| owner.as_ref());
+            let name = remote_cfg
+                .alias_repo(owner, name.as_ref())
+                .unwrap_or_else(|| name.as_ref());
 
             return Self::get_clone_url_without_alias(owner, name, remote_cfg);
         }

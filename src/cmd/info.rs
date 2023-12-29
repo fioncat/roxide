@@ -164,20 +164,17 @@ impl InfoArgs {
     }
 
     fn convert_component(r: Result<ComponentInfo>) -> ComponentInfo {
-        match r {
-            Ok(c) => c,
-            Err(_) => ComponentInfo {
-                enable: false,
-                path: String::new(),
-                version: String::new(),
-            },
-        }
+        r.unwrap_or_else(|_| ComponentInfo {
+            enable: false,
+            path: String::new(),
+            version: String::new(),
+        })
     }
 
     fn config(cfg: &Config) -> Result<ConfigInfo> {
         let path = match Config::get_path()? {
             Some(path) => format!("{}", path.display()),
-            None => format!("N/A"),
+            None => "N/A".to_string(),
         };
         let meta_dir = format!("{}", cfg.get_meta_dir().display());
         let meta_size = utils::dir_size(PathBuf::from(&meta_dir))?;

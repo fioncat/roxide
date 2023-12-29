@@ -72,10 +72,7 @@ impl Env {
                 };
                 value = Some(from_repo);
             }
-            let value = match value {
-                Some(value) => value,
-                None => String::new(),
-            };
+            let value = value.unwrap_or_else(|| String::new());
             map.insert(key, value);
         }
         map

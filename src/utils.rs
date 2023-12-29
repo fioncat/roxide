@@ -213,6 +213,9 @@ pub fn open_url(url: impl AsRef<str>) -> Result<()> {
 
 /// Return the duration in a human-readable form from the current time to `time`.
 pub fn format_since(cfg: &Config, time: u64) -> String {
+    if time == 0 {
+        return String::from("never");
+    }
     let duration = cfg.now().saturating_sub(time);
 
     let unit: &str;
@@ -252,6 +255,9 @@ pub fn format_since(cfg: &Config, time: u64) -> String {
 
 /// Convert a Unix timestamp to a human-readable time.
 pub fn format_time(time: u64) -> Result<String> {
+    if time == 0 {
+        return Ok(String::from("N/A"));
+    }
     match Local.timestamp_opt(time as i64, 0) {
         LocalResult::None => bail!("invalid timestamp {time}"),
         LocalResult::Ambiguous(_, _) => bail!("ambiguous parse timestamp {time}"),

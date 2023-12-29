@@ -995,17 +995,17 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             Some(domain) => domain,
             None => bail!("missing domain in url '{url}'"),
         };
-        let remote_names = db.cfg.list_remote_names();
+        let remotes = db.cfg.list_remotes();
 
-        let mut target_remote_name: Option<String> = None;
+        let mut target_remote: Option<String> = None;
         let mut is_gitlab = false;
-        for name in remote_names {
+        for remote in remotes {
             // We match the domain of the URL based on the clone domain of the
             // remote. This is because in many cases, the provided URL is a clone
             // address, and even for access addresses, most of the time their
             // domains are consistent with the clone.
             // TODO: Provide another match domain in config?
-            let remote_cfg = db.cfg.must_get_remote(&name)?;
+            let remote_cfg = db.cfg.must_get_remote(&remote)?;
             let remote_domain = match remote_cfg.clone.as_ref() {
                 Some(domain) => domain,
                 None => continue,
@@ -1021,11 +1021,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             if remote_domain != Self::GITHUB_DOMAIN {
                 is_gitlab = true;
             }
-            target_remote_name = Some(name);
+            target_remote = Some(remote);
             break;
         }
 
-        let remote_name = match target_remote_name {
+        let remote = match target_remote {
             Some(remote) => remote,
             None => bail!("could not find remote whose clone domain is '{domain}' in url"),
         };
@@ -1072,9 +1072,9 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let path = segs.join("/");
         let (owner, name) = parse_owner(&path);
 
-        match db.get(&remote_name, &owner, &name) {
+        match db.get(&remote, &owner, &name) {
             Some(repo) => Ok((repo, true)),
-            None => self.new_repo(db, &remote_name, &owner, &name),
+            None => self.new_repo(db, &remote, &owner, &name),
         }
     }
 
@@ -1369,10 +1369,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             return Ok((remote_cfg, owner, vec![self.query.to_string()]));
         }
 
-        let owner = match self.query.strip_suffix("/") {
-            Some(owner) => owner,
-            None => self.query,
-        };
+        let owner = self.query.strip_suffix("/").unwrap_or_else(|| self.query);
 
         let provider = self.opts.provider_builder.build_provider(
             db.cfg,
@@ -1831,35 +1828,35 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("https://github.com/fioncat/csync"),
-                format!("github:fioncat/csync"),
+                "https://github.com/fioncat/csync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!("https://github.com/fioncat/dotfiles/blob/test/starship.toml"),
-                format!("github:fioncat/dotfiles"),
+                "https://github.com/fioncat/dotfiles/blob/test/starship.toml".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("https://github.com/kubernetes/kubernetes/tree/master/api/discovery"),
-                format!("github:kubernetes/kubernetes"),
+                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
+                "github:kubernetes/kubernetes".to_string(),
             ),
             (
-                format!("https://github.com/kubernetes/kubectl.git"),
-                format!("github:kubernetes/kubectl"),
+                "https://github.com/kubernetes/kubectl.git".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // The clone ssh url
-                format!("git@github.com:kubernetes/kubectl.git"),
-                format!("github:kubernetes/kubectl"),
+                "git@github.com:kubernetes/kubectl.git".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // gitlab format path
-                format!("https://gitlab.com/my-owner-01/my-repo-02/-/tree/main.rs"),
-                format!("gitlab:my-owner-01/my-repo-02"),
+                "https://gitlab.com/my-owner-01/my-repo-02/-/tree/main.rs".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
             ),
             (
                 // gitlab not found
-                format!("https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev"),
-                format!("gitlab:my-owner-01/hello/unknown-repo"),
+                "https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev".to_string(),
+                "gitlab:my-owner-01/hello/unknown-repo".to_string(),
             ),
         ];
 
@@ -1889,29 +1886,29 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("github"),
-                format!("sync"),
-                format!("github:fioncat/csync"),
+                "github".to_string(),
+                "sync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!(""),
-                format!("dot"),
-                format!("github:fioncat/dotfiles"),
+                "".to_string(),
+                "dot".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("github"),
-                format!("proxy"),
-                format!("github:kubernetes/kube-proxy"),
+                "github".to_string(),
+                "proxy".to_string(),
+                "github:kubernetes/kube-proxy".to_string(),
             ),
             (
-                format!(""),
-                format!("let"),
-                format!("github:kubernetes/kubelet"),
+                "".to_string(),
+                "let".to_string(),
+                "github:kubernetes/kubelet".to_string(),
             ),
             (
-                format!("gitlab"),
-                format!("03"),
-                format!("gitlab:my-owner-01/my-repo-03"),
+                "gitlab".to_string(),
+                "03".to_string(),
+                "gitlab:my-owner-01/my-repo-03".to_string(),
             ),
         ];
 
@@ -1941,47 +1938,47 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!(""),
-                format!(""),
-                format!("github:fioncat/dotfiles"),
-                format!("github:fioncat/dotfiles"),
+                "".to_string(),
+                "".to_string(),
+                "github:fioncat/dotfiles".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!(""),
-                format!(""),
-                format!("gitlab:my-owner-01/my-repo-02"),
-                format!("gitlab:my-owner-01/my-repo-02"),
+                "".to_string(),
+                "".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
             ),
             (
-                format!("github"),
-                format!(""),
-                format!("fioncat/csync"),
-                format!("github:fioncat/csync"),
+                "github".to_string(),
+                "".to_string(),
+                "fioncat/csync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!("github"),
-                format!(""),
-                format!("kubernetes/kubectl"),
-                format!("github:kubernetes/kubectl"),
+                "github".to_string(),
+                "".to_string(),
+                "kubernetes/kubectl".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // Search in owner, use format "github fioncat/"
-                format!("github"),
-                format!("fioncat/"),
-                format!("fioncat"),
-                format!("github:fioncat/fioncat"),
+                "github".to_string(),
+                "fioncat/".to_string(),
+                "fioncat".to_string(),
+                "github:fioncat/fioncat".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/"),
-                format!("kubelet"),
-                format!("github:kubernetes/kubelet"),
+                "github".to_string(),
+                "kubernetes/".to_string(),
+                "kubelet".to_string(),
+                "github:kubernetes/kubelet".to_string(),
             ),
             (
-                format!("gitlab"),
-                format!("my-owner-02/"),
-                format!("my-repo-01"),
-                format!("gitlab:my-owner-02/my-repo-01"),
+                "gitlab".to_string(),
+                "my-owner-02/".to_string(),
+                "my-repo-01".to_string(),
+                "gitlab:my-owner-02/my-repo-01".to_string(),
             ),
         ];
 
@@ -2027,19 +2024,19 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("github"),
-                format!("fioncat/dotfiles"),
-                format!("github:fioncat/dotfiles"),
+                "github".to_string(),
+                "fioncat/dotfiles".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/kubernetes"),
-                format!("github:kubernetes/kubernetes"),
+                "github".to_string(),
+                "kubernetes/kubernetes".to_string(),
+                "github:kubernetes/kubernetes".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/unknown"),
-                format!("github:kubernetes/unknown"),
+                "github".to_string(),
+                "kubernetes/unknown".to_string(),
+                "github:kubernetes/unknown".to_string(),
             ),
         ];
         let mut db = Database::load(&cfg).unwrap();
@@ -2072,40 +2069,40 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!(""),
-                format!(""),
+                "".to_string(),
+                "".to_string(),
                 db.list_all(&None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("github"),
-                format!(""),
+                "github".to_string(),
+                "".to_string(),
                 db.list_by_remote("github", &None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("github"),
-                format!("fioncat/"),
+                "github".to_string(),
+                "fioncat/".to_string(),
                 db.list_by_owner("github", "fioncat", &None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("csync"),
-                format!(""),
+                "csync".to_string(),
+                "".to_string(),
                 hashset_strings![db
                     .get("github", "fioncat", "csync")
                     .unwrap()
                     .name_with_labels()],
             ),
             (
-                format!("gitlab"),
-                format!("02"),
+                "gitlab".to_string(),
+                "02".to_string(),
                 hashset_strings![db
                     .get("gitlab", "my-owner-01", "my-repo-02")
                     .unwrap()

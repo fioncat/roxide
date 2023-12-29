@@ -36,7 +36,7 @@ pub struct SyncArgs {
     #[clap(short)]
     pub dry_run: bool,
 
-    /// The operations to perform. Avaliable: [push, pull, add, delete, force].
+    /// The operations to perform. Available: [push, pull, add, delete, force].
     #[clap(short, default_value = "push,pull,add,delete")]
     pub ops: String,
 
@@ -334,10 +334,7 @@ impl Task<()> for SyncTask {
             }
         }
 
-        let target = match head.as_ref() {
-            Some(commit) => commit,
-            None => &backup_branch,
-        };
+        let target = head.as_ref().unwrap_or_else(|| &backup_branch);
         git.checkout(target)?;
 
         Ok(())

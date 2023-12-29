@@ -149,10 +149,9 @@ impl Run for GetArgs {
 
         for (idx, repo) in repos.iter().enumerate() {
             let name = repo.to_string(&level);
-            let labels = match repo.labels_string() {
-                Some(s) => s,
-                None => String::from("<none>"),
-            };
+            let labels = repo
+                .labels_string()
+                .unwrap_or_else(|| String::from("<none>"));
             let access = format!("{}", repo.accessed);
             let last_access = utils::format_since(cfg, repo.last_accessed);
             let score = format!("{}", repo.score(cfg));
