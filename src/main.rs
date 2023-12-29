@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod api;
 mod batch;
 mod cmd;
@@ -10,4 +8,18 @@ mod term;
 mod utils;
 mod workflow;
 
-fn main() {}
+use anyhow::Result;
+use clap::Parser;
+
+use crate::cmd::{App, Run};
+use crate::config::Config;
+
+fn run() -> Result<()> {
+    let cfg = Config::load()?;
+    App::parse().run(&cfg)
+}
+
+fn main() {
+    console::set_colors_enabled(true);
+    utils::handle_result(run());
+}

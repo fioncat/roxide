@@ -9,9 +9,22 @@ mod gc;
 mod get;
 mod home;
 mod import;
+mod info;
+mod init;
+mod label;
+mod merge;
+mod open;
+mod rebase;
 mod recover;
 mod remove;
+mod reset;
+mod run;
+mod snapshot;
+mod squash;
 mod sync;
+mod tag;
+mod update;
+mod version;
 
 use std::collections::{HashMap, HashSet};
 
@@ -35,12 +48,54 @@ pub struct App {
 #[strum(serialize_all = "kebab-case")]
 pub enum Commands {
     Attach(attach::AttachArgs),
+    Branch(branch::BranchArgs),
+    Check(check::CheckArgs),
+    Complete(complete::CompleteArgs),
+    Config(config::ConfigArgs),
+    Copy(copy::CopyArgs),
+    Detach(detach::DetachArgs),
+    Gc(gc::GcArgs),
+    Get(get::GetArgs),
+    Home(home::HomeArgs),
+    Import(import::ImportArgs),
+    Info(info::InfoArgs),
+    Init(init::InitArgs),
+    Merge(merge::MergeArgs),
+    Open(open::OpenArgs),
+    Rebase(rebase::RebaseArgs),
+    Recover(recover::RecoverArgs),
+    Remove(remove::RemoveArgs),
+    Reset(reset::ResetArgs),
+    Label(label::LabelArgs),
+    Run(run::RunArgs),
+    Snapshot(snapshot::SnapshotArgs),
+    Squash(squash::SquashArgs),
+    Sync(sync::SyncArgs),
+    Tag(tag::TagArgs),
+    Update(update::UpdateArgs),
+    Version(version::VersionArgs),
 }
 
 impl Commands {
     pub fn get_completions() -> HashMap<&'static str, Completion> {
         hashmap![
-            "attach" => attach::AttachArgs::completion()
+            "attach" => attach::AttachArgs::completion(),
+            "branch" => branch::BranchArgs::completion(),
+            "copy" => copy::CopyArgs::completion(),
+            "get" => get::GetArgs::completion(),
+            "home" => home::HomeArgs::completion(),
+            "import" => import::ImportArgs::completion(),
+            "init" => init::InitArgs::completion(),
+            "merge" => merge::MergeArgs::completion(),
+            "rebase" => rebase::RebaseArgs::completion(),
+            "remove" => remove::RemoveArgs::completion(),
+            "reset" => reset::ResetArgs::completion(),
+            "run" => run::RunArgs::completion(),
+            "label" => label::LabelArgs::completion(),
+            "snapshot" => snapshot::SnapshotArgs::completion(),
+            "squash" => squash::SquashArgs::completion(),
+            "sync" => sync::SyncArgs::completion(),
+            "tag" => tag::TagArgs::completion()
         ]
     }
 }
@@ -49,6 +104,32 @@ impl Run for App {
     fn run(&self, cfg: &Config) -> Result<()> {
         match &self.command {
             Commands::Attach(args) => args.run(cfg),
+            Commands::Branch(args) => args.run(cfg),
+            Commands::Check(args) => args.run(cfg),
+            Commands::Complete(args) => args.run(cfg),
+            Commands::Label(args) => args.run(cfg),
+            Commands::Config(args) => args.run(cfg),
+            Commands::Copy(args) => args.run(cfg),
+            Commands::Detach(args) => args.run(cfg),
+            Commands::Gc(args) => args.run(cfg),
+            Commands::Get(args) => args.run(cfg),
+            Commands::Home(args) => args.run(cfg),
+            Commands::Import(args) => args.run(cfg),
+            Commands::Info(args) => args.run(cfg),
+            Commands::Init(args) => args.run(cfg),
+            Commands::Merge(args) => args.run(cfg),
+            Commands::Open(args) => args.run(cfg),
+            Commands::Rebase(args) => args.run(cfg),
+            Commands::Recover(args) => args.run(cfg),
+            Commands::Remove(args) => args.run(cfg),
+            Commands::Reset(args) => args.run(cfg),
+            Commands::Run(args) => args.run(cfg),
+            Commands::Snapshot(args) => args.run(cfg),
+            Commands::Squash(args) => args.run(cfg),
+            Commands::Sync(args) => args.run(cfg),
+            Commands::Tag(args) => args.run(cfg),
+            Commands::Update(args) => args.run(cfg),
+            Commands::Version(args) => args.run(cfg),
         }
     }
 }
