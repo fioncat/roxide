@@ -1344,28 +1344,29 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     /// - [`Remote`]: The remote object being searched.
     /// - String: The owner name being searched.
     /// - Vec<String>: The search results.
-    pub fn many_remote(&self, db: &Database) -> Result<(String, String, Vec<String>)> {
-        let (remote, owner, names) = self.many_remote_raw(db)?;
+    pub fn many_remote(&self, db: &Database) -> Result<(RemoteConfig, String, Vec<String>)> {
+        let (remote_cfg, owner, names) = self.many_remote_raw(db)?;
         if self.opts.many_edit {
             let names = self.opts.terminal_helper.edit(db.cfg, names.clone())?;
-            return Ok((remote, owner, names));
+            return Ok((remote_cfg, owner, names));
         }
 
-        Ok((remote, owner, names))
+        Ok((remote_cfg, owner, names))
     }
 
     /// The same as [`Selector::many_local`], without editor filtering.
-    fn many_remote_raw(&self, db: &Database) -> Result<(String, String, Vec<String>)> {
+    fn many_remote_raw(&self, db: &Database) -> Result<(RemoteConfig, String, Vec<String>)> {
         if self.head.is_empty() {
             bail!("internal error, when select many from provider, the head cannot be empty");
         }
 
         let remote = self.head;
         let remote_cfg = db.cfg.must_get_remote(self.head)?;
+        let remote_cfg = remote_cfg.into_owned();
 
         let (owner, name) = parse_owner(self.query);
         if !owner.is_empty() && !name.is_empty() {
-            return Ok((remote.to_string(), owner, vec![self.query.to_string()]));
+            return Ok((remote_cfg, owner, vec![self.query.to_string()]));
         }
 
         let owner = match self.query.strip_suffix("/") {
@@ -1387,7 +1388,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             .into_iter()
             .filter(|name| !attached_set.contains(name.as_str()))
             .collect();
-        Ok((remote.to_string(), owner.to_string(), names))
+        Ok((remote_cfg, owner.to_string(), names))
     }
 }
 

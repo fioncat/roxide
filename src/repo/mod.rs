@@ -298,4 +298,17 @@ impl Repo<'_> {
             self.labels = Some(append_labels);
         }
     }
+
+    /// Retrieve the workspace path for this repository.
+    pub fn get_workspace_path<R, O, N>(cfg: &Config, remote: R, owner: O, name: N) -> PathBuf
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+        N: AsRef<str>,
+    {
+        cfg.get_workspace_dir()
+            .join(remote.as_ref())
+            .join(owner.as_ref())
+            .join(name.as_ref())
+    }
 }

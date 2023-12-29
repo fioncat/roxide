@@ -7,9 +7,9 @@ use clap::Args;
 
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, Run};
-use crate::config::Config;
+use crate::config::{Config, RemoteConfig};
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::{Remote, Repo};
+use crate::repo::Repo;
 use crate::term::{self, Cmd, GitCmd};
 use crate::{stderrln, utils};
 
@@ -46,19 +46,36 @@ impl Run for ImportArgs {
         let query = Some(self.owner.clone());
         let selector = Selector::from_args(&head, &query, opts);
 
-        let (remote, owner, names) = selector.many_remote(&db)?;
+        let (remote_cfg, owner, names) = selector.many_remote(&db)?;
         if names.is_empty() {
             stderrln!("No repo to import");
             return Ok(());
         }
+        let remote = remote_cfg.get_name().to_string();
         term::must_confirm_items(&names, "import", "import", "Repo", "Repos")?;
 
+        let remote_cfg_arc = Arc::new(remote_cfg);
+        let owner_arc = Arc::new(owner.clone());
         let cfg_arc = Arc::new(cfg.clone());
 
         let mut tasks = Vec::with_capacity(names.len());
-        let mut repos = Vec::with_capacity(names.len());
-        let labels = utils::parse_labels(&self.labels);
         for name in names {
+            tasks.push((
+                name.clone(),
+                ImportTask {
+                    cfg: Arc::clone(&cfg_arc),
+                    remote_cfg: Arc::clone(&remote_cfg_arc),
+                    owner: Arc::clone(&owner_arc),
+                    name: Arc::new(name),
+                },
+            ))
+        }
+
+        let labels = utils::parse_labels(&self.labels);
+
+        let names = batch::must_run("Import", tasks)?;
+        for name in names {
+            let name = Arc::try_unwrap(name).unwrap();
             let mut repo = Repo::new(
                 cfg,
                 Cow::Borrowed(&remote),
@@ -67,23 +84,7 @@ impl Run for ImportArgs {
                 None,
             )?;
             repo.append_labels(labels.clone());
-            let repo = Arc::new(repo);
-            repos.push(Arc::clone(&repo));
-            tasks.push((
-                name.clone(),
-                ImportTask {
-                    cfg: Arc::clone(&cfg_arc),
-                    repo,
-                },
-            ))
-        }
-
-        batch::must_run("Import", tasks)?;
-
-        for name in names {
-            let name = Arc::try_unwrap(name).unwrap();
-            let repo = Repo::new(cfg, &remote.name, &owner_name, name, None, &labels)?;
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         db.save()
@@ -99,33 +100,42 @@ impl ImportArgs {
     }
 }
 
-struct ImportTask<'a> {
+struct ImportTask {
     cfg: Arc<Config>,
-    repo: Arc<Repo<'a>>,
+
+    remote_cfg: Arc<RemoteConfig>,
+    owner: Arc<String>,
+
+    name: Arc<String>,
 }
 
-impl Task<()> for ImportTask<'_> {
-    fn run(&self) -> Result<()> {
-        let path = self.repo.get_path(&self.cfg);
+impl Task<Arc<String>> for ImportTask {
+    fn run(&self) -> Result<Arc<String>> {
+        let path = Repo::get_workspace_path(
+            &self.cfg,
+            self.remote_cfg.get_name(),
+            self.owner.as_str(),
+            self.name.as_str(),
+        );
 
         match fs::read_dir(&path) {
-            Ok(_) => return Ok(()),
+            Ok(_) => return Ok(Arc::clone(&self.name)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err).with_context(|| format!("read dir {}", path.display())),
         }
 
-        let url = self.repo.clone_url();
+        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote_cfg);
         let path = format!("{}", path.display());
 
         Cmd::git(&["clone", url.as_str(), path.as_str()]).execute_check()?;
 
         let git = GitCmd::with_path(path.as_str());
-        if let Some(user) = &self.repo.remote_cfg.user {
+        if let Some(user) = &self.remote_cfg.user {
             git.exec(&["config", "user.name", user.as_str()])?;
         }
-        if let Some(email) = &self.repo.remote_cfg.email {
+        if let Some(email) = &self.remote_cfg.email {
             git.exec(&["config", "user.email", email.as_str()])?;
         }
-        Ok(())
+        Ok(Arc::clone(&self.name))
     }
 }

@@ -11,6 +11,7 @@ mod home;
 mod import;
 mod recover;
 mod remove;
+mod sync;
 
 use std::collections::{HashMap, HashSet};
 
