@@ -188,17 +188,17 @@ impl Completion {
     pub fn repo_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
         match args.len() {
             0 | 1 => {
-                let remotes = cfg.list_remote_names();
+                let remotes = cfg.list_remotes();
                 Ok(CompletionResult::from(remotes))
             }
             2 => {
                 let db = Database::load(cfg)?;
 
-                let remote_name = &args[0];
+                let remote = &args[0];
                 let query = &args[1];
 
                 if !query.contains("/") {
-                    let owners = db.list_owners(remote_name);
+                    let owners = db.list_owners(remote);
                     let items: Vec<_> = owners
                         .into_iter()
                         .map(|owner| format!("{}/", owner))
@@ -207,10 +207,10 @@ impl Completion {
                 }
 
                 let (owner, _) = database::parse_owner(query);
-                let repos = db.list_by_remote(remote_name, &None);
+                let repos = db.list_by_remote(remote, &None);
                 let items: Vec<_> = repos
                     .into_iter()
-                    .filter(|repo| repo.owner.name.as_str() == owner.as_str())
+                    .filter(|repo| repo.owner.as_ref() == owner.as_str())
                     .map(|repo| format!("{}", repo.name_with_owner()))
                     .collect();
                 Ok(CompletionResult::from(items))
@@ -222,7 +222,7 @@ impl Completion {
     pub fn owner_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
         match args.len() {
             0 | 1 => {
-                let remotes = cfg.list_remote_names();
+                let remotes = cfg.list_remotes();
                 let items: Vec<_> = remotes
                     .into_iter()
                     .map(|remote| remote.to_string())
@@ -230,9 +230,9 @@ impl Completion {
                 Ok(CompletionResult::from(items))
             }
             2 => {
-                let remote_name = &args[0];
+                let remote = &args[0];
                 let db = Database::load(&cfg)?;
-                let owners = db.list_owners(remote_name);
+                let owners = db.list_owners(remote);
                 let items: Vec<_> = owners
                     .into_iter()
                     .map(|owner| format!("{}/", owner))
@@ -339,7 +339,7 @@ pub fn get_git_remote(cfg: &Config, upstream: bool, force: bool) -> Result<GitRe
     if upstream {
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;
-        let provider = api::build_provider(cfg, &repo.remote, force)?;
+        let provider = api::build_provider(cfg, &repo.remote_cfg, force)?;
 
         GitRemote::from_upstream(cfg, &repo, &provider)
     } else {

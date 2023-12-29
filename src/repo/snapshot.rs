@@ -29,7 +29,7 @@ pub struct Item {
     pub path: Option<String>,
 
     pub last_accessed: u64,
-    pub accessed: f64,
+    pub accessed: u64,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<HashSet<String>>,

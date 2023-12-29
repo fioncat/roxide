@@ -4,7 +4,6 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -1118,7 +1117,7 @@ impl GitRemote {
 
     pub fn from_upstream(
         cfg: &Config,
-        repo: &Rc<Repo>,
+        repo: &Repo,
         provider: &Box<dyn Provider>,
     ) -> Result<GitRemote> {
         let remotes = Self::list()?;
@@ -1130,7 +1129,7 @@ impl GitRemote {
         }
 
         info!("Get upstream for {}", repo.name_with_remote());
-        let api_repo = provider.get_repo(&repo.owner.name, &repo.name)?;
+        let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
         if let None = api_repo.upstream {
             bail!(
                 "repo {} is not forked, so it has not an upstream",
@@ -1138,7 +1137,7 @@ impl GitRemote {
             );
         }
         let api_upstream = api_repo.upstream.unwrap();
-        let upstream = Repo::from_api_upstream(cfg, &repo.remote.name, api_upstream)?;
+        let upstream = Repo::from_api_upstream(cfg, &repo.remote, api_upstream);
         let url = upstream.clone_url();
 
         confirm!(

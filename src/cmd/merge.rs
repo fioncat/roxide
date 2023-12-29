@@ -29,10 +29,10 @@ impl Run for MergeArgs {
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;
 
-        let mut provider = api::build_provider(cfg, &repo.remote, self.force)?;
+        let mut provider = api::build_provider(cfg, &repo.remote_cfg, self.force)?;
 
         info!("Get repo info from remote API");
-        let mut api_repo = provider.get_repo(repo.owner.name.as_str(), repo.name.as_str())?;
+        let mut api_repo = provider.get_repo(repo.owner.as_ref(), repo.name.as_ref())?;
         if self.upstream {
             if let None = &api_repo.upstream {
                 bail!(
@@ -66,8 +66,8 @@ impl Run for MergeArgs {
         }
 
         let merge = MergeOptions {
-            owner: repo.owner.name.to_string(),
-            name: repo.name.clone(),
+            owner: repo.owner.to_string(),
+            name: repo.name.to_string(),
             upstream: api_repo.upstream,
             source,
             target,

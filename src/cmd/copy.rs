@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
@@ -56,8 +57,16 @@ impl Run for CopyArgs {
             labels.extend(extra_labels);
         }
 
-        let repo = Repo::new(cfg, &self.remote, &owner, &name, None, &Some(labels))?;
-        if let Some(_) = db.get(&self.remote, &owner, &name) {
+        let mut repo = Repo::new(
+            cfg,
+            Cow::Borrowed(&self.remote),
+            Cow::Owned(owner),
+            Cow::Owned(name),
+            None,
+        )?;
+        repo.append_labels(Some(labels));
+
+        if let Some(_) = db.get(&self.remote, repo.owner.as_ref(), repo.name.as_ref()) {
             confirm!(
                 "Do you want to overwrite the repo {}",
                 repo.name_with_remote()
@@ -115,7 +124,7 @@ impl Run for CopyArgs {
 
         println!("{path}");
 
-        db.update(repo, None);
+        db.upsert(repo);
         db.save()
     }
 }

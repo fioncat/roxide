@@ -1,4 +1,5 @@
-use std::rc::Rc;
+use std::borrow::Cow;
+use std::collections::HashSet;
 
 use anyhow::Result;
 use clap::Args;
@@ -39,49 +40,53 @@ pub struct GetArgs {
 }
 
 #[derive(Debug, Serialize)]
-struct RepoInfo {
-    remote: String,
-    owner: String,
-    name: String,
+struct RepoInfo<'a> {
+    remote: Cow<'a, str>,
+    owner: Cow<'a, str>,
+    name: Cow<'a, str>,
 
     accessed: u64,
-    last_accessed: String,
-    score: String,
+    last_accessed: u64,
+    last_accessed_str: String,
+    score: u64,
 
     path: String,
     workspace: bool,
 
-    size: String,
+    size: u64,
+    size_str: String,
 
-    labels: Vec<String>,
+    labels: Option<HashSet<Cow<'a, str>>>,
 }
 
-impl RepoInfo {
-    fn from_repo(cfg: &Config, repo: Rc<Repo>) -> Result<Self> {
+impl RepoInfo<'_> {
+    fn from_repo<'a>(cfg: &Config, repo: Repo<'a>) -> Result<RepoInfo<'a>> {
         let workspace = match repo.path {
             Some(_) => false,
             None => true,
         };
         let path = repo.get_path(cfg);
         let path = format!("{}", path.display());
-        let score = format!("{:.2}", repo.score(cfg));
         let size = utils::dir_size(repo.get_path(cfg))?;
         let mut labels: Vec<String> = match repo.labels.as_ref() {
             Some(labels) => labels.iter().map(|label| label.to_string()).collect(),
             None => Vec::new(),
         };
+        let score = repo.score(cfg);
         labels.sort();
         Ok(RepoInfo {
-            remote: repo.remote.name.to_string(),
-            owner: repo.owner.name.to_string(),
-            name: repo.name.to_string(),
-            accessed: repo.accessed as u64,
-            last_accessed: utils::format_time(repo.last_accessed)?,
+            remote: repo.remote,
+            owner: repo.owner,
+            name: repo.name,
+            accessed: repo.accessed,
+            last_accessed: repo.last_accessed,
+            last_accessed_str: utils::format_time(repo.last_accessed)?,
             score,
             path,
             workspace,
-            size: utils::human_bytes(size),
-            labels,
+            size,
+            size_str: utils::human_bytes(size),
+            labels: repo.labels,
         })
     }
 }
@@ -96,9 +101,9 @@ impl Run for GetArgs {
             let filter_labels = utils::parse_labels(&self.labels);
 
             let opts = SelectOptions::default().with_filter_labels(filter_labels);
-            let selector = Selector::from_args(&db, &self.head, &self.query, opts);
+            let selector = Selector::from_args(&self.head, &self.query, opts);
 
-            selector.many_local()?
+            selector.many_local(&db)?
         };
 
         if repos.is_empty() {
@@ -144,13 +149,12 @@ impl Run for GetArgs {
 
         for (idx, repo) in repos.iter().enumerate() {
             let name = repo.to_string(&level);
-            let labels = match repo.labels_string() {
-                Some(s) => s,
-                None => String::from("<none>"),
-            };
-            let access = format!("{}", repo.accessed as u64);
+            let labels = repo
+                .labels_string()
+                .unwrap_or_else(|| String::from("<none>"));
+            let access = format!("{}", repo.accessed);
             let last_access = utils::format_since(cfg, repo.last_accessed);
-            let score = format!("{:.2}", repo.score(cfg));
+            let score = format!("{}", repo.score(cfg));
 
             let mut row = vec![name, labels, access, last_access, score];
             if let Some(size_vec) = size_vec.as_ref() {

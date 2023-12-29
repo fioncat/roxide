@@ -26,9 +26,9 @@ impl Run for OpenArgs {
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;
 
-        let provider = api::build_provider(cfg, &repo.remote, self.force)?;
+        let provider = api::build_provider(cfg, &repo.remote_cfg, self.force)?;
 
-        let api_repo = provider.get_repo(&repo.owner.name, &repo.name)?;
+        let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
         let mut url = api_repo.web_url;
 
         if self.branch {

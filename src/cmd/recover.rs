@@ -1,5 +1,5 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::{fs, io};
 
 use anyhow::{bail, Context, Result};
@@ -28,13 +28,13 @@ impl Run for RecoverArgs {
 
         let mut db = Database::load(cfg)?;
         let workspace_repos = Self::scan_workspace(cfg)?;
-        let to_add: Vec<Rc<Repo>> = workspace_repos
+        let to_add: Vec<Repo> = workspace_repos
             .into_iter()
             .filter(|repo| {
                 if let Some(_) = db.get(
-                    repo.remote.name.as_str(),
-                    repo.owner.name.as_str(),
-                    repo.name.as_str(),
+                    repo.remote.as_ref(),
+                    repo.owner.as_ref(),
+                    repo.name.as_ref(),
                 ) {
                     return false;
                 }
@@ -51,7 +51,7 @@ impl Run for RecoverArgs {
         term::must_confirm_items(&items, "add", "addition", "Repo", "Repos")?;
         info!("Add {} to database done", utils::plural(&to_add, "repo"));
         for repo in to_add {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         db.save()
@@ -72,7 +72,7 @@ impl RecoverArgs {
         Ok(())
     }
 
-    fn scan_workspace(cfg: &Config) -> Result<Vec<Rc<Repo>>> {
+    fn scan_workspace(cfg: &Config) -> Result<Vec<Repo>> {
         info!("Scanning workspace");
         let mut repos = Vec::new();
         let dir = cfg.get_workspace_dir().clone();
@@ -122,7 +122,13 @@ impl RecoverArgs {
                 );
             }
 
-            let repo = Repo::new(cfg, remote, &owner, &name, None, &None)?;
+            let repo = Repo::new(
+                cfg,
+                Cow::Owned(remote.to_string()),
+                Cow::Owned(owner),
+                Cow::Owned(name),
+                None,
+            )?;
 
             repos.push(repo);
 

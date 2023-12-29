@@ -9,8 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::api::{ApiRepo, MergeOptions, Provider};
-use crate::config::Config;
-use crate::repo::Remote;
+use crate::config::{Config, RemoteConfig};
 use crate::utils::{self, FileLock};
 
 pub struct Cache {
@@ -76,13 +75,16 @@ impl Provider for Cache {
 impl Cache {
     pub fn new(
         cfg: &Config,
-        remote: &Remote,
+        remote_cfg: &RemoteConfig,
         upstream: Box<dyn Provider>,
         force: bool,
     ) -> Result<Cache> {
         let lock = FileLock::acquire(cfg, "cache")?;
-        let expire = Duration::from_secs(remote.cfg.cache_hours as u64 * 3600);
-        let dir = cfg.get_meta_dir().join("cache").join(&remote.name);
+        let expire = Duration::from_secs(remote_cfg.cache_hours as u64 * 3600);
+        let dir = cfg
+            .get_meta_dir()
+            .join("cache")
+            .join(&remote_cfg.get_name());
         Ok(Cache {
             dir,
             expire,
@@ -172,13 +174,9 @@ mod cache_tests {
         let cfg = config_tests::load_test_config("api_cache/normal");
         let upstream = StaticProvider::mock();
         let expect_repos = upstream.list_repos("fioncat").unwrap();
-        let remote_cfg = cfg.must_get_remote("github").unwrap();
-        let remote = &Remote {
-            name: String::from("github"),
-            cfg: remote_cfg.clone(),
-        };
+        let remote_cfg = cfg.get_remote("github").unwrap();
 
-        let mut cache = Cache::new(&cfg, &remote, upstream, true).unwrap();
+        let mut cache = Cache::new(&cfg, &remote_cfg, upstream, true).unwrap();
 
         assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
 
@@ -194,13 +192,9 @@ mod cache_tests {
         let cfg = config_tests::load_test_config("api_cache/expire");
         let upstream = StaticProvider::mock();
         let expect_repos = upstream.list_repos("kubernetes").unwrap();
-        let remote_cfg = cfg.must_get_remote("github").unwrap();
-        let remote = &Remote {
-            name: String::from("github"),
-            cfg: remote_cfg.clone(),
-        };
+        let remote_cfg = cfg.get_remote("github").unwrap();
 
-        let mut cache = Cache::new(&cfg, &remote, upstream, true).unwrap();
+        let mut cache = Cache::new(&cfg, &remote_cfg, upstream, true).unwrap();
         // Set a small expire time to simulate expiration.
         cache.expire = Duration::from_secs(100);
         assert_eq!(cache.list_repos("kubernetes").unwrap(), expect_repos);

@@ -26,7 +26,7 @@ impl Run for VersionArgs {
 
         let cfg_path = match Config::get_path()? {
             Some(path) => format!("{}", path.display()),
-            None => format!("N/A"),
+            None => "N/A".to_string(),
         };
         let meta_dir = format!("{}", cfg.get_meta_dir().display());
         let workspace_dir = format!("{}", cfg.get_workspace_dir().display());

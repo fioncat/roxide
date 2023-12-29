@@ -5,8 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::api::{ApiRepo, MergeOptions, Provider};
-use crate::config::defaults;
-use crate::repo::Remote;
+use crate::config::{defaults, RemoteConfig};
 
 #[derive(Debug, Deserialize)]
 struct GitlabRepo {
@@ -123,9 +122,9 @@ impl Provider for Gitlab {
 impl Gitlab {
     const API_VERSION: u8 = 4;
 
-    pub fn new(remote: &Remote) -> Box<dyn Provider> {
-        let client = super::build_common_client(remote);
-        let domain = match &remote.cfg.api_domain {
+    pub fn new(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+        let client = super::build_common_client(remote_cfg);
+        let domain = match &remote_cfg.api_domain {
             Some(domain) => domain.clone(),
             None => String::from("gitlab.com"),
         };
@@ -133,10 +132,10 @@ impl Gitlab {
         let url = format!("https://{domain}/api/v{}", Self::API_VERSION);
 
         Box::new(Gitlab {
-            token: remote.cfg.token.clone(),
+            token: remote_cfg.token.clone(),
             client,
             url,
-            per_page: remote.cfg.list_limit,
+            per_page: remote_cfg.list_limit,
         })
     }
 

@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use anyhow::Result;
 use clap::Args;
 
@@ -62,15 +60,15 @@ impl RemoveArgs {
         let opts = SelectOptions::default()
             .with_force_search(true)
             .with_force_local(true);
-        let selector = Selector::from_args(&db, &self.head, &self.query, opts);
-        let repo = selector.must_one()?;
+        let selector = Selector::from_args(&self.head, &self.query, opts);
+        let repo = selector.must_one(db)?;
 
         confirm!("Do you want to remove repo {}", repo.name_with_remote());
 
         let path = repo.get_path(cfg);
         utils::remove_dir_recursively(path)?;
 
-        db.remove(repo);
+        db.remove(repo.update());
 
         Ok(())
     }
@@ -80,9 +78,9 @@ impl RemoveArgs {
         let opts = SelectOptions::default()
             .with_filter_labels(filter_labels)
             .with_many_edit(self.edit);
-        let selector = Selector::from_args(&db, &self.head, &self.query, opts);
+        let selector = Selector::from_args(&self.head, &self.query, opts);
 
-        let (repos, level) = selector.many_local()?;
+        let (repos, level) = selector.many_local(db)?;
         let repos = self.filter_many(cfg, repos)?;
         if repos.is_empty() {
             stderrln!("No repo to remove");
@@ -92,22 +90,24 @@ impl RemoveArgs {
         let items: Vec<_> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         term::must_confirm_items(&items, "remove", "removal", "Repo", "Repos")?;
 
-        for repo in repos.into_iter() {
+        let mut update_repos = Vec::with_capacity(repos.len());
+        for repo in repos {
             let path = repo.get_path(cfg);
             utils::remove_dir_recursively(path)?;
+            update_repos.push(repo.update());
+        }
+        for repo in update_repos {
             db.remove(repo);
         }
 
         Ok(())
     }
 
-    fn filter_many(&self, cfg: &Config, repos: Vec<Rc<Repo>>) -> Result<Vec<Rc<Repo>>> {
+    fn filter_many<'a>(&self, cfg: &Config, repos: Vec<Repo<'a>>) -> Result<Vec<Repo<'a>>> {
         let duration = match self.duration.as_ref() {
             Some(s) => Some(utils::parse_duration_secs(s)?),
             None => None,
         };
-
-        let pin_label = String::from("pin");
 
         let mut result = Vec::with_capacity(repos.len());
         for repo in repos {
@@ -119,7 +119,6 @@ impl RemoveArgs {
             }
 
             if let Some(access) = self.access {
-                let access = access as f64;
                 if repo.accessed > access {
                     continue;
                 }
@@ -127,7 +126,7 @@ impl RemoveArgs {
 
             if !self.force {
                 if let Some(labels) = repo.labels.as_ref() {
-                    if labels.contains(&pin_label) {
+                    if labels.contains("pin") {
                         continue;
                     }
                 }

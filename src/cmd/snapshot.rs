@@ -1,6 +1,6 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::{fs, io};
 
@@ -10,10 +10,10 @@ use console::style;
 
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, CompletionResult, Run};
-use crate::config::Config;
+use crate::config::{Config, RemoteConfig};
 use crate::repo::database::Database;
 use crate::repo::snapshot::{Item, Snapshot};
-use crate::repo::{Remote, Repo};
+use crate::repo::Repo;
 use crate::term::{self, Cmd, GitCmd};
 use crate::{hashset_strings, info, stderrln, utils};
 
@@ -68,7 +68,7 @@ impl SnapshotArgs {
             .list_all(&labels)
             .into_iter()
             .filter_map(|repo| {
-                if let None = repo.remote.cfg.clone {
+                if let None = repo.remote_cfg.clone {
                     return None;
                 }
                 Some(repo)
@@ -116,20 +116,17 @@ impl SnapshotArgs {
             let branch = result.unwrap();
             let repo = &repos[idx];
             items.push(Item {
-                remote: repo.remote.name.to_string(),
-                owner: repo.owner.name.to_string(),
+                remote: repo.remote.to_string(),
+                owner: repo.owner.to_string(),
                 name: repo.name.to_string(),
                 branch,
-                path: match repo.path.as_ref() {
-                    Some(path) => Some(format!("{}", path)),
-                    None => None,
-                },
+                path: repo.path.as_ref().map(|path| path.to_string()),
                 accessed: repo.accessed,
                 last_accessed: repo.last_accessed,
-                labels: match repo.labels.as_ref() {
-                    Some(labels) => Some(labels.iter().map(|label| label.to_string()).collect()),
-                    None => None,
-                },
+                labels: repo
+                    .labels
+                    .as_ref()
+                    .map(|labels| labels.iter().map(|label| label.to_string()).collect()),
             })
         }
 
@@ -154,21 +151,20 @@ impl SnapshotArgs {
         let items_set: HashSet<_> = show_items.into_iter().collect();
 
         let mut tasks = Vec::with_capacity(items.len());
-        let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
+        let mut remotes: HashMap<String, Arc<RemoteConfig>> = HashMap::new();
         for item in items.iter() {
-            let remote = match remotes.get(item.remote.as_str()) {
-                Some(remote) => remote.clone(),
+            let (remote, remote_cfg) = match remotes.remove_entry(item.remote.as_str()) {
+                Some((remote, cfg)) => (remote, cfg),
                 None => {
                     let remote_cfg = cfg.must_get_remote(item.remote.as_str())?;
-                    let remote = Arc::new(Remote {
-                        name: item.remote.clone(),
-                        cfg: remote_cfg.clone(),
-                    });
-                    let ret = remote.clone();
-                    remotes.insert(item.remote.clone(), remote);
-                    ret
+                    let remote_cfg = Arc::new(remote_cfg.into_owned());
+                    (item.remote.clone(), remote_cfg)
                 }
             };
+
+            let task_remote_cfg = Arc::clone(&remote_cfg);
+            remotes.insert(remote, remote_cfg);
+
             let path = match item.path.as_ref() {
                 Some(path) => PathBuf::from(path),
                 None => Repo::get_workspace_path(cfg, &item.remote, &item.owner, &item.name),
@@ -177,7 +173,7 @@ impl SnapshotArgs {
             tasks.push((
                 show_name,
                 RestoreSnapshotTask {
-                    remote,
+                    remote_cfg: task_remote_cfg,
                     path,
                     branch: if self.skip_checkout {
                         None
@@ -194,10 +190,10 @@ impl SnapshotArgs {
         stderrln!();
 
         let mut skip_remote = HashSet::new();
-        for remote_name in cfg.list_remote_names() {
-            let remote_cfg = cfg.must_get_remote(&remote_name)?;
+        for remote in cfg.list_remotes() {
+            let remote_cfg = cfg.must_get_remote(&remote)?;
             if let None = remote_cfg.clone.as_ref() {
-                skip_remote.insert(remote_name);
+                skip_remote.insert(remote);
             }
         }
 
@@ -206,10 +202,10 @@ impl SnapshotArgs {
         } else {
             Some(hashset_strings!["pin"])
         };
-        let to_remove: Vec<Rc<Repo>> = db
+        let to_remove: Vec<Repo> = db
             .list_all(&pin_labels)
             .iter()
-            .filter(|repo| !skip_remote.contains(repo.remote.name.as_str()))
+            .filter(|repo| !skip_remote.contains(repo.remote.as_ref()))
             .filter(|repo| !items_set.contains(&repo.name_with_remote()))
             .map(|repo| repo.clone())
             .collect();
@@ -220,9 +216,13 @@ impl SnapshotArgs {
                 .map(|repo| repo.name_with_remote())
                 .collect();
             if term::confirm_items(&remove_items, "remove", "removal", "Repo", "Repos")? {
+                let mut update_repos = Vec::with_capacity(to_remove.len());
                 for repo in to_remove {
                     let path = repo.get_path(cfg);
                     utils::remove_dir_recursively(path)?;
+                    update_repos.push(repo.update());
+                }
+                for repo in update_repos {
                     db.remove(repo);
                 }
             } else {
@@ -231,16 +231,28 @@ impl SnapshotArgs {
         }
 
         for item in items {
-            let repo = Repo::new(
+            let Item {
+                remote,
+                owner,
+                name,
+                branch: _,
+                path,
+                last_accessed,
+                accessed,
+                labels,
+            } = item;
+            let mut repo = Repo::new(
                 cfg,
-                item.remote,
-                item.owner,
-                item.name,
-                item.path,
-                &item.labels,
+                Cow::Owned(remote),
+                Cow::Owned(owner),
+                Cow::Owned(name),
+                path,
             )?;
+            repo.last_accessed = last_accessed;
+            repo.accessed = accessed;
+            repo.append_labels(labels);
             info!("Restore repo {} database", repo.name_with_remote());
-            db.add(repo);
+            db.upsert(repo);
         }
 
         db.save()
@@ -295,7 +307,7 @@ impl Task<String> for CheckSnapshotTask {
 }
 
 struct RestoreSnapshotTask {
-    remote: Arc<Remote>,
+    remote_cfg: Arc<RemoteConfig>,
     path: PathBuf,
     branch: Option<String>,
 
@@ -311,7 +323,7 @@ impl Task<()> for RestoreSnapshotTask {
             Ok(_) => git.exec(&["fetch", "--all"])?,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 let url =
-                    Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
+                    Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote_cfg);
                 Cmd::git(&["clone", url.as_str(), path.as_str()]).execute_check()?;
             }
             Err(err) => return Err(err).with_context(|| format!("read dir {}", path)),

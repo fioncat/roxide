@@ -50,9 +50,9 @@ impl Run for RunArgs {
         let opts = SelectOptions::default()
             .with_filter_labels(filter_labels)
             .with_many_edit(self.edit);
-        let selector = Selector::from_args(&db, &self.head, &self.query, opts);
+        let selector = Selector::from_args(&self.head, &self.query, opts);
 
-        let (repos, level) = selector.many_local()?;
+        let (repos, level) = selector.many_local(&db)?;
         if repos.is_empty() {
             stderrln!("No repo to run");
             return Ok(());

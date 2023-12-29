@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::api::{ApiRepo, ApiUpstream, MergeOptions, Provider};
-use crate::repo::Remote;
+use crate::config::RemoteConfig;
 
 #[derive(Debug, Deserialize)]
 struct Repo {
@@ -192,11 +192,11 @@ impl Provider for Github {
 impl Github {
     const API_VERSION: &'static str = "2022-11-28";
 
-    pub fn new(remote: &Remote) -> Box<dyn Provider> {
-        let client = super::build_common_client(remote);
+    pub fn new(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+        let client = super::build_common_client(remote_cfg);
         Box::new(Github {
-            token: remote.cfg.token.clone(),
-            per_page: remote.cfg.list_limit,
+            token: remote_cfg.token.clone(),
+            per_page: remote_cfg.list_limit,
             client,
         })
     }

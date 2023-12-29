@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -31,7 +30,7 @@ struct Env {
 }
 
 impl Env {
-    fn build(repo: &Rc<Repo>, cfg: &WorkflowConfig, path: &PathBuf) -> Env {
+    fn build(repo: &Repo, cfg: &WorkflowConfig, path: &PathBuf) -> Env {
         let global = Self::build_map(repo, &cfg.env, path);
         let mut steps = HashMap::with_capacity(cfg.steps.len());
         for (idx, step) in cfg.steps.iter().enumerate() {
@@ -45,24 +44,22 @@ impl Env {
         Env { global, steps }
     }
 
-    fn build_map(
-        repo: &Rc<Repo>,
-        vec: &Vec<WorkflowEnv>,
-        path: &PathBuf,
-    ) -> HashMap<String, String> {
+    fn build_map(repo: &Repo, vec: &Vec<WorkflowEnv>, path: &PathBuf) -> HashMap<String, String> {
         let mut map = HashMap::with_capacity(vec.len());
         for env in vec.iter() {
             let key = env.name.clone();
             let mut value = env.value.clone();
             if let Some(from_repo) = env.from_repo.as_ref() {
                 let from_repo = match from_repo {
-                    WorkflowFromRepo::Name => repo.name.clone(),
-                    WorkflowFromRepo::Owner => repo.owner.name.to_string(),
-                    WorkflowFromRepo::Remote => repo.remote.name.to_string(),
-                    WorkflowFromRepo::Clone => match repo.remote.cfg.clone.as_ref() {
-                        Some(clone) => clone.clone(),
-                        None => String::new(),
-                    },
+                    WorkflowFromRepo::Name => repo.name.to_string(),
+                    WorkflowFromRepo::Owner => repo.owner.to_string(),
+                    WorkflowFromRepo::Remote => repo.remote.to_string(),
+                    WorkflowFromRepo::Clone => {
+                        match repo.remote_cfg.clone.as_ref().map(|u| u.clone()) {
+                            Some(clone) => clone.clone(),
+                            None => String::new(),
+                        }
+                    }
                     WorkflowFromRepo::Path => format!("{}", path.display()),
                 };
                 let from_repo = if from_repo.is_empty() {
@@ -75,10 +72,7 @@ impl Env {
                 };
                 value = Some(from_repo);
             }
-            let value = match value {
-                Some(value) => value,
-                None => String::new(),
-            };
+            let value = value.unwrap_or_else(|| String::new());
             map.insert(key, value);
         }
         map
@@ -101,13 +95,7 @@ impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
 }
 
 impl<C: AsRef<WorkflowConfig>> Workflow<C> {
-    fn new(
-        cfg: &Config,
-        repo: &Rc<Repo>,
-        name: impl AsRef<str>,
-        wf_cfg: C,
-        mute: bool,
-    ) -> Workflow<C> {
+    fn new(cfg: &Config, repo: &Repo, name: impl AsRef<str>, wf_cfg: C, mute: bool) -> Workflow<C> {
         let path = repo.get_path(cfg);
         let env = Env::build(repo, wf_cfg.as_ref(), &path);
         let display = if mute {
@@ -253,7 +241,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
 impl Workflow<Arc<WorkflowConfig>> {
     pub fn load_for_batch(
         cfg: &Config,
-        repo: &Rc<Repo>,
+        repo: &Repo,
         name: impl AsRef<str>,
         wf_cfg: Arc<WorkflowConfig>,
     ) -> Self {
@@ -262,7 +250,7 @@ impl Workflow<Arc<WorkflowConfig>> {
 }
 
 impl<'a> Workflow<Cow<'a, WorkflowConfig>> {
-    pub fn load(cfg: &'a Config, repo: &Rc<Repo>, name: impl AsRef<str>) -> Result<Self> {
+    pub fn load(cfg: &'a Config, repo: &Repo, name: impl AsRef<str>) -> Result<Self> {
         let wf_cfg = match cfg.workflows.get(name.as_ref()) {
             Some(wf_cfg) => wf_cfg,
             None => bail!("could not find workflow '{}'", name.as_ref()),

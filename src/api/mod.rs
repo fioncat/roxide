@@ -14,8 +14,7 @@ use crate::api::alias::Alias;
 use crate::api::cache::Cache;
 use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
-use crate::config::{Config, ProviderType};
-use crate::repo::Remote;
+use crate::config::{Config, ProviderType, RemoteConfig};
 
 /// Represents repository information obtained from a [`Provider`].
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -122,9 +121,9 @@ pub trait Provider {
 }
 
 /// Build common http client.
-fn build_common_client(remote: &Remote) -> Client {
+fn build_common_client(remote_cfg: &RemoteConfig) -> Client {
     Client::builder()
-        .timeout(Duration::from_secs(remote.cfg.api_timeout))
+        .timeout(Duration::from_secs(remote_cfg.api_timeout))
         .build()
         .unwrap()
 }
@@ -144,23 +143,30 @@ fn build_common_client(remote: &Remote) -> Client {
 /// names so that the remote API can correctly identify them.
 /// * `force` - Only effective when cache is enabled, indicating that the current
 /// cache should be forcibly expired to refresh cache data.
-pub fn build_provider(cfg: &Config, remote: &Remote, force: bool) -> Result<Box<dyn Provider>> {
-    if let None = remote.cfg.provider {
-        bail!("missing provider config for remote '{}'", remote.name);
+pub fn build_provider(
+    cfg: &Config,
+    remote_cfg: &RemoteConfig,
+    force: bool,
+) -> Result<Box<dyn Provider>> {
+    if let None = remote_cfg.provider {
+        bail!(
+            "missing provider config for remote '{}'",
+            remote_cfg.get_name()
+        );
     }
 
-    let mut provider = match remote.cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::new(remote),
-        ProviderType::Gitlab => Gitlab::new(remote),
+    let mut provider = match remote_cfg.provider.as_ref().unwrap() {
+        ProviderType::Github => Github::new(remote_cfg),
+        ProviderType::Gitlab => Gitlab::new(remote_cfg),
     };
 
-    if remote.cfg.cache_hours > 0 {
-        let cache = Cache::new(cfg, remote, provider, force)?;
+    if remote_cfg.cache_hours > 0 {
+        let cache = Cache::new(cfg, remote_cfg, provider, force)?;
         provider = Box::new(cache);
     }
 
-    if remote.cfg.has_alias() {
-        let (alias_owner, alias_repo) = remote.cfg.get_alias_map();
+    if remote_cfg.has_alias() {
+        let (alias_owner, alias_repo) = remote_cfg.get_alias_map();
         provider = Alias::new(alias_owner, alias_repo, provider);
     }
 

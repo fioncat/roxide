@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::{bail, Result};
 use clap::Args;
 
@@ -47,40 +49,35 @@ impl Run for LabelArgs {
         let opts = SelectOptions::default()
             .with_force_search(self.search)
             .with_force_no_cache(self.force);
-        let selector = Selector::from_args(&db, &self.head, &self.query, opts);
+        let selector = Selector::from_args(&self.head, &self.query, opts);
 
-        let repo = selector.must_one()?;
+        let mut repo = selector.must_one(&db)?;
 
-        let (repo, append_labels) = if let Some(set_labels) = self.set.as_ref() {
-            let set_labels = Some(utils::parse_labels_str(set_labels));
-            let repo = repo.update_labels(set_labels);
-            (repo, None)
+        if let Some(set_labels) = self.set.as_ref() {
+            let set_labels = utils::parse_labels_str(set_labels);
+            repo.labels = Some(
+                set_labels
+                    .into_iter()
+                    .map(|label| Cow::Owned(label))
+                    .collect(),
+            );
         } else if let Some(append_labels) = self.append.as_ref() {
-            let append_labels = Some(utils::parse_labels_str(append_labels));
-            (repo, append_labels)
+            let append_labels = utils::parse_labels_str(append_labels);
+            repo.append_labels(Some(append_labels));
         } else if let Some(delete_labels) = self.delete.as_ref() {
             let delete_labels = utils::parse_labels_str(delete_labels);
-            let labels = match repo.labels.as_ref() {
-                Some(current_labels) => {
-                    let mut new_labels = current_labels.clone();
-                    for label in delete_labels {
-                        new_labels.remove(&label);
-                    }
-                    Some(new_labels)
+            for to_delete in delete_labels {
+                if let Some(labels) = repo.labels.as_mut() {
+                    labels.remove(to_delete.as_str());
                 }
-                None => None,
-            };
-            let repo = repo.update_labels_rc(labels);
-
-            (repo, None)
+            }
         } else if self.clean {
-            let repo = repo.update_labels_rc(None);
-            (repo, None)
+            repo.labels = None;
         } else {
             bail!("please specify at least one operation");
-        };
+        }
 
-        db.update(repo, append_labels);
+        db.upsert(repo.update());
 
         db.save()
     }

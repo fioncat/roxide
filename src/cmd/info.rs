@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use anyhow::{bail, Result};
 use clap::Args;
@@ -60,49 +59,48 @@ impl Run for InfoArgs {
                 }
             };
 
-            let remote_info = match remotes.get_mut(repo.remote.name.as_str()) {
-                Some(remote_info) => remote_info,
-                None => {
-                    let remote = Rc::clone(&repo.remote);
-                    let clone = match remote.cfg.clone.as_ref() {
+            let (remote, mut remote_info) = remotes
+                .remove_entry(repo.remote.as_ref())
+                .unwrap_or_else(|| {
+                    let clone = match repo.remote_cfg.clone.as_ref() {
                         Some(_) => true,
                         None => false,
                     };
-                    let info = RemoteInfo {
-                        clone,
-                        size: None,
-                        repo_count: 0,
-                        owner_count: 0,
-                        owners: BTreeMap::new(),
-                        size_u64: 0,
-                    };
-                    remotes.insert(String::from(repo.remote.name.as_str()), info);
-                    remotes.get_mut(repo.remote.name.as_str()).unwrap()
-                }
-            };
+                    (
+                        repo.remote.to_string(),
+                        RemoteInfo {
+                            clone,
+                            size: None,
+                            repo_count: 0,
+                            owner_count: 0,
+                            owners: BTreeMap::new(),
+                            size_u64: 0,
+                        },
+                    )
+                });
+
             remote_info.size_u64 += size;
             remote_info.repo_count += 1;
 
-            let owner_info = match remote_info.owners.get_mut(repo.owner.name.as_str()) {
-                Some(owner_info) => owner_info,
-                None => {
-                    let info = OwnerInfo {
-                        repo_count: 0,
-                        size: None,
-                        size_u64: 0,
-                    };
+            let (owner, mut owner_info) = remote_info
+                .owners
+                .remove_entry(repo.owner.as_ref())
+                .unwrap_or_else(|| {
+                    (
+                        repo.owner.to_string(),
+                        OwnerInfo {
+                            repo_count: 0,
+                            size: None,
+                            size_u64: 0,
+                        },
+                    )
+                });
 
-                    remote_info
-                        .owners
-                        .insert(String::from(repo.owner.name.as_str()), info);
-                    remote_info
-                        .owners
-                        .get_mut(repo.owner.name.as_str())
-                        .unwrap()
-                }
-            };
             owner_info.repo_count += 1;
             owner_info.size_u64 += size;
+
+            remote_info.owners.insert(owner, owner_info);
+            remotes.insert(remote, remote_info);
         }
 
         for (_, remote) in remotes.iter_mut() {
@@ -170,20 +168,17 @@ impl InfoArgs {
     }
 
     fn convert_component(r: Result<ComponentInfo>) -> ComponentInfo {
-        match r {
-            Ok(c) => c,
-            Err(_) => ComponentInfo {
-                enable: false,
-                path: String::new(),
-                version: String::new(),
-            },
-        }
+        r.unwrap_or_else(|_| ComponentInfo {
+            enable: false,
+            path: String::new(),
+            version: String::new(),
+        })
     }
 
     fn config(cfg: &Config) -> Result<ConfigInfo> {
         let path = match Config::get_path()? {
             Some(path) => format!("{}", path.display()),
-            None => format!("N/A"),
+            None => "N/A".to_string(),
         };
         let meta_dir = format!("{}", cfg.get_meta_dir().display());
         let meta_size = utils::dir_size(PathBuf::from(&meta_dir))?;

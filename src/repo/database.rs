@@ -1,6 +1,6 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::{fs, io};
 
 use anyhow::{bail, Context, Result};
@@ -9,32 +9,49 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::api::Provider;
-use crate::config::Config;
-use crate::repo::{NameLevel, Owner, Remote, Repo};
+use crate::config::{Config, RemoteConfig};
+use crate::repo::{NameLevel, Repo};
 use crate::term;
 use crate::utils::{self, FileLock};
 
-/// The Bucket is repositories data structure stored on disk that can be directly
-/// serialized and deserialized.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Bucket {
-    remotes: Vec<String>,
-    owners: Vec<String>,
-    labels: Vec<String>,
-    repos: Vec<RepoBucket>,
+pub fn get_path<S, R, O, N>(cfg: &Config, path: &Option<S>, remote: R, owner: O, name: N) -> PathBuf
+where
+    R: AsRef<str>,
+    O: AsRef<str>,
+    N: AsRef<str>,
+    S: AsRef<str>,
+{
+    if let Some(path) = path.as_ref() {
+        return PathBuf::from(path.as_ref());
+    }
+
+    cfg.get_workspace_dir()
+        .join(remote.as_ref())
+        .join(owner.as_ref())
+        .join(name.as_ref())
 }
 
-/// The RepoBucket is a repository data structure stored on disk that can be directly
-/// serialized and deserialized.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct RemoteBucket(HashMap<String, OwnerBucket>);
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct OwnerBucket(HashMap<String, RepoBucket>);
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct RepoBucket {
-    remote: u32,
-    owner: u32,
-    name: String,
     path: Option<String>,
+    labels: Option<HashSet<u64>>,
+
     last_accessed: u64,
-    accessed: f64,
-    labels: Option<HashSet<u32>>,
+    accessed: u64,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Bucket {
+    data: HashMap<String, RemoteBucket>,
+
+    label_index: u64,
+    labels: HashMap<u64, String>,
 }
 
 impl Bucket {
@@ -43,15 +60,14 @@ impl Bucket {
     const MAX_SIZE: u64 = 32 << 20;
 
     /// Use Version to ensure that decode and encode are consistent.
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
 
     /// Return empty Bucket, with no repository data.
     fn empty() -> Self {
         Bucket {
-            remotes: Vec::new(),
-            owners: Vec::new(),
-            repos: Vec::new(),
-            labels: Vec::new(),
+            data: HashMap::new(),
+            label_index: 0,
+            labels: HashMap::new(),
         }
     }
 
@@ -103,264 +119,20 @@ impl Bucket {
 
         Ok(buffer)
     }
-
-    /// To save metadata storage space, transform the list of repositories
-    /// suitable for queries into data suitable for storage in buckets.
-    ///
-    /// The bucket data structure undergoes some special optimizations—it, stores
-    /// remote, owner, and label data only once, while repositories store indices
-    /// of these data. Information about remote, owner, and label for a particular
-    /// repository is located through these indices.
-    ///
-    /// # Panics
-    ///
-    /// Please ensure that the [`Rc`] references in `repos` are unique when calling
-    /// this method; since we will try to unwrap them, otherwise, the function
-    /// will panic.
-    ///
-    /// # Arguments
-    ///
-    /// * `repos` - The repositories to convert.
-    fn from_repos(repos: Vec<Rc<Repo>>) -> Bucket {
-        let mut remotes: Vec<String> = Vec::new();
-        let mut remotes_index: HashMap<String, u32> = HashMap::new();
-
-        let mut owners: Vec<String> = Vec::new();
-        let mut owners_index: HashMap<String, u32> = HashMap::new();
-
-        let mut all_labels: Vec<String> = Vec::new();
-        let mut all_labels_index: HashMap<String, u32> = HashMap::new();
-
-        let mut repo_buckets: Vec<RepoBucket> = Vec::with_capacity(repos.len());
-        for repo in repos {
-            let remote_idx = match remotes_index.get(repo.remote.name.as_str()) {
-                Some(idx) => *idx,
-                None => {
-                    let remote_name = repo.remote.name.to_string();
-                    let idx = remotes.len() as u32;
-                    remotes_index.insert(remote_name.clone(), idx);
-                    remotes.push(remote_name);
-                    idx
-                }
-            };
-
-            let owner_idx = match owners_index.get(repo.owner.name.as_str()) {
-                Some(idx) => *idx,
-                None => {
-                    let owner_name = repo.owner.name.to_string();
-                    let idx = owners.len() as u32;
-                    owners_index.insert(owner_name.clone(), idx);
-                    owners.push(owner_name);
-                    idx
-                }
-            };
-
-            let labels_idx = match repo.labels.as_ref() {
-                Some(labels_set) => {
-                    let mut labels_idx = HashSet::with_capacity(labels_set.len());
-                    for label in labels_set.iter() {
-                        let idx = match all_labels_index.get(label.as_str()) {
-                            Some(idx) => *idx,
-                            None => {
-                                let label_name = label.to_string();
-                                let idx = all_labels.len() as u32;
-                                all_labels_index.insert(label_name.clone(), idx);
-                                all_labels.push(label_name);
-                                idx
-                            }
-                        };
-                        labels_idx.insert(idx);
-                    }
-                    Some(labels_idx)
-                }
-                None => None,
-            };
-
-            // Here, directly unwrap the Rc; it is the responsibility of the
-            // external code to guarantee that the current repository has a unique
-            // reference.
-            let repo = Rc::try_unwrap(repo).expect("Unwrap repo rc failed");
-            let Repo {
-                name,
-                remote: _,
-                owner: _,
-                path,
-                last_accessed,
-                accessed,
-                labels: _,
-            } = repo;
-
-            repo_buckets.push(RepoBucket {
-                remote: remote_idx,
-                owner: owner_idx,
-                name,
-                path,
-                last_accessed,
-                accessed,
-                labels: labels_idx,
-            })
-        }
-
-        Bucket {
-            remotes,
-            owners,
-            labels: all_labels,
-            repos: repo_buckets,
-        }
-    }
-
-    /// Convert the bucket data suitable for storage into repositories suitable for
-    /// queries; this function is the reverse process of [`Bucket::from_repos`].
-    /// The constructed repositories will all be [`Rc`] pointers to save memory and
-    /// clone costs. This also implies that they are entirely read-only; if modifications
-    /// are necessary, new repository objects may need to be created.
-    ///
-    /// # Arguments
-    ///
-    /// * `cfg` - The config is used to inject remote and owner configuration
-    /// information into the generated repository object for convenient subsequent
-    /// calls.
-    fn build_repos(self, cfg: &Config) -> Result<Vec<Rc<Repo>>> {
-        let Bucket {
-            remotes: remote_names,
-            owners: owner_names,
-            labels: all_label_names,
-            repos: all_buckets,
-        } = self;
-
-        let mut remote_index: HashMap<u32, Rc<Remote>> = HashMap::with_capacity(remote_names.len());
-        for (idx, remote_name) in remote_names.into_iter().enumerate() {
-            let remote_cfg = match cfg.get_remote(&remote_name)  {
-                Some(remote) => remote,
-                None => bail!("could not find remote config for '{remote_name}', please add it to your config file"),
-            };
-            let remote = Rc::new(Remote {
-                name: remote_name,
-                cfg: remote_cfg.clone(),
-            });
-
-            remote_index.insert(idx as u32, remote);
-        }
-
-        let owner_name_index: HashMap<u32, String> = owner_names
-            .into_iter()
-            .enumerate()
-            .map(|(idx, owner)| (idx as u32, owner))
-            .collect();
-        let mut owner_index: HashMap<String, HashMap<String, Rc<Owner>>> =
-            HashMap::with_capacity(owner_name_index.len());
-
-        let label_name_index: HashMap<u32, Rc<String>> = all_label_names
-            .into_iter()
-            .enumerate()
-            .map(|(idx, label)| (idx as u32, Rc::new(label)))
-            .collect();
-
-        let mut repos: Vec<Rc<Repo>> = Vec::with_capacity(all_buckets.len());
-        for repo_bucket in all_buckets {
-            let remote = match remote_index.get(&repo_bucket.remote) {
-                Some(remote) => Rc::clone(remote),
-                // If the remote recorded in the repository does not exist in the
-                // index, it indicates that this is dirty data (manually generated?
-                // or there is a bug). Skip processing here.
-                // FIXME: If this is caused by a bug, should we panic or report an
-                // error here to expose the issue better?
-                None => continue,
-            };
-
-            let owner_name = match owner_name_index.get(&repo_bucket.owner) {
-                Some(owner_name) => owner_name,
-                // The same as remote, may have bug
-                None => continue,
-            };
-
-            // If the owner already exists in the cache, reuse it using Rc. If it
-            // doesn't exist, construct and cache it using a combination of coordination
-            // and indexing.
-            let owner = match owner_index.get(&remote.name) {
-                Some(m) => match m.get(owner_name) {
-                    Some(owner) => Some(Rc::clone(owner)),
-                    None => None,
-                },
-                None => None,
-            };
-            let owner = match owner {
-                Some(o) => o,
-                None => {
-                    // Build the owner object
-                    let owner_name = owner_name.clone();
-                    let owner_remote = Rc::clone(&remote);
-                    let owner = match cfg.get_owner(&remote.name, &owner_name) {
-                        Some(owner_cfg) => Rc::new(Owner {
-                            name: owner_name,
-                            remote: owner_remote,
-                            cfg: Some(owner_cfg.clone()),
-                        }),
-                        None => Rc::new(Owner {
-                            name: owner_name,
-                            remote: owner_remote,
-                            cfg: None,
-                        }),
-                    };
-                    match owner_index.get_mut(&remote.name) {
-                        Some(m) => {
-                            m.insert(owner.name.to_string(), Rc::clone(&owner));
-                        }
-                        None => {
-                            let mut m = HashMap::with_capacity(1);
-                            m.insert(owner.name.to_string(), Rc::clone(&owner));
-                            owner_index.insert(remote.name.to_string(), m);
-                        }
-                    }
-                    owner
-                }
-            };
-
-            let labels = match repo_bucket.labels.as_ref() {
-                Some(labels_index) => {
-                    let mut labels = HashSet::with_capacity(labels_index.len());
-                    for idx in labels_index {
-                        if let Some(label_name) = label_name_index.get(idx) {
-                            labels.insert(Rc::clone(label_name));
-                        }
-                    }
-
-                    Some(labels)
-                }
-                None => None,
-            };
-
-            let repo = Rc::new(Repo {
-                name: repo_bucket.name,
-                remote,
-                owner,
-                path: repo_bucket.path,
-                last_accessed: repo_bucket.last_accessed,
-                accessed: repo_bucket.accessed,
-                labels,
-            });
-
-            repos.push(repo);
-        }
-        repos.sort_unstable_by(|repo1, repo2| repo2.score(cfg).total_cmp(&repo1.score(cfg)));
-
-        Ok(repos)
-    }
 }
 
-/// The Database provides basic functions for querying the repository, enabling
-/// location identification and listing. It also supports updating and deleting
-/// repository data. However, changes made need to be written to disk by calling
-/// the [`Database::save`] function after the operations.
 pub struct Database<'a> {
-    repos: Vec<Rc<Repo>>,
+    cfg: &'a Config,
+
+    bucket: Bucket,
+
     path: PathBuf,
 
     /// The Database can only be operated by one process at a time, so file lock
     /// here are used here to provide protection.
     lock: FileLock,
 
-    cfg: &'a Config,
+    clean_labels: bool,
 }
 
 impl Database<'_> {
@@ -373,50 +145,42 @@ impl Database<'_> {
         let lock = FileLock::acquire(cfg, "database")?;
         let path = cfg.get_meta_dir().join("database");
         let bucket = Bucket::read(&path)?;
-        let repos = bucket.build_repos(cfg)?;
 
         Ok(Database {
-            repos,
+            cfg,
+            bucket,
             path,
             lock,
-            cfg,
+            clean_labels: false,
         })
     }
 
-    /// Locate a repository based on its name.
-    pub fn get<R, O, N>(&self, remote_name: R, owner_name: O, name: N) -> Option<Rc<Repo>>
+    pub fn get<R, O, N>(&self, remote: R, owner: O, name: N) -> Option<Repo>
     where
         R: AsRef<str>,
         O: AsRef<str>,
         N: AsRef<str>,
     {
-        self.repos.iter().find_map(|repo| {
-            if repo.remote.name.as_str() != remote_name.as_ref() {
-                return None;
-            }
-            if repo.owner.name.as_str() != owner_name.as_ref() {
-                return None;
-            }
-            if repo.name.as_str() == name.as_ref() {
-                return Some(Rc::clone(repo));
-            }
-            None
-        })
+        let (remote, remote_bucket) = self.bucket.data.get_key_value(remote.as_ref())?;
+        let (owner, owner_bucket) = remote_bucket.0.get_key_value(owner.as_ref())?;
+        let (name, repo_bucket) = owner_bucket.0.get_key_value(name.as_ref())?;
+
+        Some(self.build_repo(remote, owner, name, repo_bucket))
     }
 
     /// Similar to [`Database::get`], but returns error if the repository is not found.
-    pub fn must_get<R, O, N>(&self, remote_name: R, owner_name: O, name: N) -> Result<Rc<Repo>>
+    pub fn must_get<R, O, N>(&self, remote: R, owner: O, name: N) -> Result<Repo>
     where
         R: AsRef<str>,
         O: AsRef<str>,
         N: AsRef<str>,
     {
-        match self.get(remote_name.as_ref(), owner_name.as_ref(), name.as_ref()) {
+        match self.get(remote.as_ref(), owner.as_ref(), name.as_ref()) {
             Some(repo) => Ok(repo),
             None => bail!(
                 "repo '{}:{}/{}' not found",
-                remote_name.as_ref(),
-                owner_name.as_ref(),
+                remote.as_ref(),
+                owner.as_ref(),
                 name.as_ref()
             ),
         }
@@ -425,34 +189,28 @@ impl Database<'_> {
     /// Locate a repository using a keyword. As long as the repository name contains
     /// the keyword, it is considered a successful match. The function prioritizes
     /// matches based on the repository's score.
-    pub fn get_fuzzy<R, K>(&self, remote_name: R, keyword: K) -> Option<Rc<Repo>>
+    pub fn get_fuzzy<R, K>(&self, remote: R, keyword: K) -> Option<Repo>
     where
         R: AsRef<str>,
         K: AsRef<str>,
     {
-        self.repos.iter().find_map(|repo| {
-            if !remote_name.as_ref().is_empty() && remote_name.as_ref() != repo.remote.name.as_str()
-            {
-                return None;
-            }
-            if repo.name.as_str().contains(keyword.as_ref()) {
-                return Some(Rc::clone(repo));
-            }
-            None
-        })
+        let repos = self.scan(remote, "", |_remote, _owner, name, _bucket| {
+            Some(name.contains(keyword.as_ref()))
+        })?;
+        self.get_max_score(repos)
     }
 
     /// Similar to [`Database::get_fuzzy`], but returns error if the repository
     /// is not found.
-    pub fn must_get_fuzzy<R, K>(&self, remote_name: R, keyword: K) -> Result<Rc<Repo>>
+    pub fn must_get_fuzzy<R, K>(&self, remote: R, keyword: K) -> Result<Repo>
     where
         R: AsRef<str>,
         K: AsRef<str>,
     {
-        match self.get_fuzzy(remote_name.as_ref(), keyword.as_ref()) {
+        match self.get_fuzzy(remote.as_ref(), keyword.as_ref()) {
             Some(repo) => Ok(repo),
             None => {
-                if remote_name.as_ref().is_empty() {
+                if remote.as_ref().is_empty() {
                     bail!(
                         "cannot find repo that contains keyword '{}'",
                         keyword.as_ref()
@@ -461,7 +219,7 @@ impl Database<'_> {
                 bail!(
                     "cannot find repo that contains keyword '{}' in remote '{}'",
                     keyword.as_ref(),
-                    remote_name.as_ref()
+                    remote.as_ref()
                 );
             }
         }
@@ -477,227 +235,424 @@ impl Database<'_> {
     ///
     /// This design is intended to make the function more flexible, allowing it to
     /// achieve effects similar to `cd -` in Linux.
-    pub fn get_latest<S>(&self, remote_name: S) -> Option<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        let mut max_time = 0;
-        let mut pos = None;
-
-        for (idx, repo) in self.repos.iter().enumerate() {
-            let repo_path = repo.get_path(self.cfg);
+    pub fn get_latest(&self, remote: impl AsRef<str>) -> Option<Repo> {
+        let repos = self.scan(remote, "", |remote, owner, name, bucket| {
+            let repo_path = get_path(self.cfg, &bucket.path, remote, owner, name);
             if repo_path.eq(self.cfg.get_current_dir()) {
                 // If we are currently in the root directory of a repo, the latest
                 // method should return another repo, so the current repo will be
                 // skipped here.
-                continue;
+                return Some(false);
             }
+
             if self.cfg.get_current_dir().starts_with(&repo_path) {
                 // If we are currently in a subdirectory of a repo, latest will
                 // directly return this repo.
-                if remote_name.as_ref().is_empty()
-                    || repo.remote.name.as_str() == remote_name.as_ref()
-                {
-                    return Some(Rc::clone(repo));
-                }
+                return None;
             }
 
-            if !remote_name.as_ref().is_empty() && repo.remote.name.as_str() != remote_name.as_ref()
-            {
-                continue;
-            }
-
-            if repo.last_accessed > max_time {
-                pos = Some(idx);
-                max_time = repo.last_accessed;
-            }
-        }
-        match pos {
-            Some(idx) => Some(Rc::clone(&self.repos[idx])),
-            None => None,
-        }
+            Some(true)
+        })?;
+        repos.into_iter().max_by_key(|repo| repo.last_accessed)
     }
 
     /// Similar to `get_latest`, but returns error if the repository is not found.
-    pub fn must_get_latest<S>(&self, remote_name: S) -> Result<Rc<Repo>>
+    pub fn must_get_latest<S>(&self, remote: S) -> Result<Repo>
     where
         S: AsRef<str>,
     {
-        match self.get_latest(remote_name.as_ref()) {
+        match self.get_latest(remote.as_ref()) {
             Some(repo) => Ok(repo),
             None => {
-                if remote_name.as_ref().is_empty() {
+                if remote.as_ref().is_empty() {
                     bail!("no latest repo");
                 }
-                bail!("no latest repo in remote '{}'", remote_name.as_ref());
+                bail!("no latest repo in remote '{}'", remote.as_ref());
             }
         }
     }
 
     /// Return the repository currently being accessed.
-    pub fn get_current(&self) -> Option<Rc<Repo>> {
-        self.repos.iter().find_map(|repo| {
-            let repo_path = repo.get_path(self.cfg);
+    pub fn get_current(&self) -> Option<Repo> {
+        let repos = self.scan("", "", |remote, owner, name, bucket| {
+            let repo_path = get_path(self.cfg, &bucket.path, remote, owner, name);
             if repo_path.eq(self.cfg.get_current_dir()) {
-                return Some(Rc::clone(repo));
+                return None;
             }
-            None
-        })
+            Some(false)
+        })?;
+        repos.into_iter().next()
     }
 
     /// Return the repository currently being accessed. If not within any
     /// repository, return an error.
-    pub fn must_get_current(&self) -> Result<Rc<Repo>> {
+    pub fn must_get_current(&self) -> Result<Repo> {
         match self.get_current() {
             Some(repo) => Ok(repo),
-            None => bail!("you are not in a repository"),
+            None => bail!("you are not in a repo"),
         }
     }
 
     /// List all repositories.
-    pub fn list_all(&self, filter_labels: &Option<HashSet<String>>) -> Vec<Rc<Repo>> {
-        let mut vec = Vec::with_capacity(self.repos.len());
-        for repo in self.repos.iter() {
-            if !repo.contains_labels(filter_labels) {
-                continue;
-            }
-            vec.push(Rc::clone(repo));
-        }
-        vec
+    pub fn list_all(&self, labels: &Option<HashSet<String>>) -> Vec<Repo> {
+        let mut repos = self
+            .scan("", "", |_remote, _owner, _name, bucket| {
+                self.filter_labels(bucket, labels)
+            })
+            .unwrap_or(Vec::new());
+        self.sort_repos(&mut repos);
+        repos
     }
 
     /// List all repositories under a remote.
-    pub fn list_by_remote<S>(
+    pub fn list_by_remote(
         &self,
-        remote_name: S,
-        filter_labels: &Option<HashSet<String>>,
-    ) -> Vec<Rc<Repo>>
-    where
-        S: AsRef<str>,
-    {
-        let mut vec = Vec::with_capacity(self.repos.len());
-        for repo in self.repos.iter() {
-            if !repo.contains_labels(filter_labels) {
-                continue;
+        remote: impl AsRef<str>,
+        labels: &Option<HashSet<String>>,
+    ) -> Vec<Repo> {
+        let mut repos = self
+            .scan(remote, "", |_remote, _owner, _name, bucket| {
+                self.filter_labels(bucket, labels)
+            })
+            .unwrap_or(Vec::new());
+        self.sort_repos(&mut repos);
+        repos
+    }
+
+    /// List all owner names.
+    pub fn list_owners(&self, remote: impl AsRef<str>) -> Vec<String> {
+        (|| {
+            let remote_bucket = self.bucket.data.get(remote.as_ref())?;
+            let mut owners: Vec<String> =
+                remote_bucket.0.keys().map(|key| key.to_string()).collect();
+            owners.sort_unstable();
+            Some(owners)
+        })()
+        .unwrap_or(Vec::new())
+    }
+
+    pub fn upsert(&mut self, repo: Repo) {
+        let (remote, mut remote_bucket) = self
+            .bucket
+            .data
+            .remove_entry(repo.remote.as_ref())
+            .unwrap_or((
+                repo.remote.to_string(),
+                RemoteBucket(HashMap::with_capacity(1)),
+            ));
+
+        let (owner, mut owner_bucket) = remote_bucket
+            .0
+            .remove_entry(repo.owner.as_ref())
+            .unwrap_or((
+                repo.owner.to_string(),
+                OwnerBucket(HashMap::with_capacity(1)),
+            ));
+
+        let (name, mut repo_bucket) = owner_bucket.0.remove_entry(repo.name.as_ref()).unwrap_or((
+            repo.name.to_string(),
+            RepoBucket {
+                path: None,
+                labels: None,
+                last_accessed: 0,
+                accessed: 0,
+            },
+        ));
+
+        let labels_index = self.build_labels_index(&repo);
+        if labels_index != repo_bucket.labels {
+            repo_bucket.labels = labels_index;
+            self.clean_labels = true;
+        }
+
+        repo_bucket.path = repo.path.map(|path| path.to_string());
+        repo_bucket.last_accessed = repo.last_accessed;
+        repo_bucket.accessed = repo.accessed;
+
+        owner_bucket.0.insert(name, repo_bucket);
+        remote_bucket.0.insert(owner, owner_bucket);
+        self.bucket.data.insert(remote, remote_bucket);
+    }
+
+    pub fn remove(&mut self, repo: Repo) {
+        if let Some((remote, mut remote_bucket)) =
+            self.bucket.data.remove_entry(repo.remote.as_ref())
+        {
+            if let Some((owner, mut owner_bucket)) =
+                remote_bucket.0.remove_entry(repo.owner.as_ref())
+            {
+                if let Some(bucket) = owner_bucket.0.remove(repo.name.as_ref()) {
+                    if let Some(_) = bucket.labels {
+                        self.clean_labels = true;
+                    }
+                };
+                if !owner_bucket.0.is_empty() {
+                    remote_bucket.0.insert(owner, owner_bucket);
+                }
             }
-            if repo.remote.name.as_str() == remote_name.as_ref() {
-                vec.push(Rc::clone(repo));
+
+            if !remote_bucket.0.is_empty() {
+                self.bucket.data.insert(remote, remote_bucket);
             }
         }
-        vec
     }
 
     /// List all repositories under an owner.
     pub fn list_by_owner<R, O>(
         &self,
-        remote_name: R,
-        owner_name: O,
-        filter_labels: &Option<HashSet<String>>,
-    ) -> Vec<Rc<Repo>>
+        remote: R,
+        owner: O,
+        labels: &Option<HashSet<String>>,
+    ) -> Vec<Repo>
     where
         R: AsRef<str>,
         O: AsRef<str>,
     {
-        let mut vec = Vec::with_capacity(self.repos.len());
-        for repo in self.repos.iter() {
-            if !repo.contains_labels(filter_labels) {
-                continue;
-            }
-            if repo.remote.name.as_str() != remote_name.as_ref() {
-                continue;
-            }
-            if repo.owner.name.as_str() != owner_name.as_ref() {
-                continue;
-            }
-
-            vec.push(Rc::clone(repo));
-        }
-        vec
-    }
-
-    /// List all owner names.
-    pub fn list_owners<R>(&self, remote_name: R) -> Vec<String>
-    where
-        R: AsRef<str>,
-    {
-        let mut owners = Vec::new();
-        let mut owner_set = HashSet::new();
-        for repo in self.repos.iter() {
-            if repo.remote.name.as_str() != remote_name.as_ref() {
-                continue;
-            }
-            if let None = owner_set.get(repo.owner.name.as_str()) {
-                owner_set.insert(repo.owner.name.as_str());
-                owners.push(repo.owner.name.clone());
-            }
-        }
-        owners.sort();
-        owners
-    }
-
-    /// Add the repository to database, skip updating.
-    pub fn add(&mut self, repo: Rc<Repo>) {
-        let pos = self.position(&repo);
-        match pos {
-            Some(idx) => self.repos[idx] = repo,
-            None => self.repos.push(repo),
-        }
-    }
-
-    /// Update the repository data in the database. Call this after accessing a
-    /// repository to update its access time and count. Additionally, you can
-    /// update the repository's labels using the `labels` parameter.
-    ///
-    /// # Arguments
-    ///
-    /// * `repo` - The repository to update.
-    /// * `append_labels` - If None, do not update labels, else, append the labels
-    /// with the given labels.
-    pub fn update(&mut self, repo: Rc<Repo>, append_labels: Option<HashSet<String>>) {
-        let pos = self.position(&repo);
-        let new_repo = repo.update(self.cfg, append_labels);
-        match pos {
-            Some(idx) => self.repos[idx] = new_repo,
-            None => self.repos.push(new_repo),
-        }
-    }
-
-    /// Remove a repository from database.
-    pub fn remove(&mut self, repo: Rc<Repo>) {
-        let pos = self.position(&repo);
-        if let Some(idx) = pos {
-            self.repos.remove(idx);
-        }
-    }
-
-    /// Get the position of a repository.
-    pub fn position(&self, repo: &Rc<Repo>) -> Option<usize> {
-        let mut pos = None;
-        for (idx, item) in self.repos.iter().enumerate() {
-            if item.name.as_str() == repo.name.as_str()
-                && item.remote.name.as_str() == repo.remote.name.as_str()
-                && item.owner.name.as_str() == repo.owner.name.as_str()
-            {
-                pos = Some(idx);
-                break;
-            }
-        }
-        pos
+        let mut repos = self
+            .scan(remote, owner, |_remote, _owner, _name, bucket| {
+                self.filter_labels(bucket, labels)
+            })
+            .unwrap_or(Vec::new());
+        self.sort_repos(&mut repos);
+        repos
     }
 
     /// Save the database changes to the disk file.
     pub fn save(self) -> Result<()> {
         let Database {
-            repos,
+            mut bucket,
+            clean_labels,
             path,
             lock,
             cfg: _,
         } = self;
-        let bucket = Bucket::from_repos(repos);
+
+        if clean_labels {
+            let mut use_labels = HashSet::new();
+            for (_, remote_bucket) in bucket.data.iter() {
+                for (_, owner_bucket) in remote_bucket.0.iter() {
+                    for (_, repo_bucket) in owner_bucket.0.iter() {
+                        if let Some(labels) = repo_bucket.labels.as_ref() {
+                            use_labels.extend(labels.clone());
+                        }
+                    }
+                }
+            }
+
+            let mut to_remove = HashSet::new();
+            for (id, _) in bucket.labels.iter() {
+                if !use_labels.contains(id) {
+                    to_remove.insert(*id);
+                }
+            }
+
+            for id in to_remove {
+                bucket.labels.remove(&id);
+            }
+        }
+
         bucket.save(&path)?;
         // Drop lock to release file lock after write done.
         drop(lock);
         Ok(())
+    }
+
+    #[inline]
+    fn filter_labels(&self, bucket: &RepoBucket, labels: &Option<HashSet<String>>) -> Option<bool> {
+        if let None = labels {
+            return Some(true);
+        }
+        let labels = labels.as_ref().unwrap();
+        if labels.is_empty() {
+            return Some(true);
+        }
+
+        let repo_labels = match self.build_labels(bucket) {
+            Some(labels) => labels,
+            None => return Some(false),
+        };
+
+        for label in labels {
+            if !repo_labels.contains(label.as_str()) {
+                return Some(false);
+            }
+        }
+        Some(true)
+    }
+
+    #[inline]
+    fn get_max_score<'a>(&'a self, repos: Vec<Repo<'a>>) -> Option<Repo<'a>> {
+        repos.into_iter().max_by_key(|repo| repo.score(self.cfg))
+    }
+
+    #[inline]
+    fn sort_repos(&self, repos: &mut Vec<Repo>) {
+        repos.sort_unstable_by(|a, b| {
+            let score_a = a.score(self.cfg);
+            let score_b = b.score(self.cfg);
+            if score_a != score_b {
+                return score_b.cmp(&score_a);
+            }
+            if a.remote != b.remote {
+                return a.remote.cmp(&b.remote);
+            }
+            if a.owner != b.owner {
+                return a.owner.cmp(&b.owner);
+            }
+
+            a.name.cmp(&b.name)
+        })
+    }
+
+    #[inline]
+    fn scan<R, O, F>(&self, remote: R, owner: O, filter: F) -> Option<Vec<Repo>>
+    where
+        R: AsRef<str>,
+        O: AsRef<str>,
+        F: Fn(&String, &String, &String, &RepoBucket) -> Option<bool>,
+    {
+        if remote.as_ref().is_empty() {
+            let mut repos = Vec::new();
+            for (remote, remote_bucket) in self.bucket.data.iter() {
+                let (sub_repos, next) = self.scan_remote(remote, remote_bucket, &filter);
+                if !next {
+                    return Some(sub_repos);
+                }
+                repos.extend(sub_repos);
+            }
+            return Some(repos);
+        }
+        let (remote, remote_bucket) = self.bucket.data.get_key_value(remote.as_ref())?;
+        if owner.as_ref().is_empty() {
+            let (repos, _) = self.scan_remote(remote, remote_bucket, &filter);
+            return Some(repos);
+        }
+
+        let (owner, owner_bucket) = remote_bucket.0.get_key_value(owner.as_ref())?;
+        let (repos, _) = self.scan_owner(remote, owner, owner_bucket, &filter);
+        Some(repos)
+    }
+
+    #[inline]
+    fn scan_remote<'a, F>(
+        &'a self,
+        remote: &'a String,
+        remote_bucket: &'a RemoteBucket,
+        filter: &F,
+    ) -> (Vec<Repo<'a>>, bool)
+    where
+        F: Fn(&String, &String, &String, &RepoBucket) -> Option<bool>,
+    {
+        let mut repos = Vec::new();
+        for (owner, owner_bucket) in remote_bucket.0.iter() {
+            let (sub_repos, next) = self.scan_owner(remote, owner, owner_bucket, filter);
+            if !next {
+                return (sub_repos, false);
+            }
+            repos.extend(sub_repos);
+        }
+        (repos, true)
+    }
+
+    #[inline]
+    fn scan_owner<'a, F>(
+        &'a self,
+        remote: &'a String,
+        owner: &'a String,
+        owner_bucket: &'a OwnerBucket,
+        filter: &F,
+    ) -> (Vec<Repo<'a>>, bool)
+    where
+        F: Fn(&String, &String, &String, &RepoBucket) -> Option<bool>,
+    {
+        let mut repos = Vec::new();
+        for (name, repo_bucket) in owner_bucket.0.iter() {
+            match filter(remote, owner, name, repo_bucket) {
+                Some(ok) => {
+                    if !ok {
+                        continue;
+                    }
+                }
+                None => {
+                    return (
+                        vec![self.build_repo(remote, owner, name, repo_bucket)],
+                        false,
+                    );
+                }
+            }
+            let repo = self.build_repo(remote, owner, name, repo_bucket);
+            repos.push(repo);
+        }
+        (repos, true)
+    }
+
+    #[inline]
+    fn build_repo<'a>(
+        &'a self,
+        remote: &'a String,
+        owner: &'a String,
+        name: &'a String,
+        bucket: &'a RepoBucket,
+    ) -> Repo<'a> {
+        Repo {
+            remote: Cow::Borrowed(remote),
+            owner: Cow::Borrowed(owner),
+            name: Cow::Borrowed(name),
+
+            path: bucket
+                .path
+                .as_ref()
+                .map(|path| Cow::Borrowed(path.as_str())),
+
+            labels: self.build_labels(bucket),
+
+            last_accessed: bucket.last_accessed,
+            accessed: bucket.accessed,
+
+            remote_cfg: self.cfg.get_remote_or_default(remote),
+            owner_cfg: self.cfg.get_owner(remote, owner),
+        }
+    }
+
+    #[inline]
+    fn build_labels<'a>(&'a self, bucket: &'a RepoBucket) -> Option<HashSet<Cow<'a, str>>> {
+        let labels_index = bucket.labels.as_ref()?;
+        let mut labels = HashSet::with_capacity(labels_index.len());
+        for id in labels_index {
+            let label = match self.bucket.labels.get(id) {
+                Some(label) => label,
+                None => continue,
+            };
+            labels.insert(Cow::Borrowed(label.as_str()));
+        }
+        Some(labels)
+    }
+
+    fn build_labels_index(&mut self, repo: &Repo) -> Option<HashSet<u64>> {
+        let labels = repo.labels.as_ref()?;
+
+        let label_name_map: HashMap<_, _> = self
+            .bucket
+            .labels
+            .iter()
+            .map(|(id, name)| (name.to_string(), *id))
+            .collect();
+
+        let mut index = HashSet::with_capacity(labels.len());
+        for label in labels {
+            let id = label_name_map
+                .get(label.as_ref())
+                .map(|id| *id)
+                .unwrap_or_else(|| {
+                    let id = self.bucket.label_index;
+                    self.bucket.label_index += 1;
+                    self.bucket.labels.insert(id, label.to_string());
+                    id
+                });
+            index.insert(id);
+        }
+
+        Some(index)
     }
 }
 
@@ -719,7 +674,7 @@ pub trait ProviderBuilder {
     fn build_provider(
         &self,
         cfg: &Config,
-        remote: &Remote,
+        remote_cfg: &RemoteConfig,
         force: bool,
     ) -> Result<Box<dyn Provider>>;
 }
@@ -731,11 +686,11 @@ impl ProviderBuilder for DefaultProviderBuilder {
     fn build_provider(
         &self,
         cfg: &Config,
-        remote: &Remote,
+        remote_cfg: &RemoteConfig,
         force: bool,
     ) -> Result<Box<dyn Provider>> {
         use crate::api::build_provider;
-        build_provider(cfg, remote, force)
+        build_provider(cfg, remote_cfg, force)
     }
 }
 
@@ -865,15 +820,13 @@ impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
     }
 
     /// Search repos from vec
-    fn search_from_vec(&self, repos: &Vec<Rc<Repo>>, level: &NameLevel) -> Result<Rc<Repo>> {
+    fn search_from_vec<'a>(&self, mut repos: Vec<Repo<'a>>, level: &NameLevel) -> Result<Repo<'a>> {
         let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         let idx = self.terminal_helper.search(&items)?;
-        let result = match repos.get(idx) {
-            Some(repo) => repo,
-            None => bail!("internal error, terminal_helper returned an invalid index {idx}"),
-        };
-
-        Ok(Rc::clone(result))
+        if let None = repos.get(idx) {
+            bail!("internal error, terminal_helper returned an invalid index {idx}");
+        }
+        Ok(repos.remove(idx))
     }
 }
 
@@ -929,8 +882,6 @@ pub struct Selector<'a, T: TerminalHelper, P: ProviderBuilder> {
     head: &'a str,
     query: &'a str,
 
-    db: &'a Database<'a>,
-
     opts: SelectOptions<T, P>,
 }
 
@@ -938,23 +889,12 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     const GITHUB_DOMAIN: &'static str = "github.com";
 
     /// Create a new [`Selector`] object.
-    pub fn new(
-        db: &'a Database<'a>,
-        head: &'a str,
-        query: &'a str,
-        opts: SelectOptions<T, P>,
-    ) -> Selector<'a, T, P> {
-        Selector {
-            head,
-            query,
-            db,
-            opts,
-        }
+    pub fn new(head: &'a str, query: &'a str, opts: SelectOptions<T, P>) -> Selector<'a, T, P> {
+        Selector { head, query, opts }
     }
 
     /// Similar to [`Selector::new`], but use different type for `head` and `query`.
     pub fn from_args(
-        db: &'a Database<'a>,
         head: &'a Option<String>,
         query: &'a Option<String>,
         opts: SelectOptions<T, P>,
@@ -968,13 +908,13 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             None => "",
         };
 
-        Self::new(db, head, query, opts)
+        Self::new(head, query, opts)
     }
 
     /// Similar to [`Selector::one`], the difference is that an error is returned
     /// if the repository does not exist in the database.
-    pub fn must_one(&self) -> Result<Rc<Repo>> {
-        let (repo, exists) = self.one()?;
+    pub fn must_one<'b>(&self, db: &'b Database) -> Result<Repo<'b>> {
+        let (repo, exists) = self.one(db)?;
         if !exists {
             bail!("could not find matched repo");
         }
@@ -992,14 +932,13 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     /// raise an error directly.
     ///
     /// See also: [`Selector::must_one`]
-    pub fn one(&self) -> Result<(Rc<Repo>, bool)> {
+    pub fn one<'b>(&self, db: &'b Database) -> Result<(Repo<'b>, bool)> {
         if self.head.is_empty() {
             let repo = match self.opts.mode {
-                SelectMode::Fuzzy => self.db.must_get_latest(""),
-                SelectMode::Search => self.opts.search_from_vec(
-                    &self.db.list_all(&self.opts.filter_labels),
-                    &NameLevel::Remote,
-                ),
+                SelectMode::Fuzzy => db.must_get_latest(""),
+                SelectMode::Search => self
+                    .opts
+                    .search_from_vec(db.list_all(&self.opts.filter_labels), &NameLevel::Remote),
             }?;
             return Ok((repo, true));
         }
@@ -1041,32 +980,32 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             };
 
             return match select_type {
-                SelectOneType::Url(url) => self.one_from_url(url),
-                SelectOneType::Ssh(ssh) => self.one_from_ssh(ssh),
-                SelectOneType::Direct => self.one_from_head(),
+                SelectOneType::Url(url) => self.one_from_url(db, url),
+                SelectOneType::Ssh(ssh) => self.one_from_ssh(db, ssh),
+                SelectOneType::Direct => self.one_from_head(db),
             };
         }
 
-        self.one_from_owner()
+        self.one_from_owner(db)
     }
 
     /// Select one repository from a url.
-    fn one_from_url(&self, url: Url) -> Result<(Rc<Repo>, bool)> {
+    fn one_from_url<'b>(&self, db: &'b Database, url: Url) -> Result<(Repo<'b>, bool)> {
         let domain = match url.domain() {
             Some(domain) => domain,
             None => bail!("missing domain in url '{url}'"),
         };
-        let remote_names = self.db.cfg.list_remote_names();
+        let remotes = db.cfg.list_remotes();
 
-        let mut target_remote_name: Option<String> = None;
+        let mut target_remote: Option<String> = None;
         let mut is_gitlab = false;
-        for name in remote_names {
+        for remote in remotes {
             // We match the domain of the URL based on the clone domain of the
             // remote. This is because in many cases, the provided URL is a clone
             // address, and even for access addresses, most of the time their
             // domains are consistent with the clone.
             // TODO: Provide another match domain in config?
-            let remote_cfg = self.db.cfg.must_get_remote(&name)?;
+            let remote_cfg = db.cfg.must_get_remote(&remote)?;
             let remote_domain = match remote_cfg.clone.as_ref() {
                 Some(domain) => domain,
                 None => continue,
@@ -1082,11 +1021,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             if remote_domain != Self::GITHUB_DOMAIN {
                 is_gitlab = true;
             }
-            target_remote_name = Some(name);
+            target_remote = Some(remote);
             break;
         }
 
-        let remote_name = match target_remote_name {
+        let remote = match target_remote {
             Some(remote) => remote,
             None => bail!("could not find remote whose clone domain is '{domain}' in url"),
         };
@@ -1133,14 +1072,14 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let path = segs.join("/");
         let (owner, name) = parse_owner(&path);
 
-        match self.db.get(&remote_name, &owner, &name) {
+        match db.get(&remote, &owner, &name) {
             Some(repo) => Ok((repo, true)),
-            None => self.new_repo(&remote_name, &owner, &name),
+            None => self.new_repo(db, &remote, &owner, &name),
         }
     }
 
     /// Select one repository from a ssh url.
-    fn one_from_ssh(&self, ssh: &str) -> Result<(Rc<Repo>, bool)> {
+    fn one_from_ssh<'b>(&self, db: &'b Database, ssh: &str) -> Result<(Repo<'b>, bool)> {
         // Parsing SSH is done in a clever way by reusing the code for parsing
         // URLs. The approach involves converting the SSH statement to a URL and
         // then calling the URL parsing code.
@@ -1159,43 +1098,39 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             )
         })?;
 
-        self.one_from_url(url)
+        self.one_from_url(db, url)
             .with_context(|| format!("select from ssh '{ssh}'"))
     }
 
     /// Select one repository from a head statement.
-    fn one_from_head(&self) -> Result<(Rc<Repo>, bool)> {
+    fn one_from_head<'b>(&self, db: &'b Database) -> Result<(Repo<'b>, bool)> {
         // Treating `head` as a remote (with higher priority) or fuzzy matching
         // keyword, we will call different functions from the database to retrieve
         // the information.
-        match self.db.cfg.get_remote(self.head) {
+        match db.cfg.get_remote(self.head) {
             Some(_) => {
                 let repo = match self.opts.mode {
                     SelectMode::Search => self.opts.search_from_vec(
-                        &self.db.list_by_remote(self.head, &self.opts.filter_labels),
+                        db.list_by_remote(self.head, &self.opts.filter_labels),
                         &NameLevel::Owner,
                     ),
-                    SelectMode::Fuzzy => self.db.must_get_latest(self.head),
+                    SelectMode::Fuzzy => db.must_get_latest(self.head),
                 }?;
                 Ok((repo, true))
             }
             None => {
-                let repo = self.db.must_get_fuzzy("", self.head)?;
+                let repo = db.must_get_fuzzy("", self.head)?;
                 Ok((repo, true))
             }
         }
     }
 
     /// Select one repository from owner.
-    fn one_from_owner(&self) -> Result<(Rc<Repo>, bool)> {
+    fn one_from_owner<'b>(&self, db: &'b Database) -> Result<(Repo<'b>, bool)> {
         // Up to this point, with the `query` provided, indicating that `head`
         // represents a remote, we can directly retrieve the remote configuration.
-        let remote_name = self.head;
-        let remote_cfg = self.db.cfg.must_get_remote(remote_name)?;
-        let remote = Remote {
-            name: remote_name.to_string(),
-            cfg: remote_cfg.clone(),
-        };
+        let remote = self.head;
+        let remote_cfg = db.cfg.must_get_remote(remote)?;
 
         // A special syntax: If `query` ends with "/", it indicates a search
         // within the owner.
@@ -1208,26 +1143,24 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
 
             if search_local {
                 let repo = self.opts.search_from_vec(
-                    &self
-                        .db
-                        .list_by_owner(remote_name, owner, &self.opts.filter_labels),
+                    db.list_by_owner(remote, owner, &self.opts.filter_labels),
                     &NameLevel::Name,
                 )?;
                 return Ok((repo, true));
             }
 
             let provider = self.opts.provider_builder.build_provider(
-                &self.db.cfg,
-                &remote,
+                &db.cfg,
+                &remote_cfg,
                 self.opts.force_no_cache,
             )?;
             let mut api_repos = provider.list_repos(owner)?;
 
             if self.opts.force_remote {
                 // force remote, don't show exists repos
-                let owner_repos = self.db.list_by_owner(remote_name, owner, &None);
+                let owner_repos = db.list_by_owner(remote, owner, &None);
                 let repos_set: HashSet<&str> =
-                    owner_repos.iter().map(|repo| repo.name.as_str()).collect();
+                    owner_repos.iter().map(|repo| repo.name.as_ref()).collect();
                 api_repos = api_repos
                     .into_iter()
                     .filter(|name| !repos_set.contains(name.as_str()))
@@ -1236,7 +1169,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
 
             let idx = self.opts.terminal_helper.search(&api_repos)?;
             let name = &api_repos[idx];
-            return self.get_or_create_repo(remote_name, owner, name);
+            return self.get_or_create_repo(db, remote, owner, name);
         }
 
         // At this point, there are still two potential branching scenarios:
@@ -1248,22 +1181,26 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let (owner, name) = parse_owner(self.query);
         if owner.is_empty() {
             return match self.opts.mode {
-                SelectMode::Search => self.one_from_provider(&remote),
+                SelectMode::Search => self.one_from_provider(db, &remote_cfg),
                 SelectMode::Fuzzy => {
-                    let repo = self.db.must_get_fuzzy(remote_name, self.query)?;
+                    let repo = db.must_get_fuzzy(remote, self.query)?;
                     Ok((repo, true))
                 }
             };
         }
 
-        self.get_or_create_repo(remote_name, &owner, &name)
+        self.get_or_create_repo(db, remote, &owner, &name)
     }
 
     /// Select one repository from remote provider.
-    fn one_from_provider(&self, remote: &Remote) -> Result<(Rc<Repo>, bool)> {
+    fn one_from_provider<'b>(
+        &self,
+        db: &'b Database,
+        remote_cfg: &RemoteConfig,
+    ) -> Result<(Repo<'b>, bool)> {
         let provider = self.opts.provider_builder.build_provider(
-            &self.db.cfg,
-            remote,
+            &db.cfg,
+            remote_cfg,
             self.opts.force_no_cache,
         )?;
 
@@ -1280,45 +1217,48 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             bail!("invalid repo name '{result}' from remote");
         }
 
-        self.get_or_create_repo(&remote.name, &owner, &name)
+        self.get_or_create_repo(db, remote_cfg.get_name(), &owner, &name)
     }
 
     /// Creating or retrieving a repository, the second return value indicates
     /// whether the repository exists in the Database.
-    fn get_or_create_repo<S, O, N>(
+    fn get_or_create_repo<'b, S, O, N>(
         &self,
-        remote_name: S,
-        owner_name: O,
+        db: &'b Database,
+        remote: S,
+        owner: O,
         name: N,
-    ) -> Result<(Rc<Repo>, bool)>
+    ) -> Result<(Repo<'b>, bool)>
     where
         S: AsRef<str>,
         O: AsRef<str>,
         N: AsRef<str>,
     {
-        match self
-            .db
-            .get(remote_name.as_ref(), owner_name.as_ref(), name.as_ref())
-        {
+        match db.get(remote.as_ref(), owner.as_ref(), name.as_ref()) {
             Some(repo) => Ok((repo, true)),
-            None => self.new_repo(remote_name, owner_name, name),
+            None => self.new_repo(db, remote, owner, name),
         }
     }
 
     /// Create a new repository object.
-    fn new_repo<S, O, N>(&self, remote_name: S, owner_name: O, name: N) -> Result<(Rc<Repo>, bool)>
+    fn new_repo<'b, S, O, N>(
+        &self,
+        db: &'b Database,
+        remote: S,
+        owner: O,
+        name: N,
+    ) -> Result<(Repo<'b>, bool)>
     where
         S: AsRef<str>,
         O: AsRef<str>,
         N: AsRef<str>,
     {
         let repo = Repo::new(
-            self.db.cfg,
-            remote_name,
-            owner_name,
-            name,
+            db.cfg,
+            Cow::Owned(remote.as_ref().to_string()),
+            Cow::Owned(owner.as_ref().to_string()),
+            Cow::Owned(name.as_ref().to_string()),
             self.opts.repo_path.clone(),
-            &None,
         )?;
         Ok((repo, false))
     }
@@ -1331,14 +1271,14 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     /// a suggested [`NameLevel`] for display.
     /// If you want to display the list of repositories, use this [`NameLevel`] to
     /// call [`Repo::to_string`].
-    pub fn many_local(&self) -> Result<(Vec<Rc<Repo>>, NameLevel)> {
-        let (repos, level) = self.many_local_raw()?;
+    pub fn many_local<'b>(&self, db: &'b Database) -> Result<(Vec<Repo<'b>>, NameLevel)> {
+        let (repos, level) = self.many_local_raw(db)?;
         if self.opts.many_edit {
             let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
-            let items = self.opts.terminal_helper.edit(self.db.cfg, items)?;
+            let items = self.opts.terminal_helper.edit(db.cfg, items)?;
             let items_set: HashSet<String> = items.into_iter().collect();
 
-            let repos: Vec<Rc<Repo>> = repos
+            let repos: Vec<Repo> = repos
                 .into_iter()
                 .filter(|repo| items_set.contains(&repo.to_string(&level)))
                 .collect();
@@ -1350,23 +1290,23 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     }
 
     /// The same as [`Selector::many_local`], without editor filtering.
-    fn many_local_raw(&self) -> Result<(Vec<Rc<Repo>>, NameLevel)> {
+    fn many_local_raw<'b>(&self, db: &'b Database) -> Result<(Vec<Repo<'b>>, NameLevel)> {
         if self.head.is_empty() {
             // List all repositories.
-            let repos = self.db.list_all(&self.opts.filter_labels);
+            let repos = db.list_all(&self.opts.filter_labels);
             return Ok((repos, NameLevel::Remote));
         }
 
         if self.query.is_empty() {
             // If `head` is the remote name, select all repositories under that
             // remote; otherwise, perform a fuzzy search.
-            return match self.db.cfg.get_remote(self.head) {
+            return match db.cfg.get_remote(self.head) {
                 Some(_) => {
-                    let repos = self.db.list_by_remote(self.head, &self.opts.filter_labels);
+                    let repos = db.list_by_remote(self.head, &self.opts.filter_labels);
                     Ok((repos, NameLevel::Owner))
                 }
                 None => {
-                    let repo = self.db.must_get_fuzzy("", self.head)?;
+                    let repo = db.must_get_fuzzy("", self.head)?;
                     Ok((vec![repo], NameLevel::Owner))
                 }
             };
@@ -1376,27 +1316,22 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         // selecting one. Adding "/" after the query indicates selecting the entire
         // owner, and not adding it uses fuzzy matching. The difference from
         // selecting one is that there is no search performed here.
-        let remote_name = self.head;
-        let remote_cfg = self.db.cfg.must_get_remote(remote_name)?;
-        let remote = Remote {
-            name: remote_name.to_string(),
-            cfg: remote_cfg.clone(),
-        };
+        let remote = self.head;
+        let _ = db.cfg.must_get_remote(remote)?;
 
         if self.query.ends_with("/") {
             let owner = self.query.strip_suffix("/").unwrap();
             return Ok((
-                self.db
-                    .list_by_owner(remote.name.as_str(), owner, &self.opts.filter_labels),
+                db.list_by_owner(remote, owner, &self.opts.filter_labels),
                 NameLevel::Name,
             ));
         }
 
         let (owner, name) = parse_owner(self.query);
         let repo = if owner.is_empty() {
-            self.db.must_get_fuzzy(&remote.name, &name)?
+            db.must_get_fuzzy(remote, &name)?
         } else {
-            self.db.must_get(&remote.name, &owner, &name)?
+            db.must_get(remote, &owner, &name)?
         };
 
         Ok((vec![repo], NameLevel::Name))
@@ -1409,55 +1344,48 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     /// - [`Remote`]: The remote object being searched.
     /// - String: The owner name being searched.
     /// - Vec<String>: The search results.
-    pub fn many_remote(&self) -> Result<(Remote, String, Vec<String>)> {
-        let (remote, owner, names) = self.many_remote_raw()?;
+    pub fn many_remote(&self, db: &Database) -> Result<(RemoteConfig, String, Vec<String>)> {
+        let (remote_cfg, owner, names) = self.many_remote_raw(db)?;
         if self.opts.many_edit {
-            let names = self.opts.terminal_helper.edit(self.db.cfg, names.clone())?;
-            return Ok((remote, owner, names));
+            let names = self.opts.terminal_helper.edit(db.cfg, names.clone())?;
+            return Ok((remote_cfg, owner, names));
         }
 
-        Ok((remote, owner, names))
+        Ok((remote_cfg, owner, names))
     }
 
     /// The same as [`Selector::many_local`], without editor filtering.
-    fn many_remote_raw(&self) -> Result<(Remote, String, Vec<String>)> {
+    fn many_remote_raw(&self, db: &Database) -> Result<(RemoteConfig, String, Vec<String>)> {
         if self.head.is_empty() {
             bail!("internal error, when select many from provider, the head cannot be empty");
         }
 
-        let remote_cfg = self.db.cfg.must_get_remote(self.head)?;
-        let remote = Remote {
-            name: self.head.to_string(),
-            cfg: remote_cfg.clone(),
-        };
+        let remote = self.head;
+        let remote_cfg = db.cfg.must_get_remote(self.head)?;
+        let remote_cfg = remote_cfg.into_owned();
 
         let (owner, name) = parse_owner(self.query);
         if !owner.is_empty() && !name.is_empty() {
-            return Ok((remote, owner, vec![self.query.to_string()]));
+            return Ok((remote_cfg, owner, vec![self.query.to_string()]));
         }
 
-        let owner = match self.query.strip_suffix("/") {
-            Some(owner) => owner,
-            None => self.query,
-        };
+        let owner = self.query.strip_suffix("/").unwrap_or_else(|| self.query);
 
         let provider = self.opts.provider_builder.build_provider(
-            self.db.cfg,
-            &remote,
+            db.cfg,
+            &remote_cfg,
             self.opts.force_no_cache,
         )?;
         let items = provider.list_repos(owner)?;
 
-        let attached = self
-            .db
-            .list_by_owner(remote.name.as_str(), owner, &self.opts.filter_labels);
-        let attached_set: HashSet<&str> = attached.iter().map(|repo| repo.name.as_str()).collect();
+        let attached = db.list_by_owner(remote, owner, &self.opts.filter_labels);
+        let attached_set: HashSet<&str> = attached.iter().map(|repo| repo.name.as_ref()).collect();
 
         let names: Vec<_> = items
             .into_iter()
             .filter(|name| !attached_set.contains(name.as_str()))
             .collect();
-        Ok((remote, owner.to_string(), names))
+        Ok((remote_cfg, owner.to_string(), names))
     }
 }
 
@@ -1489,235 +1417,94 @@ pub fn parse_owner(path: impl AsRef<str>) -> (String, String) {
 }
 
 #[cfg(test)]
-mod bucket_tests {
+pub mod database_tests {
     use crate::config::config_tests;
     use crate::repo::database::*;
-    use crate::{hashset, vec_strings};
+    use crate::{hashset, hashset_strings};
 
-    fn get_expect_bucket() -> Bucket {
-        Bucket {
-            remotes: vec_strings!["github", "gitlab"],
-            owners: vec_strings!["fioncat", "kubernetes", "test"],
-            labels: vec_strings!["pin", "sync"],
-            repos: vec![
-                RepoBucket {
-                    remote: 0,
-                    owner: 0,
-                    name: String::from("roxide"),
-                    accessed: 12.0,
-                    last_accessed: 12,
-                    path: None,
-                    labels: Some(hashset![0]),
-                },
-                RepoBucket {
-                    remote: 0,
-                    owner: 0,
-                    name: String::from("spacenvim"),
-                    accessed: 11.0,
-                    last_accessed: 11,
-                    path: None,
-                    labels: Some(hashset![0]),
-                },
-                RepoBucket {
-                    remote: 0,
-                    owner: 1,
-                    name: String::from("kubernetes"),
-                    accessed: 10.0,
-                    last_accessed: 10,
-                    path: None,
-                    labels: None,
-                },
-                RepoBucket {
-                    remote: 1,
-                    owner: 2,
-                    name: String::from("test-repo"),
-                    accessed: 9.0,
-                    last_accessed: 9,
-                    path: None,
-                    labels: Some(hashset![1]),
-                },
-            ],
+    fn new_test_repo<'a>(
+        cfg: &'a Config,
+        remote: &'static str,
+        owner: &'static str,
+        name: &'static str,
+        labels: Option<Vec<&'static str>>,
+    ) -> Repo<'a> {
+        let labels = match labels {
+            Some(labels) => Some(
+                labels
+                    .into_iter()
+                    .map(|label| Cow::Borrowed(label))
+                    .collect(),
+            ),
+            None => None,
+        };
+        Repo {
+            remote: Cow::Borrowed(remote),
+            owner: Cow::Borrowed(owner),
+            name: Cow::Borrowed(name),
+            last_accessed: 0,
+            accessed: 0,
+
+            remote_cfg: cfg.get_remote_or_default(remote),
+            owner_cfg: cfg.get_owner(remote, owner),
+
+            labels,
+            path: None,
         }
     }
 
-    fn get_expect_repos(cfg: &Config) -> Vec<Rc<Repo>> {
-        let github_remote = Rc::new(Remote {
-            name: format!("github"),
-            cfg: cfg.get_remote("github").unwrap().clone(),
-        });
-        let gitlab_remote = Rc::new(Remote {
-            name: format!("gitlab"),
-            cfg: cfg.get_remote("gitlab").unwrap().clone(),
-        });
-        let fioncat_owner = Rc::new(Owner {
-            name: format!("fioncat"),
-            remote: Rc::clone(&github_remote),
-            cfg: Some(cfg.get_owner("github", "fioncat").unwrap().clone()),
-        });
-        let kubernetes_owner = Rc::new(Owner {
-            name: format!("kubernetes"),
-            remote: Rc::clone(&github_remote),
-            cfg: Some(cfg.get_owner("github", "kubernetes").unwrap().clone()),
-        });
-        let test_owner = Rc::new(Owner {
-            name: format!("test"),
-            remote: Rc::clone(&gitlab_remote),
-            cfg: Some(cfg.get_owner("gitlab", "test").unwrap().clone()),
-        });
-
-        let pin_label = Rc::new(String::from("pin"));
-        let sync_label = Rc::new(String::from("sync"));
+    pub fn get_test_repos(cfg: &Config) -> Vec<Repo> {
         vec![
-            Rc::new(Repo {
-                name: String::from("roxide"),
-                remote: Rc::clone(&github_remote),
-                owner: Rc::clone(&fioncat_owner),
-                path: None,
-                accessed: 12.0,
-                last_accessed: 12,
-                labels: Some(hashset![Rc::clone(&pin_label)]),
-            }),
-            Rc::new(Repo {
-                name: String::from("spacenvim"),
-                remote: Rc::clone(&github_remote),
-                owner: Rc::clone(&fioncat_owner),
-                path: None,
-                accessed: 11.0,
-                last_accessed: 11,
-                labels: Some(hashset![pin_label]),
-            }),
-            Rc::new(Repo {
-                name: String::from("kubernetes"),
-                remote: Rc::clone(&github_remote),
-                owner: Rc::clone(&kubernetes_owner),
-                path: None,
-                accessed: 10.0,
-                last_accessed: 10,
-                labels: None,
-            }),
-            Rc::new(Repo {
-                name: String::from("test-repo"),
-                remote: Rc::clone(&gitlab_remote),
-                owner: Rc::clone(&test_owner),
-                path: None,
-                accessed: 9.0,
-                last_accessed: 9,
-                labels: Some(hashset![sync_label]),
-            }),
-        ]
-    }
-
-    #[test]
-    fn test_bucket_from() {
-        let cfg = config_tests::load_test_config("repo_bucket_from");
-
-        let expect_bucket = get_expect_bucket();
-        let repos = get_expect_repos(&cfg);
-
-        let bucket = Bucket::from_repos(repos);
-        assert_eq!(expect_bucket, bucket);
-    }
-
-    #[test]
-    fn test_bucket_build() {
-        let cfg = config_tests::load_test_config("repo_bucket_build");
-
-        let expect_repos = get_expect_repos(&cfg);
-
-        let bucket = get_expect_bucket();
-        let repos = bucket.build_repos(&cfg).unwrap();
-
-        assert_eq!(expect_repos, repos);
-    }
-
-    #[test]
-    fn test_bucket_convert() {
-        let cfg = config_tests::load_test_config("repo_bucket_convert");
-
-        let expect_repos = get_expect_repos(&cfg);
-        let repos = get_expect_repos(&cfg);
-
-        let bucket = Bucket::from_repos(repos);
-        let repos = bucket.build_repos(&cfg).unwrap();
-
-        assert_eq!(expect_repos, repos);
-    }
-}
-
-#[cfg(test)]
-pub mod database_tests {
-    use crate::config::config_tests;
-    use crate::hashset_strings;
-    use crate::repo::database::*;
-
-    pub fn get_test_repos(cfg: &Config) -> Vec<Rc<Repo>> {
-        let mark_labels = Some(hashset_strings!["mark"]);
-        vec![
-            Repo::new(cfg, "github", "fioncat", "csync", None, &mark_labels).unwrap(),
-            Repo::new(cfg, "github", "fioncat", "fioncat", None, &None).unwrap(),
-            Repo::new(cfg, "github", "fioncat", "dotfiles", None, &None).unwrap(),
-            Repo::new(
+            new_test_repo(cfg, "github", "fioncat", "csync", Some(vec!["sync", "pin"])),
+            new_test_repo(cfg, "github", "fioncat", "fioncat", Some(vec!["sync"])),
+            new_test_repo(cfg, "github", "fioncat", "dotfiles", Some(vec!["sync"])),
+            new_test_repo(
                 cfg,
                 "github",
                 "kubernetes",
                 "kubernetes",
-                None,
-                &mark_labels,
-            )
-            .unwrap(),
-            Repo::new(cfg, "github", "kubernetes", "kube-proxy", None, &None).unwrap(),
-            Repo::new(cfg, "github", "kubernetes", "kubelet", None, &None).unwrap(),
-            Repo::new(cfg, "github", "kubernetes", "kubectl", None, &None).unwrap(),
-            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-01", None, &None).unwrap(),
-            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-02", None, &None).unwrap(),
-            Repo::new(cfg, "gitlab", "my-owner-01", "my-repo-03", None, &None).unwrap(),
-            Repo::new(cfg, "gitlab", "my-owner-02", "my-repo-01", None, &None).unwrap(),
+                Some(vec!["mark", "sync"]),
+            ),
+            new_test_repo(cfg, "github", "kubernetes", "kube-proxy", None),
+            new_test_repo(cfg, "github", "kubernetes", "kubelet", None),
+            new_test_repo(cfg, "github", "kubernetes", "kubectl", Some(vec!["mark"])),
+            new_test_repo(
+                cfg,
+                "gitlab",
+                "my-owner-01",
+                "my-repo-01",
+                Some(vec!["sync"]),
+            ),
+            new_test_repo(
+                cfg,
+                "gitlab",
+                "my-owner-01",
+                "my-repo-02",
+                Some(vec!["mark"]),
+            ),
+            new_test_repo(cfg, "gitlab", "my-owner-01", "my-repo-03", None),
+            new_test_repo(cfg, "gitlab", "my-owner-02", "my-repo-01", None),
         ]
-    }
-
-    fn repos_as_strings(repos: &Vec<Rc<Repo>>) -> Vec<String> {
-        let mut items: Vec<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
-        items.sort();
-        items
-    }
-
-    fn repos_labels_as_strings(repos: &Vec<Rc<Repo>>, label: &str) -> Vec<String> {
-        let repos: Vec<_> = repos
-            .iter()
-            .filter_map(|repo| match repo.labels.as_ref() {
-                Some(labels) => {
-                    if labels.contains(&Rc::new(String::from(label))) {
-                        Some(Rc::clone(repo))
-                    } else {
-                        None
-                    }
-                }
-                None => None,
-            })
-            .collect();
-        repos_as_strings(&repos)
     }
 
     #[test]
     fn test_load() {
         let cfg = config_tests::load_test_config("database/load");
         let repos = get_test_repos(&cfg);
-
-        let mut expect_items: Vec<String> =
-            repos.iter().map(|repo| repo.name_with_labels()).collect();
-        expect_items.sort();
+        let mut expect = repos.clone();
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
+        db.sort_repos(&mut expect);
         db.save().unwrap();
 
         let db = Database::load(&cfg).unwrap();
         let repos = db.list_all(&None);
 
-        assert_eq!(expect_items, repos_as_strings(&repos));
+        assert_eq!(repos, expect);
     }
 
     #[test]
@@ -1725,149 +1512,250 @@ pub mod database_tests {
         let cfg = config_tests::load_test_config("database/get");
         let repos = get_test_repos(&cfg);
 
-        let expect_repos = repos.clone();
-
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         assert_eq!(
-            db.get("github", "fioncat", "csync")
-                .unwrap()
-                .name_with_labels()
-                .as_str(),
-            "github:fioncat/csync@mark,pin,sync"
+            db.get("github", "fioncat", "csync").unwrap(),
+            new_test_repo(
+                &cfg,
+                "github",
+                "fioncat",
+                "csync",
+                Some(vec!["sync", "pin"])
+            )
         );
+        assert_eq!(db.get("github", "fioncat", "ghost"), None);
         assert_eq!(
-            db.get("gitlab", "my-owner-01", "my-repo-01")
-                .unwrap()
-                .name_with_labels()
-                .as_str(),
-            "gitlab:my-owner-01/my-repo-01"
+            db.get("gitlab", "my-owner-01", "my-repo-02").unwrap(),
+            new_test_repo(
+                &cfg,
+                "gitlab",
+                "my-owner-01",
+                "my-repo-02",
+                Some(vec!["mark"])
+            )
         );
-        assert_eq!(db.get("gitlab", "my-owner-01", "my-repo"), None);
 
-        for expect_repo in expect_repos {
-            let repo = db
-                .get(
-                    expect_repo.remote.name.as_str(),
-                    expect_repo.owner.name.as_str(),
-                    expect_repo.name.as_str(),
-                )
-                .unwrap();
-            assert_eq!(repo.name_with_labels(), expect_repo.name_with_labels());
-        }
+        db.save().unwrap();
     }
 
     #[test]
-    fn test_list_all() {
-        let cfg = config_tests::load_test_config("database/list_all");
+    fn test_fuzzy() {
+        let cfg = config_tests::load_test_config("database/fuzzy");
         let repos = get_test_repos(&cfg);
-
-        let expect = repos_as_strings(&repos);
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
-        let repos = db.list_all(&None);
-        assert_eq!(repos_as_strings(&repos), expect);
+        assert_eq!(
+            db.get_fuzzy("", "dot").unwrap(),
+            new_test_repo(&cfg, "github", "fioncat", "dotfiles", Some(vec!["sync"]))
+        );
+        assert_eq!(db.get_fuzzy("gitlab", "dot"), None);
+
+        let mut update_repo = new_test_repo(&cfg, "github", "kubernetes", "kubectl", None);
+        update_repo.accessed = 100; // Make this repo the highest score
+        db.upsert(update_repo.clone());
+        assert_eq!(db.get_fuzzy("", "kube").unwrap(), update_repo);
     }
 
     #[test]
-    fn test_list_labels() {
-        let cfg = config_tests::load_test_config("database/list_labels");
+    fn test_latest() {
+        let cfg = config_tests::load_test_config("database/latest");
         let repos = get_test_repos(&cfg);
-
-        let expect_pin = repos_labels_as_strings(&repos, "pin");
-        let expect_sync = repos_labels_as_strings(&repos, "sync");
-        let expect_huge = repos_labels_as_strings(&repos, "huge");
-        let expect_mark = repos_labels_as_strings(&repos, "mark");
-        let expect_none = repos_labels_as_strings(&repos, "none");
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
-        assert_eq!(
-            repos_as_strings(&db.list_all(&Some(hashset_strings!["pin"]))),
-            expect_pin
-        );
-        assert_eq!(
-            repos_as_strings(&db.list_all(&Some(hashset_strings!["sync"]))),
-            expect_sync
-        );
-        assert_eq!(
-            repos_as_strings(&db.list_all(&Some(hashset_strings!["huge"]))),
-            expect_huge
-        );
-        assert_eq!(
-            repos_as_strings(&db.list_all(&Some(hashset_strings!["mark"]))),
-            expect_mark
-        );
-        assert_eq!(
-            repos_as_strings(&db.list_all(&Some(hashset_strings!["none"]))),
-            expect_none
-        );
+        let mut repo = new_test_repo(&cfg, "github", "kubernetes", "kube-proxy", None);
+        repo.last_accessed = cfg.now() + 200;
+        db.upsert(repo.clone());
+        assert_eq!(db.get_latest("").unwrap(), repo);
+        let latest = repo;
+
+        let mut repo = new_test_repo(&cfg, "gitlab", "my-owner-01", "my-repo-03", None);
+        repo.last_accessed = cfg.now() + 10;
+        db.upsert(repo.clone());
+        assert_eq!(db.get_latest("gitlab").unwrap(), repo);
+        assert_eq!(db.get_latest("").unwrap(), latest);
+
+        let latest = repo;
+
+        let dir = cfg.get_current_dir().parent().unwrap();
+        let mut repo = new_test_repo(&cfg, "github", "kubernetes", "kube-proxy", None);
+        repo.path = Some(Cow::Owned(format!("{}", dir.display())));
+        db.upsert(repo.clone());
+        assert_eq!(db.get_latest("").unwrap(), repo);
+        assert_eq!(db.get_latest("gitlab").unwrap(), latest);
+
+        repo.path = Some(Cow::Owned(format!("{}", cfg.get_current_dir().display())));
+        repo.accessed = 5000;
+        db.upsert(repo.clone());
+        assert_eq!(db.get_latest("").unwrap(), latest);
     }
 
     #[test]
-    fn test_list_remote() {
-        let cfg = config_tests::load_test_config("database/list_remote");
+    fn list_by_remote() {
+        let cfg = config_tests::load_test_config("database/list_by_remote");
         let repos = get_test_repos(&cfg);
 
-        let expect_repos: Vec<_> = repos
+        let mut expect: Vec<_> = repos
             .iter()
-            .filter_map(|repo| {
-                if repo.remote.name.as_str() == "github" {
-                    Some(Rc::clone(repo))
-                } else {
-                    None
-                }
-            })
+            .filter(|repo| repo.remote.as_ref() == "github")
+            .map(|repo| repo.clone())
             .collect();
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
-        let repos = db.list_by_remote("github", &None);
+        db.sort_repos(&mut expect);
 
-        assert_eq!(repos_as_strings(&expect_repos), repos_as_strings(&repos));
+        assert_eq!(db.list_by_remote("github", &None), expect);
+
+        let repos = db.list_by_remote("github", &Some(hashset_strings!["pin"]));
+        assert_eq!(
+            repos,
+            vec![new_test_repo(
+                &cfg,
+                "github",
+                "fioncat",
+                "csync",
+                Some(vec!["sync", "pin"])
+            )]
+        );
+        assert_eq!(
+            db.list_by_remote("gitlab", &Some(hashset_strings!["pin"])),
+            vec![]
+        );
     }
 
     #[test]
-    fn test_list_owner() {
-        let cfg = config_tests::load_test_config("database/list_owner");
+    fn list_by_owner() {
+        let cfg = config_tests::load_test_config("database/list_by_owner");
         let repos = get_test_repos(&cfg);
 
-        let expect_repos: Vec<_> = repos
+        let mut expect: Vec<_> = repos
             .iter()
-            .filter_map(|repo| {
-                if repo.remote.name.as_str() == "github" {
-                    if repo.owner.name.as_str() == "fioncat" {
-                        Some(Rc::clone(repo))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
+            .filter(|repo| repo.remote.as_ref() == "github" && repo.owner.as_ref() == "kubernetes")
+            .map(|repo| repo.clone())
             .collect();
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
-        let repos = db.list_by_owner("github", "fioncat", &None);
+        db.sort_repos(&mut expect);
 
-        assert_eq!(repos_as_strings(&expect_repos), repos_as_strings(&repos));
+        assert_eq!(db.list_by_owner("github", "kubernetes", &None), expect);
+        let mut mark_repos = vec![
+            new_test_repo(
+                &cfg,
+                "github",
+                "kubernetes",
+                "kubernetes",
+                Some(vec!["mark", "sync"]),
+            ),
+            new_test_repo(&cfg, "github", "kubernetes", "kubectl", Some(vec!["mark"])),
+        ];
+        db.sort_repos(&mut mark_repos);
+        assert_eq!(
+            db.list_by_owner("github", "kubernetes", &Some(hashset_strings!["mark"])),
+            mark_repos
+        );
+    }
+
+    #[test]
+    fn upsert() {
+        let cfg = config_tests::load_test_config("database/upsert");
+        let repos = get_test_repos(&cfg);
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.upsert(repo);
+        }
+
+        db.upsert(new_test_repo(
+            &cfg,
+            "github",
+            "kubernetes",
+            "kubernetes",
+            None,
+        ));
+        db.upsert(new_test_repo(&cfg, "github", "kubernetes", "kubectl", None));
+        db.upsert(new_test_repo(
+            &cfg,
+            "gitlab",
+            "my-owner-01",
+            "my-repo-02",
+            None,
+        ));
+
+        assert!(db.clean_labels);
+        db.save().unwrap();
+
+        let db = Database::load(&cfg).unwrap();
+        let labels: HashSet<&str> = db
+            .bucket
+            .labels
+            .iter()
+            .map(|(_id, label)| label.as_str())
+            .collect();
+        // The mark label should be removed
+        assert_eq!(labels, hashset!["sync", "pin"]);
+    }
+
+    #[test]
+    fn remove() {
+        let cfg = config_tests::load_test_config("database/remove");
+        let repos = get_test_repos(&cfg);
+
+        let mut db = Database::load(&cfg).unwrap();
+        for repo in repos {
+            db.upsert(repo);
+        }
+
+        db.remove(new_test_repo(
+            &cfg,
+            "github",
+            "kubernetes",
+            "kubernetes",
+            None,
+        ));
+        db.remove(new_test_repo(&cfg, "github", "kubernetes", "kubectl", None));
+        db.remove(new_test_repo(
+            &cfg,
+            "gitlab",
+            "my-owner-01",
+            "my-repo-02",
+            None,
+        ));
+
+        assert_eq!(db.get("github", "kubernetes", "kubernetes"), None);
+        assert_eq!(db.get("github", "kubernetes", "kubectl"), None);
+        assert_eq!(db.get("gitlab", "my-owner-01", "my-repo-02"), None);
+        assert!(db.clean_labels);
+
+        db.save().unwrap();
+
+        let db = Database::load(&cfg).unwrap();
+        let labels: HashSet<&str> = db
+            .bucket
+            .labels
+            .iter()
+            .map(|(_id, label)| label.as_str())
+            .collect();
+        // The mark label should be removed
+        assert_eq!(labels, hashset!["sync", "pin"]);
     }
 }
 
@@ -1916,7 +1804,7 @@ mod select_tests {
         fn build_provider(
             &self,
             _cfg: &Config,
-            _remote: &Remote,
+            _remote: &RemoteConfig,
             _force: bool,
         ) -> Result<Box<dyn Provider>> {
             Ok(StaticProvider::mock())
@@ -1940,49 +1828,49 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("https://github.com/fioncat/csync"),
-                format!("github:fioncat/csync"),
+                "https://github.com/fioncat/csync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!("https://github.com/fioncat/dotfiles/blob/test/starship.toml"),
-                format!("github:fioncat/dotfiles"),
+                "https://github.com/fioncat/dotfiles/blob/test/starship.toml".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("https://github.com/kubernetes/kubernetes/tree/master/api/discovery"),
-                format!("github:kubernetes/kubernetes"),
+                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
+                "github:kubernetes/kubernetes".to_string(),
             ),
             (
-                format!("https://github.com/kubernetes/kubectl.git"),
-                format!("github:kubernetes/kubectl"),
+                "https://github.com/kubernetes/kubectl.git".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // The clone ssh url
-                format!("git@github.com:kubernetes/kubectl.git"),
-                format!("github:kubernetes/kubectl"),
+                "git@github.com:kubernetes/kubectl.git".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // gitlab format path
-                format!("https://gitlab.com/my-owner-01/my-repo-02/-/tree/main.rs"),
-                format!("gitlab:my-owner-01/my-repo-02"),
+                "https://gitlab.com/my-owner-01/my-repo-02/-/tree/main.rs".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
             ),
             (
                 // gitlab not found
-                format!("https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev"),
-                format!("gitlab:my-owner-01/hello/unknown-repo"),
+                "https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev".to_string(),
+                "gitlab:my-owner-01/hello/unknown-repo".to_string(),
             ),
         ];
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         let opts = new_test_options(None, None);
         for case in cases {
             let (url, expect) = case;
-            let selector = Selector::new(&db, url.as_str(), "", opts.clone());
-            let (repo, exists) = selector.one().unwrap();
-            if repo.name.as_str() != "unknown-repo" {
+            let selector = Selector::new(url.as_str(), "", opts.clone());
+            let (repo, exists) = selector.one(&db).unwrap();
+            if repo.name.as_ref() != "unknown-repo" {
                 assert!(exists);
             } else {
                 assert!(!exists);
@@ -1998,51 +1886,46 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("github"),
-                format!("sync"),
-                format!("github:fioncat/csync"),
+                "github".to_string(),
+                "sync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!(""),
-                format!("dot"),
-                format!("github:fioncat/dotfiles"),
+                "".to_string(),
+                "dot".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("github"),
-                format!("proxy"),
-                format!("github:kubernetes/kube-proxy"),
+                "github".to_string(),
+                "proxy".to_string(),
+                "github:kubernetes/kube-proxy".to_string(),
             ),
             (
-                format!(""),
-                format!("let"),
-                format!("github:kubernetes/kubelet"),
+                "".to_string(),
+                "let".to_string(),
+                "github:kubernetes/kubelet".to_string(),
             ),
             (
-                format!(""),
-                format!("01"),
-                format!("gitlab:my-owner-01/my-repo-01"),
-            ),
-            (
-                format!("gitlab"),
-                format!("03"),
-                format!("gitlab:my-owner-01/my-repo-03"),
+                "gitlab".to_string(),
+                "03".to_string(),
+                "gitlab:my-owner-01/my-repo-03".to_string(),
             ),
         ];
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         let opts = new_test_options(None, None);
         for case in cases {
             let (remote, keyword, expect) = case;
             let selector = if remote.is_empty() {
-                Selector::new(&db, keyword.as_str(), "", opts.clone())
+                Selector::new(keyword.as_str(), "", opts.clone())
             } else {
-                Selector::new(&db, remote.as_str(), keyword.as_str(), opts.clone())
+                Selector::new(remote.as_str(), keyword.as_str(), opts.clone())
             };
-            let (repo, exists) = selector.one().unwrap();
+            let (repo, exists) = selector.one(&db).unwrap();
             assert!(exists);
             assert_eq!(expect, repo.name_with_remote());
         }
@@ -2055,53 +1938,53 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!(""),
-                format!(""),
-                format!("github:fioncat/dotfiles"),
-                format!("github:fioncat/dotfiles"),
+                "".to_string(),
+                "".to_string(),
+                "github:fioncat/dotfiles".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!(""),
-                format!(""),
-                format!("gitlab:my-owner-01/my-repo-02"),
-                format!("gitlab:my-owner-01/my-repo-02"),
+                "".to_string(),
+                "".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
+                "gitlab:my-owner-01/my-repo-02".to_string(),
             ),
             (
-                format!("github"),
-                format!(""),
-                format!("fioncat/csync"),
-                format!("github:fioncat/csync"),
+                "github".to_string(),
+                "".to_string(),
+                "fioncat/csync".to_string(),
+                "github:fioncat/csync".to_string(),
             ),
             (
-                format!("github"),
-                format!(""),
-                format!("kubernetes/kubectl"),
-                format!("github:kubernetes/kubectl"),
+                "github".to_string(),
+                "".to_string(),
+                "kubernetes/kubectl".to_string(),
+                "github:kubernetes/kubectl".to_string(),
             ),
             (
                 // Search in owner, use format "github fioncat/"
-                format!("github"),
-                format!("fioncat/"),
-                format!("fioncat"),
-                format!("github:fioncat/fioncat"),
+                "github".to_string(),
+                "fioncat/".to_string(),
+                "fioncat".to_string(),
+                "github:fioncat/fioncat".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/"),
-                format!("kubelet"),
-                format!("github:kubernetes/kubelet"),
+                "github".to_string(),
+                "kubernetes/".to_string(),
+                "kubelet".to_string(),
+                "github:kubernetes/kubelet".to_string(),
             ),
             (
-                format!("gitlab"),
-                format!("my-owner-02/"),
-                format!("my-repo-01"),
-                format!("gitlab:my-owner-02/my-repo-01"),
+                "gitlab".to_string(),
+                "my-owner-02/".to_string(),
+                "my-repo-01".to_string(),
+                "gitlab:my-owner-02/my-repo-01".to_string(),
             ),
         ];
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         for case in cases {
@@ -2109,8 +1992,8 @@ mod select_tests {
             let opts = new_test_options(Some(target), None)
                 .with_force_search(true)
                 .with_force_local(true);
-            let selector = Selector::new(&db, &remote, &query, opts);
-            let (repo, exists) = selector.one().unwrap();
+            let selector = Selector::new(&remote, &query, opts);
+            let (repo, exists) = selector.one(&db).unwrap();
             assert!(exists);
             assert_eq!(expect, repo.name_with_remote());
         }
@@ -2123,13 +2006,13 @@ mod select_tests {
 
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
         let expect = db.must_get_latest("").unwrap();
 
         let opts = new_test_options(None, None);
-        let selector = Selector::new(&db, "", "", opts);
-        let (repo, exists) = selector.one().unwrap();
+        let selector = Selector::new("", "", opts);
+        let (repo, exists) = selector.one(&db).unwrap();
         assert!(exists);
         assert_eq!(repo.name_with_labels(), expect.name_with_labels());
     }
@@ -2141,32 +2024,32 @@ mod select_tests {
 
         let cases = vec![
             (
-                format!("github"),
-                format!("fioncat/dotfiles"),
-                format!("github:fioncat/dotfiles"),
+                "github".to_string(),
+                "fioncat/dotfiles".to_string(),
+                "github:fioncat/dotfiles".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/kubernetes"),
-                format!("github:kubernetes/kubernetes"),
+                "github".to_string(),
+                "kubernetes/kubernetes".to_string(),
+                "github:kubernetes/kubernetes".to_string(),
             ),
             (
-                format!("github"),
-                format!("kubernetes/unknown"),
-                format!("github:kubernetes/unknown"),
+                "github".to_string(),
+                "kubernetes/unknown".to_string(),
+                "github:kubernetes/unknown".to_string(),
             ),
         ];
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         let opts = new_test_options(None, None);
         for case in cases {
             let (remote, query, expect) = case;
-            let selector = Selector::new(&db, &remote, &query, opts.clone());
-            let (repo, exists) = selector.one().unwrap();
-            if repo.name.as_str() == "unknown" {
+            let selector = Selector::new(&remote, &query, opts.clone());
+            let (repo, exists) = selector.one(&db).unwrap();
+            if repo.name.as_ref() == "unknown" {
                 assert!(!exists);
             } else {
                 assert!(exists);
@@ -2181,45 +2064,45 @@ mod select_tests {
         let repos = database_tests::get_test_repos(&cfg);
         let mut db = Database::load(&cfg).unwrap();
         for repo in repos {
-            db.update(repo, None);
+            db.upsert(repo);
         }
 
         let cases = vec![
             (
-                format!(""),
-                format!(""),
+                "".to_string(),
+                "".to_string(),
                 db.list_all(&None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("github"),
-                format!(""),
+                "github".to_string(),
+                "".to_string(),
                 db.list_by_remote("github", &None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("github"),
-                format!("fioncat/"),
+                "github".to_string(),
+                "fioncat/".to_string(),
                 db.list_by_owner("github", "fioncat", &None)
                     .iter()
                     .map(|repo| repo.name_with_labels())
                     .collect::<HashSet<String>>(),
             ),
             (
-                format!("csync"),
-                format!(""),
+                "csync".to_string(),
+                "".to_string(),
                 hashset_strings![db
                     .get("github", "fioncat", "csync")
                     .unwrap()
                     .name_with_labels()],
             ),
             (
-                format!("gitlab"),
-                format!("02"),
+                "gitlab".to_string(),
+                "02".to_string(),
                 hashset_strings![db
                     .get("gitlab", "my-owner-01", "my-repo-02")
                     .unwrap()
@@ -2230,8 +2113,8 @@ mod select_tests {
         let opts = new_test_options(None, None);
         for case in cases {
             let (head, query, expect) = case;
-            let selector = Selector::new(&db, &head, &query, opts.clone());
-            let (repos, _) = selector.many_local().unwrap();
+            let selector = Selector::new(&head, &query, opts.clone());
+            let (repos, _) = selector.many_local(&db).unwrap();
             let repos: HashSet<String> = repos.iter().map(|repo| repo.name_with_labels()).collect();
 
             assert_eq!(repos, expect);

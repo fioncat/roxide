@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::config::Docker;
+use crate::config::RemoteConfig;
 
 pub fn workspace() -> String {
     String::from("~/dev")
@@ -18,6 +19,26 @@ pub fn docker() -> Docker {
     Docker {
         cmd: docker_cmd(),
         shell: docker_shell(),
+    }
+}
+
+pub fn remote(remote: impl AsRef<str>) -> RemoteConfig {
+    RemoteConfig {
+        clone: None,
+        user: None,
+        email: None,
+        ssh: false,
+        labels: None,
+        provider: None,
+        token: None,
+        cache_hours: cache_hours(),
+        list_limit: list_limit(),
+        api_timeout: api_timeout(),
+        api_domain: None,
+        owners: empty_map(),
+        name: Some(remote.as_ref().to_string()),
+        alias_owner_map: None,
+        alias_repo_map: None,
     }
 }
 

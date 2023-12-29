@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::{fs, io};
 
@@ -10,9 +9,9 @@ use regex::Regex;
 
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, Run};
-use crate::config::Config;
+use crate::config::{Config, RemoteConfig};
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::{NameLevel, Remote, Repo};
+use crate::repo::{NameLevel, Repo};
 use crate::term::{self, BranchStatus, Cmd, GitBranch, GitCmd};
 use crate::{hashset_strings, stderrln, utils};
 
@@ -37,7 +36,7 @@ pub struct SyncArgs {
     #[clap(short)]
     pub dry_run: bool,
 
-    /// The operations to perform. Avaliable: [push, pull, add, delete, force].
+    /// The operations to perform. Available: [push, pull, add, delete, force].
     #[clap(short, default_value = "push,pull,add,delete")]
     pub ops: String,
 
@@ -86,9 +85,9 @@ impl Run for SyncArgs {
         let opts = SelectOptions::default()
             .with_filter_labels(filter_labels)
             .with_many_edit(self.edit);
-        let selector = Selector::from_args(&db, &self.head, &self.query, opts);
+        let selector = Selector::from_args(&self.head, &self.query, opts);
 
-        let (repos, level) = selector.many_local()?;
+        let (repos, level) = selector.many_local(&db)?;
         if repos.is_empty() {
             stderrln!("No repo to sync");
             return Ok(());
@@ -118,7 +117,7 @@ impl SyncArgs {
     fn build_tasks(
         &self,
         cfg: &Config,
-        repos: Vec<Rc<Repo>>,
+        repos: Vec<Repo>,
         ops: HashSet<String>,
         level: &NameLevel,
     ) -> Result<Vec<(String, SyncTask)>> {
@@ -127,44 +126,36 @@ impl SyncArgs {
         let ops = Arc::new(ops);
 
         let mut tasks = Vec::with_capacity(repos.len());
-        let mut remotes: HashMap<String, Arc<Remote>> = HashMap::new();
-        let mut owners: HashMap<String, Arc<String>> = HashMap::new();
+        let mut remotes: HashMap<&str, Arc<RemoteConfig>> = HashMap::new();
+        let mut owners: HashMap<&str, Arc<String>> = HashMap::new();
 
-        for repo in repos {
-            let remote = match remotes.get(repo.remote.name.as_str()) {
-                Some(remote) => Arc::clone(remote),
+        for repo in repos.iter() {
+            let (remote, remote_cfg) = match remotes.remove_entry(repo.remote.as_ref()) {
+                Some((remote, cfg)) => (remote, cfg),
                 None => {
-                    let remote_cfg = cfg.must_get_remote(repo.remote.name.as_str())?;
-                    let remote = Remote {
-                        name: repo.remote.name.to_string(),
-                        cfg: remote_cfg.clone(),
-                    };
-                    let remote = Arc::new(remote);
-                    let ret = Arc::clone(&remote);
-                    remotes.insert(repo.remote.name.to_string(), remote);
-                    ret
+                    let remote_cfg = cfg.must_get_remote(repo.remote.as_ref())?;
+                    let remote_cfg = Arc::new(remote_cfg.into_owned());
+                    (repo.remote.as_ref(), remote_cfg)
                 }
             };
 
-            let owner = match owners.get(repo.owner.name.as_str()) {
-                Some(owner) => Arc::clone(owner),
-                None => {
-                    let owner = repo.owner.name.to_string();
-                    let owner_arc = Arc::new(owner.clone());
-                    let ret = Arc::clone(&owner_arc);
-                    owners.insert(owner, owner_arc);
-                    ret
-                }
-            };
+            let task_remote_cfg = Arc::clone(&remote_cfg);
+            remotes.insert(remote, remote_cfg);
+
+            let (owner, owner_arc) = owners
+                .remove_entry(repo.owner.as_ref())
+                .unwrap_or((repo.owner.as_ref(), Arc::new(repo.owner.to_string())));
+            let task_owner = Arc::clone(&owner_arc);
+            owners.insert(owner, owner_arc);
 
             let path = repo.get_path(cfg);
 
             tasks.push((
                 repo.to_string(level),
                 SyncTask {
-                    remote,
-                    owner,
-                    name: repo.name.clone(),
+                    remote_cfg: task_remote_cfg,
+                    owner: task_owner,
+                    name: repo.name.to_string(),
                     path,
                     ops: Arc::clone(&ops),
                     branch_re: Arc::clone(&branch_re),
@@ -217,7 +208,7 @@ impl SyncArgs {
 }
 
 struct SyncTask {
-    remote: Arc<Remote>,
+    remote_cfg: Arc<RemoteConfig>,
     owner: Arc<String>,
     name: String,
 
@@ -232,7 +223,7 @@ struct SyncTask {
 
 impl Task<()> for SyncTask {
     fn run(&self) -> Result<()> {
-        if let None = self.remote.cfg.clone {
+        if let None = self.remote_cfg.clone {
             return Ok(());
         }
 
@@ -247,7 +238,7 @@ impl Task<()> for SyncTask {
         let path = format!("{}", self.path.display());
         let git = GitCmd::with_path(&path);
 
-        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
+        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote_cfg);
         if need_clone {
             Cmd::git(&["clone", url.as_str(), path.as_str()]).execute_check()?;
         } else {
@@ -255,10 +246,10 @@ impl Task<()> for SyncTask {
             git.exec(&["fetch", "origin", "--prune"])?;
         }
 
-        if let Some(user) = &self.remote.cfg.user {
+        if let Some(user) = &self.remote_cfg.user {
             git.exec(&["config", "user.name", user.as_str()])?;
         }
-        if let Some(email) = &self.remote.cfg.email {
+        if let Some(email) = &self.remote_cfg.email {
             git.exec(&["config", "user.email", email.as_str()])?;
         }
 
@@ -339,10 +330,7 @@ impl Task<()> for SyncTask {
             }
         }
 
-        let target = match head.as_ref() {
-            Some(commit) => commit,
-            None => &backup_branch,
-        };
+        let target = head.as_ref().unwrap_or_else(|| &backup_branch);
         git.checkout(target)?;
 
         Ok(())
@@ -354,7 +342,7 @@ impl Task<Option<String>> for SyncTask {
         match self.dry_run()? {
             Some(msg) => Ok(Some(format!(
                 "{}:{}/{} => {}",
-                self.remote.name.as_str(),
+                self.remote_cfg.get_name(),
                 self.owner,
                 self.name,
                 msg
@@ -366,7 +354,7 @@ impl Task<Option<String>> for SyncTask {
 
 impl SyncTask {
     fn dry_run(&self) -> Result<Option<String>> {
-        if let None = self.remote.cfg.clone.as_ref() {
+        if let None = self.remote_cfg.clone.as_ref() {
             return Ok(None);
         }
 
@@ -383,7 +371,7 @@ impl SyncTask {
         let path = format!("{}", self.path.display());
         let git = GitCmd::with_path(path.as_str());
 
-        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote);
+        let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote_cfg);
         git.exec(&["remote", "set-url", "origin", url.as_str()])?;
         git.exec(&["fetch", "origin", "--prune"])?;
 

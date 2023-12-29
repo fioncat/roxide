@@ -163,11 +163,11 @@ mod tests {
         alias.get_repo("kubernetes", "k8s").unwrap();
 
         let merge = MergeOptions {
-            owner: format!("test-alias"),
-            name: format!("ro"),
+            owner: "test-alias".to_string(),
+            name: "ro".to_string(),
             upstream: None,
-            source: format!("test"),
-            target: format!("main"),
+            source: "test".to_string(),
+            target: "main".to_string(),
         };
         let result = alias
             .create_merge(merge.clone(), String::new(), String::new())

@@ -45,8 +45,8 @@ impl Run for AttachArgs {
             .with_repo_path(path);
 
         let head = Some(self.head.clone());
-        let selector = Selector::from_args(&db, &head, &self.query, opts);
-        let (repo, exists) = selector.one()?;
+        let selector = Selector::from_args(&head, &self.query, opts);
+        let (mut repo, exists) = selector.one(&db)?;
 
         if exists {
             bail!(
@@ -61,19 +61,20 @@ impl Run for AttachArgs {
             repo.name_with_remote()
         );
 
-        if let Some(user) = &repo.remote.cfg.user {
+        if let Some(user) = &repo.remote_cfg.user {
             Cmd::git(&["config", "user.name", user.as_str()])
                 .with_display(format!("Set user to '{}'", user))
                 .execute_check()?;
         }
-        if let Some(email) = &repo.remote.cfg.email {
+        if let Some(email) = &repo.remote_cfg.email {
             Cmd::git(&["config", "user.email", email.as_str()])
                 .with_display(format!("Set email to '{}'", email))
                 .execute_check()?;
         }
 
         info!("Attach current directory to {}", repo.name_with_remote());
-        db.update(repo, append_labels);
+        repo.append_labels(append_labels);
+        db.upsert(repo.update());
 
         db.save()
     }

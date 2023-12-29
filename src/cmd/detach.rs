@@ -20,7 +20,7 @@ impl Run for DetachArgs {
             repo.name_with_remote()
         );
 
-        db.remove(repo);
+        db.remove(repo.update());
 
         db.save()
     }
