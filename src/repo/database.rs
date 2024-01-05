@@ -1919,17 +1919,9 @@ mod select_tests {
                 "github:fioncat/dotfiles".to_string(),
             ),
             (
-                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
-                "github:kubernetes/kubernetes".to_string(),
-            ),
-            (
-                "https://github.com/kubernetes/kubectl.git".to_string(),
-                "github:kubernetes/kubectl".to_string(),
-            ),
-            (
                 // The clone ssh url
-                "git@github.com:kubernetes/kubectl.git".to_string(),
-                "github:kubernetes/kubectl".to_string(),
+                "git@github.com:fioncat/fioncat.git".to_string(),
+                "github:fioncat/fioncat".to_string(),
             ),
             (
                 // gitlab format path
@@ -1940,6 +1932,19 @@ mod select_tests {
                 // gitlab not found
                 "https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev".to_string(),
                 "gitlab:my-owner-01/hello/unknown-repo".to_string(),
+            ),
+            // The alias will be expanded
+            (
+                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
+                "github:k8s/k8s".to_string(),
+            ),
+            (
+                "https://github.com/kubernetes/kubectl.git".to_string(),
+                "github:k8s/kubectl".to_string(),
+            ),
+            (
+                "git@github.com:kubernetes/kubectl.git".to_string(),
+                "github:k8s/kubectl".to_string(),
             ),
         ];
 
@@ -1954,7 +1959,11 @@ mod select_tests {
             let selector = Selector::new(url.as_str(), "", opts.clone());
             let (repo, exists) = selector.one(&db).unwrap();
             if repo.name.as_ref() != "unknown-repo" {
-                assert!(exists);
+                if repo.owner.as_ref() == "k8s" {
+                    assert!(!exists);
+                } else {
+                    assert!(exists);
+                }
             } else {
                 assert!(!exists);
             }
