@@ -1137,7 +1137,23 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         let path = segs.join("/");
-        let (owner, name) = parse_owner(&path);
+        let (mut owner, mut name) = parse_owner(&path);
+
+        let remote_cfg = db.cfg.must_get_remote(&remote)?;
+        if remote_cfg.has_alias() {
+            // We need to convert the owner and name in the URL to alias name.
+            // Note that only the URL requires this processing, as URLs are typically directly
+            // copied by users from the browser and their owner and name are usually in their
+            // original form.
+            if let Some(owner_cfg) = remote_cfg.owners.get(&owner) {
+                if let Some(owner_alias) = owner_cfg.alias.as_ref() {
+                    owner = owner_alias.to_string();
+                }
+                if let Some(name_alias) = owner_cfg.repo_alias.get(&name) {
+                    name = name_alias.to_string();
+                }
+            }
+        }
 
         match db.get(&remote, &owner, &name) {
             Some(repo) => Ok((repo, true)),
