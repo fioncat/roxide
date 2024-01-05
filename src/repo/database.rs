@@ -1137,7 +1137,23 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         let path = segs.join("/");
-        let (owner, name) = parse_owner(&path);
+        let (mut owner, mut name) = parse_owner(&path);
+
+        let remote_cfg = db.cfg.must_get_remote(&remote)?;
+        if remote_cfg.has_alias() {
+            // We need to convert the owner and name in the URL to alias name.
+            // Note that only the URL requires this processing, as URLs are typically directly
+            // copied by users from the browser and their owner and name are usually in their
+            // original form.
+            if let Some(owner_cfg) = remote_cfg.owners.get(&owner) {
+                if let Some(owner_alias) = owner_cfg.alias.as_ref() {
+                    owner = owner_alias.to_string();
+                }
+                if let Some(name_alias) = owner_cfg.repo_alias.get(&name) {
+                    name = name_alias.to_string();
+                }
+            }
+        }
 
         match db.get(&remote, &owner, &name) {
             Some(repo) => Ok((repo, true)),
@@ -1903,17 +1919,9 @@ mod select_tests {
                 "github:fioncat/dotfiles".to_string(),
             ),
             (
-                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
-                "github:kubernetes/kubernetes".to_string(),
-            ),
-            (
-                "https://github.com/kubernetes/kubectl.git".to_string(),
-                "github:kubernetes/kubectl".to_string(),
-            ),
-            (
                 // The clone ssh url
-                "git@github.com:kubernetes/kubectl.git".to_string(),
-                "github:kubernetes/kubectl".to_string(),
+                "git@github.com:fioncat/fioncat.git".to_string(),
+                "github:fioncat/fioncat".to_string(),
             ),
             (
                 // gitlab format path
@@ -1924,6 +1932,19 @@ mod select_tests {
                 // gitlab not found
                 "https://gitlab.com/my-owner-01/hello/unknown-repo/-/tree/feat/dev".to_string(),
                 "gitlab:my-owner-01/hello/unknown-repo".to_string(),
+            ),
+            // The alias will be expanded
+            (
+                "https://github.com/kubernetes/kubernetes/tree/master/api/discovery".to_string(),
+                "github:k8s/k8s".to_string(),
+            ),
+            (
+                "https://github.com/kubernetes/kubectl.git".to_string(),
+                "github:k8s/kubectl".to_string(),
+            ),
+            (
+                "git@github.com:kubernetes/kubectl.git".to_string(),
+                "github:k8s/kubectl".to_string(),
             ),
         ];
 
@@ -1938,7 +1959,11 @@ mod select_tests {
             let selector = Selector::new(url.as_str(), "", opts.clone());
             let (repo, exists) = selector.one(&db).unwrap();
             if repo.name.as_ref() != "unknown-repo" {
-                assert!(exists);
+                if repo.owner.as_ref() == "k8s" {
+                    assert!(!exists);
+                } else {
+                    assert!(exists);
+                }
             } else {
                 assert!(!exists);
             }
