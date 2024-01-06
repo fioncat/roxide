@@ -30,6 +30,9 @@ pub struct Config {
     #[serde(default = "defaults::docker")]
     pub docker: Docker,
 
+    #[serde(default = "defaults::keyword_expire")]
+    pub keyword_expire: u64,
+
     /// The remotes config.
     #[serde(default = "defaults::empty_map")]
     pub remotes: HashMap<String, RemoteConfig>,
@@ -419,6 +422,7 @@ impl Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
             docker: defaults::docker(),
+            keyword_expire: defaults::keyword_expire(),
             cmd: defaults::cmd(),
             remotes: HashMap::new(),
             release: defaults::release(),
