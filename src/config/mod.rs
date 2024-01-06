@@ -537,6 +537,11 @@ impl Config {
     pub fn now(&self) -> u64 {
         self.now.unwrap()
     }
+
+    #[cfg(test)]
+    pub fn set_now(&mut self, now: u64) {
+        self.now = Some(now);
+    }
 }
 
 #[cfg(test)]

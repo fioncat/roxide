@@ -148,3 +148,67 @@ impl Keywords {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod keywords_tests {
+    use crate::config::config_tests;
+    use crate::repo::keywords::*;
+
+    #[test]
+    fn test_complete() {
+        let cfg = config_tests::load_test_config("keywords/completion");
+
+        let mut disable_cfg = cfg.clone();
+        disable_cfg.keyword_expire = 0;
+        let _ = Keywords::load(&disable_cfg).unwrap(); // remove old file
+
+        let mut keywords = Keywords::load(&cfg).unwrap();
+        let cases = vec![
+            ("", "go"),
+            ("", "go"),
+            ("", "vim"),
+            ("", "vim"),
+            ("", "vim"),
+            ("", "vim"),
+            ("", "vim"),
+            ("", "vim"),
+            ("test", "hello"),
+            ("test", "hello"),
+            ("", "rox"),
+            ("", "rox"),
+            ("", "rox"),
+            ("test", "rust"),
+            ("test", "rust"),
+            ("test", "rust"),
+        ];
+        for (remote, keyword) in cases {
+            keywords.upsert(remote, keyword);
+        }
+        keywords.save().unwrap();
+
+        let expects = vec![("", vec!["vim", "rox"]), ("test", vec!["rust"])];
+        for (remote, expect) in expects {
+            let keywords = Keywords::load(&cfg).unwrap();
+            let keywords = keywords.complete(remote);
+            let result: Vec<_> = keywords.iter().map(|s| s.as_str()).collect();
+            assert_eq!(result, expect);
+        }
+    }
+
+    #[test]
+    fn test_expire() {
+        let mut cfg = config_tests::load_test_config("keywords/expire");
+        cfg.keyword_expire = 3;
+
+        let mut keywords = Keywords::load(&cfg).unwrap();
+        keywords.upsert("", "rox");
+        keywords.upsert("", "some");
+
+        keywords.save().unwrap();
+
+        cfg.set_now(cfg.now() + 5);
+        let keywords = Keywords::load(&cfg).unwrap();
+        // All keywords should be expired
+        assert!(keywords.complete("").is_empty());
+    }
+}
