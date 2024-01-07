@@ -956,6 +956,8 @@ pub struct Selector<'a, T: TerminalHelper, P: ProviderBuilder> {
 impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
     const GITHUB_DOMAIN: &'static str = "github.com";
 
+    const DEFAULT_SELECT_LATEST_COUNT: u32 = 5;
+
     /// Create a new [`Selector`] object.
     pub fn new(head: &'a str, query: &'a str, opts: SelectOptions<T, P>) -> Selector<'a, T, P> {
         Selector { head, query, opts }
@@ -1012,6 +1014,10 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         if self.query.is_empty() {
+            if self.head.starts_with("@") {
+                return self.one_from_latest(db, "", "", self.head);
+            }
+
             // If only one `head` parameter is provided, its meaning needs to be
             // inferred based on its format:
             // - It could be a URL.
@@ -1213,6 +1219,10 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let remote = self.head;
         let remote_cfg = db.cfg.must_get_remote(remote)?;
 
+        if self.query.starts_with("@") {
+            return self.one_from_latest(db, remote, "", self.query);
+        }
+
         // A special syntax: If `query` ends with "/", it indicates a search
         // within the owner.
         if self.query.ends_with("/") {
@@ -1267,6 +1277,10 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             };
         }
 
+        if name.starts_with("@") {
+            return self.one_from_latest(db, remote, &owner, &name);
+        }
+
         self.get_or_create_repo(db, remote, &owner, &name)
     }
 
@@ -1296,6 +1310,68 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         self.get_or_create_repo(db, remote_cfg.get_name(), &owner, &name)
+    }
+
+    /// Select one from the recently accessed repositories. The syntax is "@n," where `n`
+    /// indicates the number of repositories to choose from, with a default value of
+    /// [`Selector::DEFAULT_SELECT_LATEST_COUNT`].
+    fn one_from_latest<'b>(
+        &self,
+        db: &'b Database,
+        remote: &str,
+        owner: &str,
+        query: &str,
+    ) -> Result<(Repo<'b>, bool)> {
+        let n = query.strip_prefix("@").unwrap();
+        let n: u32 = if n == "" {
+            Self::DEFAULT_SELECT_LATEST_COUNT
+        } else {
+            n.parse().with_context(|| {
+                format!(
+                    "invalid select latest '{}', expect '@[n]' which n is a number",
+                    query
+                )
+            })?
+        };
+
+        let (mut repos, level) = if remote == "" {
+            (db.list_all(&self.opts.filter_labels), NameLevel::Remote)
+        } else if owner == "" {
+            (
+                db.list_by_remote(remote, &self.opts.filter_labels),
+                NameLevel::Owner,
+            )
+        } else {
+            (
+                db.list_by_owner(remote, owner, &self.opts.filter_labels),
+                NameLevel::Name,
+            )
+        };
+
+        if let Some(current) = db.get_current() {
+            if let Some(idx) = repos.iter().position(|repo| repo.eq(&current)) {
+                repos.remove(idx);
+            }
+        }
+
+        if repos.is_empty() {
+            bail!("No latest repo to select");
+        }
+        if repos.len() == 1 || n <= 1 {
+            return Ok((repos.remove(0), true));
+        }
+
+        repos.sort_unstable_by(|repo0, repo1| repo1.last_accessed.cmp(&repo0.last_accessed));
+        let mut repos = if repos.len() > n as usize {
+            repos.into_iter().take(n as usize).collect()
+        } else {
+            repos
+        };
+        let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
+        let idx = self.opts.terminal_helper.search(&items)?;
+
+        let repo = repos.remove(idx);
+        Ok((repo, true))
     }
 
     /// Creating or retrieving a repository, the second return value indicates

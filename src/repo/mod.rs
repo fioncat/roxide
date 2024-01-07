@@ -12,7 +12,7 @@ use crate::config::{defaults, Config, OwnerConfig, RemoteConfig};
 use crate::utils;
 
 /// Represents a repository, which is the most fundamental operational object
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Repo<'a> {
     /// The repository remote name.
     pub remote: Cow<'a, str>,
@@ -54,6 +54,25 @@ pub enum NameLevel {
     Owner,
     /// Display remote, owner and name: `{remote}:{owner}/{name}`
     Remote,
+}
+
+impl PartialEq for Repo<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.remote != other.remote {
+            return false;
+        }
+        if self.owner != other.owner {
+            return false;
+        }
+        if self.name != other.name {
+            return false;
+        }
+        true
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
 }
 
 impl Repo<'_> {
