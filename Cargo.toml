@@ -1,6 +1,6 @@
 [package]
 name = "roxide"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 build = "build.rs"
 license = "MIT"
@@ -11,7 +11,7 @@ repository = "https://github.com/fioncat/roxide"
 description = "🎁 A great and fast tool to manage your git repositories"
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.79"
 bincode = "1.3.3"
 chrono = "0.4.31"
 clap = { version = "4.4.13", features = ["derive"] }
