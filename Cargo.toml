@@ -8,7 +8,7 @@ authors = ["fioncat"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 repository = "https://github.com/fioncat/roxide"
-description = "🎁 A great and fast tool to manage your git repositories"
+description = "🎁 A simple and fast tool to manage your git repositories"
 
 [dependencies]
 anyhow = "1.0.79"
