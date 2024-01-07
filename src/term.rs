@@ -366,10 +366,9 @@ pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Resu
     }
 
     let theme = ColorfulTheme::default();
-    let mut input: Input<String> = Input::with_theme(&theme);
-    input.with_prompt(msg.as_ref());
+    let mut input: Input<String> = Input::with_theme(&theme).with_prompt(msg.as_ref());
     if let Some(default) = default {
-        input.with_initial_text(default.to_string());
+        input = input.with_initial_text(default.to_string());
     }
     let text = input.interact_text().context("terminal input")?;
     if require && text.is_empty() {
