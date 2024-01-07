@@ -34,6 +34,7 @@ use strum::EnumVariantNames;
 
 use crate::config::Config;
 use crate::repo::database::{self, Database};
+use crate::repo::keywords::Keywords;
 use crate::term::{GitBranch, GitRemote};
 use crate::{api, hashmap, term};
 
@@ -188,8 +189,9 @@ impl Completion {
     pub fn repo_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
         match args.len() {
             0 | 1 => {
+                let to_complete = args.get(0).map(|s| *s).unwrap_or("");
                 let remotes = cfg.list_remotes();
-                Ok(CompletionResult::from(remotes))
+                Self::wrap_with_keywords(cfg, "", to_complete, remotes, false)
             }
             2 => {
                 let db = Database::load(cfg)?;
@@ -203,7 +205,7 @@ impl Completion {
                         .into_iter()
                         .map(|owner| format!("{}/", owner))
                         .collect();
-                    return Ok(CompletionResult::from(items).no_space());
+                    return Self::wrap_with_keywords(cfg, remote, query, items, true);
                 }
 
                 let (owner, _) = database::parse_owner(query);
@@ -217,6 +219,72 @@ impl Completion {
             }
             _ => Ok(CompletionResult::empty()),
         }
+    }
+
+    fn wrap_with_keywords(
+        cfg: &Config,
+        remote: &str,
+        to_complete: &str,
+        items: Vec<String>,
+        no_space: bool,
+    ) -> Result<CompletionResult> {
+        if to_complete == "" {
+            if no_space {
+                return Ok(CompletionResult::from(items).no_space());
+            }
+            return Ok(CompletionResult::from(items));
+        }
+
+        let mut completion = vec![];
+        let mut found = false;
+        for item in items {
+            if item.starts_with(to_complete) {
+                found = true;
+                completion.push(item);
+            }
+        }
+        if found {
+            // The highest priority is given to the `items` - if `to_complete` matches any
+            // element in `items`, directly return the matching item, disregarding keywords
+            // and repository names.
+            if no_space {
+                return Ok(CompletionResult::from(completion).no_space());
+            }
+            return Ok(CompletionResult::from(completion));
+        }
+
+        // Return the matched keywords and repository names as the completion items.
+        let keywords = Keywords::load(cfg)?;
+        let mut keywords = keywords.complete(remote);
+        let db = Database::load(cfg)?;
+        let names: Vec<_> = if remote != "" {
+            db.list_by_remote(remote, &None)
+        } else {
+            db.list_all(&None)
+        }
+        .into_iter()
+        .map(|repo| repo.name.to_string())
+        .collect();
+        keywords.extend(names);
+        for kw in keywords {
+            if kw.starts_with(to_complete) {
+                completion.push(kw);
+            }
+        }
+
+        let mut set: HashSet<String> = HashSet::with_capacity(completion.len());
+        let completion: Vec<_> = completion
+            .into_iter()
+            .filter(|item| {
+                if set.contains(item.as_str()) {
+                    return false;
+                }
+                set.insert(item.clone());
+                true
+            })
+            .collect();
+
+        Ok(CompletionResult::from(completion))
     }
 
     pub fn owner_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {

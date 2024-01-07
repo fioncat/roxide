@@ -85,10 +85,10 @@ pub fn ensure_dir(path: &PathBuf) -> Result<()> {
             Ok(_) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 fs::create_dir_all(dir)
-                    .with_context(|| format!("create directory {}", dir.display()))?;
+                    .with_context(|| format!("create directory '{}'", dir.display()))?;
                 Ok(())
             }
-            Err(err) => Err(err).with_context(|| format!("read directory {}", dir.display())),
+            Err(err) => Err(err).with_context(|| format!("read directory '{}'", dir.display())),
         }
     } else {
         Ok(())
@@ -103,9 +103,9 @@ pub fn write_file(path: &PathBuf, data: &[u8]) -> Result<()> {
     opts.create(true).truncate(true).write(true);
     let mut file = opts
         .open(path)
-        .with_context(|| format!("open file {}", path.display()))?;
+        .with_context(|| format!("open file '{}'", path.display()))?;
     file.write_all(data)
-        .with_context(|| format!("write file {}", path.display()))?;
+        .with_context(|| format!("write file '{}'", path.display()))?;
     Ok(())
 }
 

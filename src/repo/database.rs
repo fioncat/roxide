@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::Provider;
 use crate::config::{Config, RemoteConfig};
+use crate::repo::keywords::Keywords;
 use crate::repo::{NameLevel, Repo};
 use crate::utils::{self, FileLock};
 use crate::{info, term};
@@ -1201,10 +1202,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 }?;
                 Ok((repo, true))
             }
-            None => {
-                let repo = db.must_get_fuzzy("", self.head)?;
-                Ok((repo, true))
-            }
+            None => self.fuzzy_get_repo(db, "", self.head),
         }
     }
 
@@ -1265,10 +1263,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         if owner.is_empty() {
             return match self.opts.mode {
                 SelectMode::Search => self.one_from_provider(db, &remote_cfg),
-                SelectMode::Fuzzy => {
-                    let repo = db.must_get_fuzzy(remote, self.query)?;
-                    Ok((repo, true))
-                }
+                SelectMode::Fuzzy => self.fuzzy_get_repo(db, remote, self.query),
             };
         }
 
@@ -1346,6 +1341,33 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         Ok((repo, false))
     }
 
+    /// Wrap fuzzy get, add keywords addon.
+    fn fuzzy_get_repo<'b, R, K>(
+        &self,
+        db: &'b Database,
+        remote: R,
+        keyword: K,
+    ) -> Result<(Repo<'b>, bool)>
+    where
+        R: AsRef<str>,
+        K: AsRef<str>,
+    {
+        let repo = db.must_get_fuzzy(remote.as_ref(), keyword.as_ref())?;
+
+        if repo.name != keyword.as_ref() {
+            // If a fuzzy match hits a repository, record the fuzzy matching keywords in a
+            // file for automatic keyword completion. If the fuzzy match word exactly matches
+            // the repository name, no additional recording is needed, as the completion
+            // logic will automatically include the repository name in the completion
+            // candidates.
+            let mut keywords = Keywords::load(db.cfg)?;
+            keywords.upsert(remote.as_ref(), keyword.as_ref());
+            keywords.save()?;
+        }
+
+        Ok((repo, true))
+    }
+
     /// Selecting multiple repositories from the local database.
     ///
     /// # Returns
@@ -1389,7 +1411,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                     Ok((repos, NameLevel::Owner))
                 }
                 None => {
-                    let repo = db.must_get_fuzzy("", self.head)?;
+                    let (repo, _) = self.fuzzy_get_repo(db, "", self.head)?;
                     Ok((vec![repo], NameLevel::Owner))
                 }
             };
@@ -1412,7 +1434,8 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
 
         let (owner, name) = parse_owner(self.query);
         let repo = if owner.is_empty() {
-            db.must_get_fuzzy(remote, &name)?
+            let (repo, _) = self.fuzzy_get_repo(db, remote, &name)?;
+            repo
         } else {
             db.must_get(remote, &owner, &name)?
         };

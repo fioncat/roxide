@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::config::Docker;
 use crate::config::RemoteConfig;
+use crate::utils;
 
 pub fn workspace() -> String {
     String::from("~/dev")
@@ -48,6 +49,10 @@ pub fn docker_cmd() -> String {
 
 pub fn docker_shell() -> String {
     String::from("sh")
+}
+
+pub fn keyword_expire() -> u64 {
+    utils::DAY
 }
 
 pub fn empty_map<K, V>() -> HashMap<K, V> {
