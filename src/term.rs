@@ -1358,11 +1358,9 @@ impl Table {
     }
 }
 
-struct ProgressWriter<W: Write> {
+struct ProgressWrapper {
     desc: String,
     desc_size: usize,
-
-    upstream: W,
 
     last_report: Instant,
 
@@ -1370,20 +1368,19 @@ struct ProgressWriter<W: Write> {
     total: usize,
 }
 
-impl<W: Write> ProgressWriter<W> {
+impl ProgressWrapper {
     const SPACE: &'static str = " ";
     const SPACE_SIZE: usize = 1;
 
     const REPORT_INTERVAL: Duration = Duration::from_millis(200);
 
-    pub fn new(desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
+    pub fn new(desc: String, total: usize) -> ProgressWrapper {
         let desc_size = console::measure_text_width(&desc);
         let last_report = Instant::now();
 
-        let pw = ProgressWriter {
+        let pw = ProgressWrapper {
             desc,
             desc_size,
-            upstream,
             last_report,
             current: 0,
             total,
@@ -1427,18 +1424,15 @@ impl<W: Write> ProgressWriter<W> {
         line.push_str(&info);
         line
     }
-}
 
-impl<W: Write> Write for ProgressWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let size = self.upstream.write(buf)?;
+    fn update_current(&mut self, size: usize) {
         self.current += size;
 
         if self.current >= self.total {
             self.current = self.total;
             cursor_up();
             write_stderrln(self.render());
-            return Ok(size);
+            return;
         }
 
         let now = Instant::now();
@@ -1448,12 +1442,56 @@ impl<W: Write> Write for ProgressWriter<W> {
             write_stderrln(self.render());
             self.last_report = now;
         }
+    }
+}
+
+struct ProgressWriter<W: Write> {
+    upstream: W,
+    wrapper: ProgressWrapper,
+}
+
+impl<W: Write> ProgressWriter<W> {
+    pub fn new(desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
+        ProgressWriter {
+            upstream,
+            wrapper: ProgressWrapper::new(desc, total),
+        }
+    }
+}
+
+impl<W: Write> Write for ProgressWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let size = self.upstream.write(buf)?;
+        self.wrapper.update_current(size);
 
         Ok(size)
     }
 
     fn flush(&mut self) -> io::Result<()> {
         self.upstream.flush()
+    }
+}
+
+pub struct ProgressReader<R: Read> {
+    upstream: R,
+    wrapper: ProgressWrapper,
+}
+
+impl<R: Read> ProgressReader<R> {
+    pub fn new(desc: String, total: usize, upstream: R) -> ProgressReader<R> {
+        ProgressReader {
+            upstream,
+            wrapper: ProgressWrapper::new(desc, total),
+        }
+    }
+}
+
+impl<R: Read> Read for ProgressReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let size = self.upstream.read(buf)?;
+        self.wrapper.update_current(size);
+
+        Ok(size)
     }
 }
 

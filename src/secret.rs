@@ -11,10 +11,11 @@ use anyhow::{bail, Context, Result};
 use pbkdf2::pbkdf2_hmac_array;
 use sha2::Sha256;
 
-use crate::term;
+use crate::info;
+use crate::term::{self, ProgressReader};
 
 const ENCRYPT_READ_BUFFER_SIZE: usize = 4096;
-// const SHOW_PROGRESS_BAR_SIZE: u64 = 4096 * 1024;
+const SHOW_PROGRESS_BAR_SIZE: u64 = 4096 * 1024;
 
 const SALT_LENGTH: usize = 5;
 const NONCE_LENGTH: usize = 12;
@@ -31,6 +32,7 @@ pub fn handle<P: AsRef<Path>>(
 ) -> Result<()> {
     let src = File::open(path.as_ref()).context("read file")?;
     let src_meta = src.metadata().context("get file meta")?;
+    let mut is_dest_file = false;
     let dest: Box<dyn Write> = match dest.as_ref() {
         Some(dest) => {
             match File::open(dest) {
@@ -44,6 +46,7 @@ pub fn handle<P: AsRef<Path>>(
                 Err(err) => return Err(err).context("read dest file"),
             };
 
+            is_dest_file = true;
             let dest = File::create(dest).context("create dest file")?;
             Box::new(dest)
         }
@@ -58,15 +61,40 @@ pub fn handle<P: AsRef<Path>>(
     let password = password
         .map(|s| Ok(s.to_string()))
         .unwrap_or(term::input_password())?;
+
+    let mut show_progress = false;
+    let reader: Box<dyn Read> = if is_dest_file && src_meta.len() > SHOW_PROGRESS_BAR_SIZE {
+        show_progress = true;
+        Box::new(ProgressReader::new(
+            "Processing".to_string(),
+            src_meta.len() as usize,
+            src,
+        ))
+    } else {
+        Box::new(src)
+    };
+
+    let mut is_cipher = false;
     if read_count == SECRET_BEGIN_LINE.len() {
         if let Ok(head) = String::from_utf8(head_buffer.to_vec()) {
             if head == SECRET_BEGIN_LINE {
-                return decrypt(src, dest, password);
+                is_cipher = true;
             }
         }
     }
 
-    encrypt(src, dest, password)
+    if is_cipher {
+        decrypt(reader, dest, password)
+    } else {
+        encrypt(reader, dest, password)
+    }?;
+
+    if show_progress {
+        term::cursor_up();
+        info!("Handle secret done");
+    }
+
+    Ok(())
 }
 
 fn encrypt<R, W, S>(plain: R, mut dest: W, password: S) -> Result<()>
