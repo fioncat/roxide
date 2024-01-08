@@ -380,7 +380,11 @@ pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Resu
 /// Ask user to input password in tty.
 pub fn input_password() -> Result<String> {
     let msg = format!("{} Input password: ", style("::").bold().magenta());
-    rpassword::prompt_password(msg).context("input password from tty")
+    let password = rpassword::prompt_password(msg).context("input password from tty")?;
+    if password.is_empty() {
+        bail!("password can't be empty");
+    }
+    Ok(password)
 }
 
 /// Ask user to edit content in editor.
