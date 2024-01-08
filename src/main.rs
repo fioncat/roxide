@@ -4,6 +4,7 @@ mod cmd;
 mod config;
 mod errors;
 mod repo;
+mod secret;
 mod term;
 mod utils;
 mod workflow;
