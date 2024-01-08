@@ -1,5 +1,8 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::unix::fs::{FileExt, MetadataExt};
+use std::path::Path;
 
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
@@ -8,194 +11,172 @@ use anyhow::{bail, Context, Result};
 use pbkdf2::pbkdf2_hmac_array;
 use sha2::Sha256;
 
-use crate::utils;
+use crate::term;
 
-enum Output {
-    Encrypt(String),
-    Decrypt(Vec<u8>),
+const ENCRYPT_READ_BUFFER_SIZE: usize = 4096;
+// const SHOW_PROGRESS_BAR_SIZE: u64 = 4096 * 1024;
+
+const SALT_LENGTH: usize = 5;
+const NONCE_LENGTH: usize = 12;
+
+const SECRET_BEGIN_LINE: &'static str = "-----BEGIN ROXIDE SECRET-----";
+const SECRET_END_LINE: &'static str = "-----END ROXIDE SECRET-----";
+
+const PBKDF2_ROUNDS: u32 = 600_000;
+
+pub fn handle<P: AsRef<Path>>(
+    path: P,
+    dest: &Option<String>,
+    password: Option<&str>,
+) -> Result<()> {
+    let src = File::open(path.as_ref()).context("read file")?;
+    let src_meta = src.metadata().context("get file meta")?;
+    let dest: Box<dyn Write> = match dest.as_ref() {
+        Some(dest) => {
+            match File::open(dest) {
+                Ok(dest_file) => {
+                    let dest_meta = dest_file.metadata().context("get dest file meta")?;
+                    if src_meta.ino() == dest_meta.ino() {
+                        bail!("the dest file and src file can't be same");
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err).context("read dest file"),
+            };
+
+            let dest = File::create(dest).context("create dest file")?;
+            Box::new(dest)
+        }
+        None => Box::new(io::stdout()),
+    };
+
+    let mut head_buffer: [u8; SECRET_BEGIN_LINE.len()] = [0; SECRET_BEGIN_LINE.len()];
+    let read_count = src
+        .read_at(&mut head_buffer, 0)
+        .context("read head from src file")?;
+
+    let password = password
+        .map(|s| Ok(s.to_string()))
+        .unwrap_or(term::input_password())?;
+    if read_count == SECRET_BEGIN_LINE.len() {
+        if let Ok(head) = String::from_utf8(head_buffer.to_vec()) {
+            if head == SECRET_BEGIN_LINE {
+                return decrypt(src, dest, password);
+            }
+        }
+    }
+
+    encrypt(src, dest, password)
 }
 
-impl Output {
-    fn to_string(self) -> Result<String> {
-        match self {
-            Output::Encrypt(s) => Ok(s),
-            Output::Decrypt(data) => String::from_utf8(data)
-                .context("decode secret result as utf-8 failed, please consider write it to file"),
-        }
-    }
+fn encrypt<R, W, S>(plain: R, mut dest: W, password: S) -> Result<()>
+where
+    R: Read,
+    W: Write,
+    S: AsRef<str>,
+{
+    let mut reader = BufReader::new(plain);
+    let mut buffer = [0; ENCRYPT_READ_BUFFER_SIZE];
 
-    fn to_vec(self) -> Vec<u8> {
-        match self {
-            Output::Encrypt(s) => s.into_bytes(),
-            Output::Decrypt(data) => data,
+    let mut write_data = |data: &[u8]| -> Result<()> {
+        dest.write_all(data).context("write data to dest")?;
+        dest.write(&[b'\n']).context("write break to dest")?;
+        Ok(())
+    };
+    write_data(SECRET_BEGIN_LINE.as_bytes())?;
+
+    let mut salt: [u8; SALT_LENGTH] = [0; SALT_LENGTH];
+    let mut rng = OsRng::default();
+    rng.fill_bytes(&mut salt);
+    let salt_hex = hex::encode(&salt);
+    write_data(&salt_hex.into_bytes())?;
+
+    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), &salt, PBKDF2_ROUNDS);
+    let key = Key::<Aes256Gcm>::from_slice(&key);
+
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Aes256Gcm::generate_nonce(&mut rng);
+    assert_eq!(nonce.len(), NONCE_LENGTH);
+    let nonce_hex = hex::encode(&nonce);
+    write_data(&nonce_hex.into_bytes())?;
+
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes_read) => {
+                let data = &buffer[..bytes_read];
+                let encrypted = match cipher.encrypt(&nonce, data) {
+                    Ok(data) => data,
+                    Err(err) => bail!("use aes256gcm to encrypt data: {err}"),
+                };
+                let line = hex::encode(encrypted);
+                write_data(&line.into_bytes())?;
+            }
+            Err(err) => return Err(err).context("read plain data"),
         }
     }
+    write_data(SECRET_END_LINE.as_bytes())?;
+    dest.flush().context("flush dest")?;
+
+    Ok(())
 }
 
-pub struct Secret {
-    data: Vec<u8>,
-    cipher: bool,
-
-    replace: Option<PathBuf>,
-}
-
-impl Secret {
-    const SALT_LENGTH: usize = 5;
-    const NONCE_LENGTH: usize = 12;
-    const NONCE_OFFSET: usize = Self::SALT_LENGTH + Self::NONCE_LENGTH;
-
-    const SECRET_BEGIN_LINE: &'static [u8] = b"-----BEGIN ROXIDE SECRET-----";
-    const SECRET_END_LINE: &'static [u8] = b"-----END ROXIDE SECRET-----";
-
-    const SECRET_LINE_MAX_LENGTH: usize = 70;
-
-    const PBKDF2_ROUNDS: u32 = 600_000;
-
-    pub fn read(path: impl AsRef<Path>, replace: bool) -> Result<Secret> {
-        let replace = if replace {
-            Some(PathBuf::from(path.as_ref()))
-        } else {
-            None
-        };
-
-        let data = fs::read(path.as_ref())
-            .with_context(|| format!("read secret file '{}'", path.as_ref().display()))?;
-        if !data.starts_with(Self::SECRET_BEGIN_LINE) {
-            return Ok(Secret {
-                data,
-                cipher: false,
-                replace,
-            });
+fn decrypt<R, W, S>(encrypted: R, mut dest: W, password: S) -> Result<()>
+where
+    R: Read,
+    W: Write,
+    S: AsRef<str>,
+{
+    let reader = BufReader::new(encrypted);
+    let mut lines = reader.lines();
+    let mut must_read_line = || -> Result<String> {
+        match lines.next() {
+            Some(line) => line.context("read data from file"),
+            None => bail!("unexpect end of the file, the file is too short"),
         }
+    };
 
-        let content = String::from_utf8(data).context("decode secret file as utf-8")?;
-        let lines = content.split('\n');
-
-        let mut cipher_content = String::with_capacity(content.len());
-        for line in lines {
-            let line = line.trim();
-            if line == "" {
-                continue;
-            }
-
-            if line.as_bytes() == Self::SECRET_BEGIN_LINE {
-                continue;
-            }
-
-            cipher_content.push_str(line);
-
-            if line.as_bytes() == Self::SECRET_END_LINE {
-                break;
-            }
-        }
-
-        let data = hex::decode(cipher_content).context("invalid hex string in secret file")?;
-
-        Ok(Secret {
-            data,
-            cipher: true,
-            replace,
-        })
+    let head = must_read_line()?;
+    if head != SECRET_BEGIN_LINE {
+        bail!("unexpect head line of the file");
     }
 
-    pub fn write(&self, password: impl AsRef<str>) -> Result<Option<String>> {
-        let output = if self.cipher {
-            Output::Encrypt(self.wrap_encrypt(password)?)
-        } else {
-            Output::Decrypt(self.decrypt(password)?)
-        };
-        match self.replace.as_ref() {
-            Some(path) => {
-                let data = output.to_vec();
-                utils::write_file(path, &data)?;
-                Ok(None)
-            }
-            None => Ok(Some(output.to_string()?)),
-        }
-    }
-
-    fn wrap_encrypt(&self, password: impl AsRef<str>) -> Result<String> {
-        let cipher = self.encrypt(password)?;
-        let mut wrap = String::with_capacity(
-            Self::SECRET_BEGIN_LINE.len() + 1 + cipher.len() + Self::SECRET_END_LINE.len() + 1,
+    let salt = hex::decode(must_read_line()?).context("decode salt as hex string")?;
+    if salt.len() != SALT_LENGTH {
+        bail!(
+            "invalid salt length, expect {}, found {}",
+            SALT_LENGTH,
+            salt.len()
         );
-        for ch in Self::SECRET_BEGIN_LINE {
-            wrap.push(*ch as char);
-        }
-        wrap.push('\n');
-
-        let mut line_length = 0;
-        for ch in cipher.as_bytes() {
-            if line_length > Self::SECRET_LINE_MAX_LENGTH {
-                line_length = 0;
-                wrap.push('\n');
-            }
-            wrap.push(*ch as char);
-            line_length += 1;
-        }
-
-        for ch in Self::SECRET_END_LINE {
-            wrap.push(*ch as char);
-        }
-        wrap.push('\n');
-
-        Ok(wrap)
     }
+    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), &salt, PBKDF2_ROUNDS);
+    let key = Key::<Aes256Gcm>::from_slice(&key);
+    let cipher = Aes256Gcm::new(&key);
 
-    fn encrypt(&self, password: impl AsRef<str>) -> Result<String> {
-        let mut salt: [u8; Self::SALT_LENGTH] = [0; Self::SALT_LENGTH];
-        let mut rng = OsRng::default();
-        rng.fill_bytes(&mut salt);
-
-        let key = pbkdf2_hmac_array::<Sha256, 32>(
-            password.as_ref().as_bytes(),
-            &salt,
-            Self::PBKDF2_ROUNDS,
+    let nonce = hex::decode(must_read_line()?).context("decode nonce as hex string")?;
+    if nonce.len() != NONCE_LENGTH {
+        bail!(
+            "invalid nonce length, expect {}, found {}",
+            NONCE_LENGTH,
+            nonce.len()
         );
-        let key = Key::<Aes256Gcm>::from_slice(&key);
-
-        let cipher = Aes256Gcm::new(&key);
-        let nonce = Aes256Gcm::generate_nonce(&mut rng);
-        assert_eq!(nonce.len(), Self::NONCE_LENGTH);
-
-        let cipher_data = match cipher.encrypt(&nonce, self.data.as_ref()) {
-            Ok(data) => data,
-            Err(err) => bail!("use aes256gcm to encrypt data: {err}"),
-        };
-
-        let mut result =
-            Vec::with_capacity(Self::SALT_LENGTH + Self::NONCE_LENGTH + cipher_data.len());
-        result.extend(salt.to_vec());
-        result.extend(nonce.to_vec());
-        result.extend(cipher_data);
-
-        Ok(hex::encode(result))
     }
+    let nonce = Nonce::<Aes256Gcm>::from_slice(&nonce);
 
-    fn decrypt(&self, password: impl AsRef<str>) -> Result<Vec<u8>> {
-        if self.data.len() < Self::SALT_LENGTH + Self::NONCE_LENGTH + 1 {
-            bail!("invalid secret data, too short");
+    for line in lines {
+        let line = line.context("read content from file")?;
+        if line == SECRET_END_LINE {
+            break;
         }
-
-        let salt = &self.data[..Self::SALT_LENGTH];
-        let nonce = &self.data[Self::SALT_LENGTH..Self::NONCE_OFFSET];
-        let cipher_data = &self.data[Self::NONCE_OFFSET..];
-
-        let key = pbkdf2_hmac_array::<Sha256, 32>(
-            password.as_ref().as_bytes(),
-            salt,
-            Self::PBKDF2_ROUNDS,
-        );
-        let key = Key::<Aes256Gcm>::from_slice(&key);
-
-        let cipher = Aes256Gcm::new(&key);
-
-        let nonce = Nonce::<Aes256Gcm>::from_slice(nonce);
-        let plain = match cipher.decrypt(&nonce, cipher_data) {
+        let buffer = hex::decode(line).context("decode content as hex string")?;
+        let buffer: &[u8] = &buffer;
+        let plain = match cipher.decrypt(&nonce, buffer) {
             Ok(data) => data,
             Err(_) => bail!("decrypt secret failed, incorrect password or content"),
         };
-
-        Ok(plain)
+        dest.write_all(&plain).context("write buffer to dest")?;
     }
+    dest.flush().context("flush dest")?;
+
+    Ok(())
 }

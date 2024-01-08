@@ -19,6 +19,7 @@ mod recover;
 mod remove;
 mod reset;
 mod run;
+mod secret;
 mod snapshot;
 mod squash;
 mod sync;
@@ -69,6 +70,7 @@ pub enum Commands {
     Reset(reset::ResetArgs),
     Label(label::LabelArgs),
     Run(run::RunArgs),
+    Secret(secret::SecretArgs),
     Snapshot(snapshot::SnapshotArgs),
     Squash(squash::SquashArgs),
     Sync(sync::SyncArgs),
@@ -93,6 +95,7 @@ impl Commands {
             "reset" => reset::ResetArgs::completion(),
             "run" => run::RunArgs::completion(),
             "label" => label::LabelArgs::completion(),
+            "secret" => secret::SecretArgs::completion(),
             "snapshot" => snapshot::SnapshotArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
             "sync" => sync::SyncArgs::completion(),
@@ -125,6 +128,7 @@ impl Run for App {
             Commands::Remove(args) => args.run(cfg),
             Commands::Reset(args) => args.run(cfg),
             Commands::Run(args) => args.run(cfg),
+            Commands::Secret(args) => args.run(cfg),
             Commands::Snapshot(args) => args.run(cfg),
             Commands::Squash(args) => args.run(cfg),
             Commands::Sync(args) => args.run(cfg),
@@ -139,17 +143,33 @@ pub trait Run {
     fn run(&self, cfg: &Config) -> Result<()>;
 }
 
+pub enum CompletionFlag {
+    Items,
+    ItemsNoSpace,
+    Files,
+}
+
+impl CompletionFlag {
+    fn code(&self) -> &'static str {
+        match self {
+            CompletionFlag::Items => "0",
+            CompletionFlag::ItemsNoSpace => "1",
+            CompletionFlag::Files => "2",
+        }
+    }
+}
+
 pub struct CompletionResult {
     pub items: Vec<String>,
 
-    pub no_space: bool,
+    pub flag: CompletionFlag,
 }
 
 impl From<Vec<String>> for CompletionResult {
     fn from(items: Vec<String>) -> Self {
         CompletionResult {
             items,
-            no_space: false,
+            flag: CompletionFlag::Items,
         }
     }
 }
@@ -158,21 +178,25 @@ impl CompletionResult {
     pub fn empty() -> CompletionResult {
         CompletionResult {
             items: vec![],
-            no_space: false,
+            flag: CompletionFlag::Items,
+        }
+    }
+
+    pub fn files() -> CompletionResult {
+        CompletionResult {
+            items: vec![],
+            flag: CompletionFlag::Files,
         }
     }
 
     pub fn no_space(mut self) -> Self {
-        self.no_space = true;
+        self.flag = CompletionFlag::ItemsNoSpace;
         self
     }
 
     pub fn show(&self) {
-        if self.no_space {
-            println!("1");
-        } else {
-            println!("0");
-        }
+        let flag = self.flag.code();
+        println!("{flag}");
         for item in self.items.iter() {
             println!("{}", item);
         }
@@ -219,6 +243,10 @@ impl Completion {
             }
             _ => Ok(CompletionResult::empty()),
         }
+    }
+
+    pub fn files(_: &Config, _: &[&str]) -> Result<CompletionResult> {
+        Ok(CompletionResult::files())
     }
 
     fn wrap_with_keywords(

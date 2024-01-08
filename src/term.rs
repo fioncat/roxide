@@ -377,6 +377,12 @@ pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Resu
     Ok(text)
 }
 
+/// Ask user to input password in tty.
+pub fn input_password() -> Result<String> {
+    let msg = format!("{} Input password: ", style("::").bold().magenta());
+    rpassword::prompt_password(msg).context("input password from tty")
+}
+
 /// Ask user to edit content in editor.
 pub fn edit_content<S>(cfg: &Config, raw: S, name: S, require: bool) -> Result<String>
 where

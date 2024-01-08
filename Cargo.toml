@@ -29,6 +29,7 @@ pad = "0.1.6"
 pbkdf2 = "0.12.2"
 regex = "1.10.2"
 reqwest = { version = "0.11.23", features = ["blocking", "json"] }
+rpassword = "7.3.1"
 scanf = "1.2.1"
 semver = "1.0.21"
 serde = { version = "1.0.195", features = ["derive"] }
