@@ -1482,6 +1482,17 @@ impl ProgressWrapper {
     }
 }
 
+impl Drop for ProgressWrapper {
+    fn drop(&mut self) {
+        if self.done || self.current >= self.total {
+            return;
+        }
+        // The progress didn't stop normally, mark it as failed.
+        cursor_up();
+        info!("{} {}", self.done_desc, style("failed").red());
+    }
+}
+
 struct ProgressWriter<W: Write> {
     upstream: W,
     wrapper: ProgressWrapper,
