@@ -43,18 +43,28 @@ impl Write for StdoutWrap {
     }
 }
 
-/// Encrypts or decrypts files using the [AES-256-GCM](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) algorithm.
-/// A password is required to represent the encryption key.
+/// Encrypts or decrypts files using the AES-256-GCM algorithm. A password is
+/// required to represent the encryption key.
+///
+/// See:
+///
+/// * [AES](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard)
+/// * [GCM](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
 ///
 /// ## Encryption
 ///
 /// 1. Generates a random `salt` of length 5.
-/// 2. Utilizes the [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) + [SHA256](https://en.wikipedia.org/wiki/SHA-2) algorithm to derive a key of length 32 bytes
+/// 2. Utilizes the PBKDF2 + SHA256 algorithm to derive a key of length 32 bytes
 /// from the user-provided password. The key undergoes salting and PBKDF2 processing
 /// to enhance security.
 /// 3. Generates a random `nonce` of length 12 for use in AES-256-GCM encryption.
 /// 4. Reads 4096 bytes of data from the file at a time, encrypts using AES-256-GCM,
 /// and stores the HEX result as a string.
+///
+/// See:
+///
+/// * [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2)
+/// * [SHA-2](https://en.wikipedia.org/wiki/SHA-2)
 ///
 /// The format of the encrypted file:
 ///
