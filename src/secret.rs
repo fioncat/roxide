@@ -13,7 +13,6 @@ use base64::Engine;
 use pbkdf2::pbkdf2_hmac_array;
 use sha2::Sha256;
 
-use crate::info;
 use crate::term::{self, ProgressReader};
 
 const ENCRYPT_READ_BUFFER_SIZE: usize = 4096;
@@ -144,6 +143,7 @@ pub fn handle<P: AsRef<Path>>(
                 // Therefore, [`StdoutWrap`] is used to validate it in real-time.
                 Box::new(StdoutWrap { stdout })
             } else {
+                is_dest_file = true;
                 Box::new(stdout)
             }
         }
@@ -158,13 +158,12 @@ pub fn handle<P: AsRef<Path>>(
         .map(|s| Ok(s.to_string()))
         .unwrap_or(term::input_password())?;
 
-    let mut show_progress = false;
     let reader: Box<dyn Read> = if is_dest_file && src_meta.len() > SHOW_PROGRESS_BAR_SIZE {
         // The progress bar for encryption/decryption will only be displayed in the
         // terminal if writing to a file and the source file is large enough.
-        show_progress = true;
         Box::new(ProgressReader::new(
             "Processing".to_string(),
+            "Process".to_string(),
             src_meta.len() as usize,
             src,
         ))
@@ -172,27 +171,15 @@ pub fn handle<P: AsRef<Path>>(
         Box::new(src)
     };
 
-    let mut is_cipher = false;
     if read_count == SECRET_BEGIN_LINE.len() {
         if let Ok(head) = String::from_utf8(head_buffer.to_vec()) {
             if head == SECRET_BEGIN_LINE {
-                is_cipher = true;
+                return decrypt(reader, dest, password).context("decrypt file");
             }
         }
     }
 
-    if is_cipher {
-        decrypt(reader, dest, password).context("decrypt file")
-    } else {
-        encrypt(reader, dest, password).context("encrypt file")
-    }?;
-
-    if show_progress {
-        term::cursor_up();
-        info!("Handle secret done");
-    }
-
-    Ok(())
+    encrypt(reader, dest, password).context("encrypt file")
 }
 
 /// See: [`handle`].
@@ -208,6 +195,7 @@ where
     let mut write_data = |data: &[u8]| -> Result<()> {
         dest.write_all(data).context("write data to dest")?;
         dest.write(&[b'\n']).context("write break to dest")?;
+        dest.flush().context("flush dest")?;
         Ok(())
     };
     write_data(SECRET_BEGIN_LINE.as_bytes())?;
@@ -253,7 +241,6 @@ where
         }
     }
     write_data(SECRET_END_LINE.as_bytes())?;
-    dest.flush().context("flush dest")?;
 
     Ok(())
 }
@@ -321,8 +308,8 @@ where
             Err(_) => bail!("decrypt secret failed, incorrect password or content"),
         };
         dest.write_all(&plain).context("write buffer to dest")?;
+        dest.flush().context("flush dest")?;
     }
-    dest.flush().context("flush dest")?;
 
     Ok(())
 }

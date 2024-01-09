@@ -1364,12 +1364,17 @@ impl Table {
 
 struct ProgressWrapper {
     desc: String,
+    done_desc: String,
     desc_size: usize,
 
     last_report: Instant,
 
     current: usize,
     total: usize,
+
+    start: Instant,
+
+    done: bool,
 }
 
 impl ProgressWrapper {
@@ -1378,16 +1383,19 @@ impl ProgressWrapper {
 
     const REPORT_INTERVAL: Duration = Duration::from_millis(200);
 
-    pub fn new(desc: String, total: usize) -> ProgressWrapper {
+    pub fn new(desc: String, done_desc: String, total: usize) -> ProgressWrapper {
         let desc_size = console::measure_text_width(&desc);
         let last_report = Instant::now();
 
         let pw = ProgressWrapper {
             desc,
+            done_desc,
             desc_size,
             last_report,
             current: 0,
             total,
+            start: Instant::now(),
+            done: false,
         };
         write_stderrln(pw.render());
         pw
@@ -1426,16 +1434,41 @@ impl ProgressWrapper {
             return line;
         }
         line.push_str(&info);
+
+        let line_size = console::measure_text_width(&line);
+        if line_size + Self::SPACE_SIZE > term_size {
+            return line;
+        }
+        let elapsed_seconds = self.start.elapsed().as_secs_f64();
+        if elapsed_seconds == 0.0 {
+            return line;
+        }
+
+        line.push_str(Self::SPACE);
+
+        let speed = self.current as f64 / elapsed_seconds;
+        let speed = format!("- {}/s", utils::human_bytes(speed as u64));
+        let speed_size = console::measure_text_width(&speed);
+        let line_size = console::measure_text_width(&line);
+        if line_size + speed_size > term_size {
+            return line;
+        }
+        line.push_str(&speed);
+
         line
     }
 
     fn update_current(&mut self, size: usize) {
+        if self.done {
+            return;
+        }
         self.current += size;
 
         if self.current >= self.total {
+            self.done = true;
             self.current = self.total;
             cursor_up();
-            write_stderrln(self.render());
+            info!("{} {}", self.done_desc, style("done").green());
             return;
         }
 
@@ -1449,16 +1482,27 @@ impl ProgressWrapper {
     }
 }
 
+impl Drop for ProgressWrapper {
+    fn drop(&mut self) {
+        if self.done || self.current >= self.total {
+            return;
+        }
+        // The progress didn't stop normally, mark it as failed.
+        cursor_up();
+        info!("{} {}", self.done_desc, style("failed").red());
+    }
+}
+
 struct ProgressWriter<W: Write> {
     upstream: W,
     wrapper: ProgressWrapper,
 }
 
 impl<W: Write> ProgressWriter<W> {
-    pub fn new(desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
+    pub fn new(desc: String, done_desc: String, total: usize, upstream: W) -> ProgressWriter<W> {
         ProgressWriter {
             upstream,
-            wrapper: ProgressWrapper::new(desc, total),
+            wrapper: ProgressWrapper::new(desc, done_desc, total),
         }
     }
 }
@@ -1482,10 +1526,10 @@ pub struct ProgressReader<R: Read> {
 }
 
 impl<R: Read> ProgressReader<R> {
-    pub fn new(desc: String, total: usize, upstream: R) -> ProgressReader<R> {
+    pub fn new(desc: String, done_desc: String, total: usize, upstream: R) -> ProgressReader<R> {
         ProgressReader {
             upstream,
-            wrapper: ProgressWrapper::new(desc, total),
+            wrapper: ProgressWrapper::new(desc, done_desc, total),
         }
     }
 }
@@ -1527,11 +1571,8 @@ pub fn download(name: &str, url: impl AsRef<str>, path: impl AsRef<str>) -> Resu
         .with_context(|| format!("Open file {}", path.display()))?;
     let desc = format!("Downloading {name}:");
 
-    let mut pw = ProgressWriter::new(desc, total as usize, file);
+    let mut pw = ProgressWriter::new(desc, "Download".to_string(), total as usize, file);
     resp.copy_to(&mut pw).context("download data")?;
-
-    cursor_up();
-    info!("Download {} done", name);
 
     Ok(())
 }
