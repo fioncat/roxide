@@ -20,6 +20,7 @@ const SHOW_PROGRESS_BAR_SIZE: u64 = 4096 * 1024;
 
 const SALT_LENGTH: usize = 5;
 const NONCE_LENGTH: usize = 12;
+const HEADER_LENGTH: usize = SALT_LENGTH + NONCE_LENGTH;
 
 const SECRET_BEGIN_LINE: &'static str = "-----BEGIN ROXIDE SECRET-----";
 const SECRET_END_LINE: &'static str = "-----END ROXIDE SECRET-----";
@@ -69,10 +70,9 @@ impl Write for StdoutWrap {
 ///
 /// The format of the encrypted file:
 ///
-/// - First line: File header, indicating that the file is an encrypted file using
+/// - First line: File begin, indicating that the file is an encrypted file using
 /// the roxide encryption.
-/// - Second line: Randomly generated salt.
-/// - Third line: Randomly generated nonce.
+/// - Second line: Secret header, randomly generated salt + nonce.
 /// - Subsequent lines: Each line represents the encrypted result of 4096 bytes of
 /// original data.
 /// - Last line: File footer, marking the end of the encrypted content; subsequent
@@ -200,12 +200,10 @@ where
     };
     write_data(SECRET_BEGIN_LINE.as_bytes())?;
 
-    // Generate salt, and write it to the dest file (with base64 encode).
+    // Generate salt.
     let mut salt: [u8; SALT_LENGTH] = [0; SALT_LENGTH];
     let mut rng = OsRng::default();
     rng.fill_bytes(&mut salt);
-    let salt_b64 = B64Engine.encode(&salt);
-    write_data(&salt_b64.into_bytes())?;
 
     // Use PBKDF2 to generate private key according to user password and generated
     // salt. This approach ensures that the generated key is robust enough, and the
@@ -214,11 +212,15 @@ where
     let key = Key::<Aes256Gcm>::from_slice(&key);
 
     let cipher = Aes256Gcm::new(&key);
-    // Generate the nonce in aes-256-gcm, usually randomly.
+    // Generate the nonce in aes-256-gcm.
     let nonce = Aes256Gcm::generate_nonce(&mut rng);
     assert_eq!(nonce.len(), NONCE_LENGTH);
-    let nonce_b64 = B64Engine.encode(&nonce);
-    write_data(&nonce_b64.into_bytes())?;
+
+    // Write salt and nonce into file header.
+    let mut head = salt.to_vec();
+    head.extend(nonce.to_vec());
+    let head_b64 = B64Engine.encode(head);
+    write_data(&head_b64.into_bytes())?;
 
     loop {
         // Encrypts 4096 bytes of data from the source file at a time and writes it
@@ -261,36 +263,30 @@ where
         }
     };
 
-    let head = must_read_line()?;
-    if head != SECRET_BEGIN_LINE {
-        bail!("unexpect head line of the file");
+    let begin = must_read_line()?;
+    if begin != SECRET_BEGIN_LINE {
+        bail!("unexpect begin line of the file");
     }
 
-    let salt = B64Engine
+    let head = B64Engine
         .decode(must_read_line()?)
-        .context("decode salt as base64 string")?;
-    if salt.len() != SALT_LENGTH {
+        .context("decode header as base64 string")?;
+    if head.len() != HEADER_LENGTH {
         bail!(
-            "invalid salt length, expect {}, found {}",
-            SALT_LENGTH,
-            salt.len()
+            "invalid header length, expect {}, found {}",
+            HEADER_LENGTH,
+            head.len()
         );
     }
-    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), &salt, PBKDF2_ROUNDS);
+
+    let salt = &head[..SALT_LENGTH];
+    let nonce = &head[SALT_LENGTH..];
+
+    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), salt, PBKDF2_ROUNDS);
     let key = Key::<Aes256Gcm>::from_slice(&key);
     let cipher = Aes256Gcm::new(&key);
 
-    let nonce = B64Engine
-        .decode(must_read_line()?)
-        .context("decode nonce as base64 string")?;
-    if nonce.len() != NONCE_LENGTH {
-        bail!(
-            "invalid nonce length, expect {}, found {}",
-            NONCE_LENGTH,
-            nonce.len()
-        );
-    }
-    let nonce = Nonce::<Aes256Gcm>::from_slice(&nonce);
+    let nonce = Nonce::<Aes256Gcm>::from_slice(nonce);
 
     for line in lines {
         // During decryption, each line represents a batch, and each batch of data
