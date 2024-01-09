@@ -183,7 +183,6 @@ pub fn handle<P: AsRef<Path>>(
 }
 
 /// See: [`handle`].
-#[inline(always)]
 fn encrypt<R, W, S>(plain: R, mut dest: W, password: S) -> Result<()>
 where
     R: Read,
