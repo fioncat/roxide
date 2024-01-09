@@ -8,6 +8,8 @@ use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use anyhow::{bail, Context, Result};
+use base64::engine::general_purpose::STANDARD as B64Engine;
+use base64::Engine;
 use pbkdf2::pbkdf2_hmac_array;
 use sha2::Sha256;
 
@@ -59,7 +61,7 @@ impl Write for StdoutWrap {
 /// to enhance security.
 /// 3. Generates a random `nonce` of length 12 for use in AES-256-GCM encryption.
 /// 4. Reads 4096 bytes of data from the file at a time, encrypts using AES-256-GCM,
-/// and stores the HEX result as a string.
+/// and stores the Base64 result as a string.
 ///
 /// See:
 ///
@@ -78,8 +80,8 @@ impl Write for StdoutWrap {
 /// lines after this are ignored.
 ///
 /// In summary, the encrypted file is a text file, easily viewable and storable.
-/// However, the encrypted file is generally larger than the original file (typically
-/// around twice the size), and users may need to compress it manually.
+/// However, the encrypted file is generally larger than the original file and users
+/// may need to compress it manually.
 ///
 /// ## Decryption
 ///
@@ -210,12 +212,12 @@ where
     };
     write_data(SECRET_BEGIN_LINE.as_bytes())?;
 
-    // Generate salt, and write it to the dest file (with hex encode).
+    // Generate salt, and write it to the dest file (with base64 encode).
     let mut salt: [u8; SALT_LENGTH] = [0; SALT_LENGTH];
     let mut rng = OsRng::default();
     rng.fill_bytes(&mut salt);
-    let salt_hex = hex::encode(&salt);
-    write_data(&salt_hex.into_bytes())?;
+    let salt_b64 = B64Engine.encode(&salt);
+    write_data(&salt_b64.into_bytes())?;
 
     // Use PBKDF2 to generate private key according to user password and generated
     // salt. This approach ensures that the generated key is robust enough, and the
@@ -227,8 +229,8 @@ where
     // Generate the nonce in aes-256-gcm, usually randomly.
     let nonce = Aes256Gcm::generate_nonce(&mut rng);
     assert_eq!(nonce.len(), NONCE_LENGTH);
-    let nonce_hex = hex::encode(&nonce);
-    write_data(&nonce_hex.into_bytes())?;
+    let nonce_b64 = B64Engine.encode(&nonce);
+    write_data(&nonce_b64.into_bytes())?;
 
     loop {
         // Encrypts 4096 bytes of data from the source file at a time and writes it
@@ -244,7 +246,7 @@ where
                     Ok(data) => data,
                     Err(err) => bail!("use aes256gcm to encrypt data: {err}"),
                 };
-                let line = hex::encode(encrypted);
+                let line = B64Engine.encode(encrypted);
                 write_data(&line.into_bytes())?;
             }
             Err(err) => return Err(err).context("read plain data"),
@@ -277,7 +279,9 @@ where
         bail!("unexpect head line of the file");
     }
 
-    let salt = hex::decode(must_read_line()?).context("decode salt as hex string")?;
+    let salt = B64Engine
+        .decode(must_read_line()?)
+        .context("decode salt as base64 string")?;
     if salt.len() != SALT_LENGTH {
         bail!(
             "invalid salt length, expect {}, found {}",
@@ -289,7 +293,9 @@ where
     let key = Key::<Aes256Gcm>::from_slice(&key);
     let cipher = Aes256Gcm::new(&key);
 
-    let nonce = hex::decode(must_read_line()?).context("decode nonce as hex string")?;
+    let nonce = B64Engine
+        .decode(must_read_line()?)
+        .context("decode nonce as base64 string")?;
     if nonce.len() != NONCE_LENGTH {
         bail!(
             "invalid nonce length, expect {}, found {}",
@@ -306,7 +312,9 @@ where
         if line == SECRET_END_LINE {
             break;
         }
-        let buffer = hex::decode(line).context("decode content as hex string")?;
+        let buffer = B64Engine
+            .decode(line)
+            .context("decode content as base64 string")?;
         let buffer: &[u8] = &buffer;
         let plain = match cipher.decrypt(&nonce, buffer) {
             Ok(data) => data,
