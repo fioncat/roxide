@@ -13,13 +13,13 @@ description = "🎁 A simple and fast tool to manage your git repositories"
 [dependencies]
 aes-gcm = "0.10.3"
 anyhow = "1.0.79"
+base64 = "0.21.6"
 bincode = "1.3.3"
 chrono = "0.4.31"
 clap = { version = "4.4.13", features = ["derive"] }
 console = "0.15.7"
 dialoguer = "0.11.0"
 file-lock = "2.1.10"
-hex = "0.4.3"
 num_cpus = "1.16.0"
 open = "5.0.1"
 # We need this to let cargo build can run in Github workflow.
