@@ -5,12 +5,18 @@ _roxide() {
 
 	local flags=${items[1]}
 	local items=("${items[@]:1}")
-	if [[ $flags -eq "1" ]]; then
-		# No space
-		_describe 'command' items -S ''
-	else
-		_describe 'command' items
-	fi
+	case "${flags}" in
+		"0")
+			_describe 'command' items
+			;;
+		"1")
+			# No space
+			_describe 'command' items -S ''
+			;;
+		"2")
+			# Files
+			_arguments '*:filename:'"_files"
+	esac
 }
 
 compdef _roxide roxide
