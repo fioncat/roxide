@@ -91,6 +91,10 @@ pub fn disable() -> bool {
     false
 }
 
+pub fn enable() -> bool {
+    false
+}
+
 pub fn empty_string() -> String {
     String::new()
 }

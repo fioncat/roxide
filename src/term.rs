@@ -783,7 +783,7 @@ impl<'a> Cmd<'_> {
 
     fn show(&self) -> Option<String> {
         let cmd_name = match self.script.as_ref() {
-            Some(script) => format!("sh: {}", style(script).bold()),
+            Some(script) => format!(">> {}", style(script).bold()),
             None => {
                 let mut cmd_args = Vec::with_capacity(1);
                 cmd_args.push(self.cmd.get_program().to_str().unwrap());

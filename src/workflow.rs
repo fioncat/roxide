@@ -6,10 +6,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use crate::batch::Task;
-use crate::config::{Config, Docker, WorkflowConfig, WorkflowEnv, WorkflowFromRepo, WorkflowStep};
+use crate::config::{
+    Config, Docker, WorkflowCondition, WorkflowConfig, WorkflowEnv, WorkflowFromRepo, WorkflowOS,
+    WorkflowStep,
+};
 use crate::repo::Repo;
 use crate::term::Cmd;
-use crate::{exec, info, utils};
+use crate::{exec, info, stderrln, utils};
 
 pub struct Workflow<C: AsRef<WorkflowConfig>> {
     pub name: String,
@@ -85,10 +88,20 @@ impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
 
         if let Some(hint) = self.display.as_ref() {
             exec!("{}", hint);
+            stderrln!();
         }
+        let step_len = self.cfg.as_ref().steps.len();
         for (idx, step) in self.cfg.as_ref().steps.iter().enumerate() {
+            if let Some(_) = self.display {
+                exec!("Step '{}'", step.name);
+            }
             self.run_step(idx, step, &mut extra_env)
                 .with_context(|| format!("run step '{}' failed", step.name))?;
+            if let Some(_) = self.display {
+                if idx != step_len - 1 {
+                    stderrln!();
+                }
+            }
         }
         Ok(())
     }
@@ -130,14 +143,33 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         step: &WorkflowStep,
         extra_env: &mut HashMap<String, String>,
     ) -> Result<()> {
-        if let Some(content) = step.file.as_ref() {
-            if let Some(_) = self.display.as_ref() {
-                exec!(
-                    "Write file '{}', with {} data",
-                    step.name,
-                    utils::human_bytes(content.len() as u64)
-                );
+        if let Some(os) = step.os.as_ref() {
+            if !self.check_os(os)? {
+                self.show_step_info("Skip because of mismatched os");
+                return Ok(());
             }
+        }
+
+        if let Some(if_condition) = step.if_condition.as_ref() {
+            if !self.check_if(idx, &extra_env, if_condition)? {
+                self.show_step_info("Skip because the if condition check did not pass");
+                return Ok(());
+            }
+        }
+
+        if !step.condition.is_empty() {
+            let if_condition = self.parse_condition(&step.condition);
+            if !self.check_if(idx, &extra_env, if_condition)? {
+                self.show_step_info("Skip because the condition check did not pass");
+                return Ok(());
+            }
+        }
+
+        if let Some(content) = step.file.as_ref() {
+            self.show_step_info(format!(
+                "Write file with {} data",
+                utils::human_bytes(content.len() as u64)
+            ));
             let path = self.path.join(&step.name);
             utils::write_file(&path, content.as_bytes())?;
             return Ok(());
@@ -172,32 +204,40 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
                 None => return Ok(()),
             }
         };
-        for (k, v) in extra_env.iter() {
-            cmd.with_env(k, v);
-        }
-        for (k, v) in self.env.global.iter() {
-            cmd.with_env(k, v);
-        }
-        if let Some(envs) = self.env.steps.get(&idx) {
-            for (k, v) in envs.iter() {
-                cmd.with_env(k, v);
-            }
-        }
+        self.setup_env(idx, &mut cmd, extra_env);
 
         if let Some(_) = self.display.as_ref() {
-            let hint = format!("Run workflow step '{}'", step.name);
-            cmd = cmd.with_display(hint);
+            cmd = cmd.with_display_cmd();
         }
 
         cmd.with_path(&self.path);
-        match capture_output {
-            Some(env_name) => {
-                let output = cmd.read()?;
-                info!("Capture the command output to env '{}'", env_name.as_str());
-                extra_env.insert(env_name, output);
-                Ok(())
+        let result = (|| -> Result<()> {
+            match capture_output {
+                Some(env_name) => {
+                    let output = cmd.read()?;
+                    self.show_step_info(format!(
+                        "Capture the command output to env '{}'",
+                        env_name.as_str()
+                    ));
+                    extra_env.insert(env_name, output);
+                    Ok(())
+                }
+                None => cmd.execute_check(),
             }
-            None => cmd.execute_check(),
+        })();
+        if let Err(_) = result {
+            if step.allow_failure {
+                self.show_step_info("Ignore step failure because of `allow_failure`");
+                return Ok(());
+            }
+        }
+        result
+    }
+
+    #[inline]
+    fn show_step_info(&self, s: impl AsRef<str>) {
+        if let Some(_) = self.display {
+            info!("{}", s.as_ref());
         }
     }
 
@@ -260,6 +300,79 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         args.push(step.run.as_ref().unwrap().as_str());
 
         Cmd::sh(args.join(" ").as_str(), step.is_capture())
+    }
+
+    fn setup_env(&self, idx: usize, cmd: &mut Cmd, extra_env: &HashMap<String, String>) {
+        for (k, v) in extra_env.iter() {
+            cmd.with_env(k, v);
+        }
+        for (k, v) in self.env.global.iter() {
+            cmd.with_env(k, v);
+        }
+        if let Some(envs) = self.env.steps.get(&idx) {
+            for (k, v) in envs.iter() {
+                cmd.with_env(k, v);
+            }
+        }
+    }
+
+    fn check_os(&self, os: &WorkflowOS) -> Result<bool> {
+        let current_os = Cmd::with_args("uname", &["-s"])
+            .read()
+            .context("use `uname -s` to check os")?
+            .to_lowercase();
+        match os {
+            WorkflowOS::Linux => Ok(current_os == "linux"),
+            WorkflowOS::Macos => Ok(current_os == "darwin"),
+        }
+    }
+
+    fn check_if(
+        &self,
+        idx: usize,
+        extra_env: &HashMap<String, String>,
+        condition: impl AsRef<str>,
+    ) -> Result<bool> {
+        let cmd = format!("if {}; then echo true; fi", condition.as_ref());
+        let mut cmd = Cmd::sh(cmd, true);
+
+        if let Some(_) = self.display {
+            cmd = cmd.with_display_cmd();
+        }
+
+        self.setup_env(idx, &mut cmd, extra_env);
+
+        let result = cmd.read().context("check if condition")?;
+        Ok(result.trim() == "true")
+    }
+
+    fn parse_condition(&self, condition: &Vec<WorkflowCondition>) -> String {
+        let mut conds: Vec<String> = Vec::with_capacity(condition.len());
+        for cond in condition.iter() {
+            let cond = if let Some(env) = cond.env.as_ref() {
+                if cond.exists {
+                    format!("[[ -n \"${{{env}}}\" ]]")
+                } else {
+                    format!("[[ -z \"${{{env}}}\" ]]")
+                }
+            } else if let Some(file) = cond.file.as_ref() {
+                if cond.exists {
+                    format!("[[ -f {file} ]]")
+                } else {
+                    format!("[[ ! -f {file} ]]")
+                }
+            } else if let Some(cmd) = cond.cmd.as_ref() {
+                if cond.exists {
+                    format!("command -v {cmd}")
+                } else {
+                    format!("! command -v {cmd}")
+                }
+            } else {
+                continue;
+            };
+            conds.push(cond);
+        }
+        conds.join(" && ")
     }
 }
 

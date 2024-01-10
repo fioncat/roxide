@@ -110,6 +110,17 @@ pub struct WorkflowStep {
     /// is an execution command, name is the name of the step. (required)
     pub name: String,
 
+    pub os: Option<WorkflowOS>,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub condition: Vec<WorkflowCondition>,
+
+    #[serde(default = "defaults::disable")]
+    pub allow_failure: bool,
+
+    #[serde(rename = "if")]
+    pub if_condition: Option<String>,
+
     pub image: Option<String>,
 
     pub ssh: Option<String>,
@@ -144,6 +155,26 @@ pub struct WorkflowSetEnv {
 pub struct WorkflowDockerBuild {
     pub image: String,
     pub file: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub enum WorkflowOS {
+    #[serde(rename = "linux")]
+    Linux,
+    #[serde(rename = "macos")]
+    Macos,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct WorkflowCondition {
+    pub env: Option<String>,
+
+    pub file: Option<String>,
+
+    pub cmd: Option<String>,
+
+    #[serde(default = "defaults::enable")]
+    pub exists: bool,
 }
 
 /// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
@@ -919,6 +950,10 @@ func main() {
                 docker_build: None,
                 docker_push: None,
                 set_env: None,
+                allow_failure: false,
+                os: None,
+                condition: vec![],
+                if_condition: None,
             },
             WorkflowStep {
                 name: "Init go module".to_string(),
@@ -934,6 +969,10 @@ func main() {
                 docker_build: None,
                 docker_push: None,
                 set_env: None,
+                allow_failure: false,
+                os: None,
+                condition: vec![],
+                if_condition: None,
             },
         ];
         let w0_env = vec![
@@ -971,6 +1010,10 @@ func main() {
             docker_build: None,
             docker_push: None,
             set_env: None,
+            allow_failure: false,
+            os: None,
+            condition: vec![],
+            if_condition: None,
         }];
         let w1 = WorkflowConfig {
             env: vec![],
@@ -994,6 +1037,10 @@ func main() {
             docker_build: None,
             docker_push: None,
             set_env: None,
+            allow_failure: false,
+            os: None,
+            condition: vec![],
+            if_condition: None,
         }];
         let w2 = WorkflowConfig {
             env: vec![],
@@ -1092,6 +1139,10 @@ func main() {
                         docker_build: None,
                         docker_push: None,
                         set_env: None,
+                        allow_failure: false,
+                        os: None,
+                        condition: vec![],
+                        if_condition: None,
                     })
                     .collect(),
                 include: includes.into_iter().map(|s| s.to_string()).collect(),
