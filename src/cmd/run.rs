@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Args;
 
 use crate::batch::{self, Task};
@@ -63,10 +63,7 @@ impl Run for RunArgs {
 
         let level = Arc::new(level);
         let mut tasks = Vec::with_capacity(repos.len());
-        let workflow_cfg = match cfg.workflows.get(&self.name) {
-            Some(cfg) => Arc::new(cfg.clone()),
-            None => bail!("could not find workflow '{}'", self.name),
-        };
+        let workflow_cfg = Arc::new(cfg.get_workflow(&self.name)?.into_owned());
 
         for repo in repos {
             let show_name = repo.to_string(&level);

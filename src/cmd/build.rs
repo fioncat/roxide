@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -26,8 +25,9 @@ impl Run for BuildArgs {
         let db = Database::load(cfg)?;
 
         let repo = db.must_get_current()?;
-        let workflow = self.load_workflow(cfg, &repo)?;
-
+        let workflows = Self::load_workflow_cfg(cfg, &repo)?;
+        let workflow_cfg = Config::get_workflow_from_map(&workflows, &self.name)?;
+        let workflow = Workflow::new(cfg, &repo, &self.name, workflow_cfg, false);
         workflow.run()
     }
 }
@@ -50,23 +50,6 @@ impl BuildArgs {
                 Err(err).with_context(|| format!("read file '{}'", Self::WORKFLOW_FILE_NAME))
             }
         }
-    }
-
-    fn load_workflow(&self, cfg: &Config, repo: &Repo) -> Result<Workflow<Cow<WorkflowConfig>>> {
-        let mut workflows = Self::load_workflow_cfg(cfg, repo)?;
-
-        let workflow_cfg = match workflows.remove(&self.name) {
-            Some(workflow) => workflow,
-            None => bail!(
-                "could not find workflow '{}' in your '{}'",
-                self.name,
-                Self::WORKFLOW_FILE_NAME
-            ),
-        };
-
-        let workflow_cfg: Cow<WorkflowConfig> = Cow::Owned(workflow_cfg);
-
-        Ok(Workflow::new(cfg, repo, &self.name, workflow_cfg, false))
     }
 
     pub fn completion() -> Completion {
