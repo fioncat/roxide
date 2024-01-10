@@ -142,16 +142,35 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
             utils::write_file(&path, content.as_bytes())?;
             return Ok(());
         }
-        if let None = step.run {
-            return Ok(());
-        }
 
+        let mut capture_output = step.capture_output.as_ref().map(|s| s.clone());
         let mut cmd = if let Some(_) = step.image {
             self.docker_cmd(idx, step, &extra_env)
         } else if let Some(_) = step.ssh {
             self.ssh_cmd(step)
+        } else if let Some(set_env) = step.set_env.as_ref() {
+            let cmd = format!("echo \"{}\"", set_env.value);
+            capture_output = Some(set_env.name.clone());
+            Cmd::sh(cmd, true)
+        } else if let Some(image) = step.docker_push.as_ref() {
+            let cmd = format!("{} push {}", self.docker.cmd, image);
+            Cmd::sh(cmd, step.is_capture())
+        } else if let Some(docker_build) = step.docker_build.as_ref() {
+            let file = docker_build
+                .file
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or("Dockerfile");
+            let cmd = format!(
+                "{} build -f {} -t {} .",
+                self.docker.cmd, file, docker_build.image
+            );
+            Cmd::sh(cmd, step.is_capture())
         } else {
-            Cmd::sh(step.run.as_ref().unwrap().as_str(), step.is_capture())
+            match step.run.as_ref() {
+                Some(run) => Cmd::sh(run, step.is_capture()),
+                None => return Ok(()),
+            }
         };
         for (k, v) in extra_env.iter() {
             cmd.with_env(k, v);
@@ -171,14 +190,14 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         }
 
         cmd.with_path(&self.path);
-        if step.is_capture() {
-            let env_name = step.capture_output.as_ref().unwrap().clone();
-            let output = cmd.read()?;
-            info!("Capture the command output to env '{}'", env_name.as_str());
-            extra_env.insert(env_name, output);
-            Ok(())
-        } else {
-            cmd.execute_check()
+        match capture_output {
+            Some(env_name) => {
+                let output = cmd.read()?;
+                info!("Capture the command output to env '{}'", env_name.as_str());
+                extra_env.insert(env_name, output);
+                Ok(())
+            }
+            None => cmd.execute_check(),
         }
     }
 

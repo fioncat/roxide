@@ -114,6 +114,12 @@ pub struct WorkflowStep {
 
     pub ssh: Option<String>,
 
+    pub set_env: Option<WorkflowSetEnv>,
+
+    pub docker_build: Option<WorkflowDockerBuild>,
+
+    pub docker_push: Option<String>,
+
     pub work_dir: Option<String>,
 
     #[serde(default = "defaults::empty_vec")]
@@ -126,6 +132,18 @@ pub struct WorkflowStep {
     pub run: Option<String>,
 
     pub capture_output: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct WorkflowSetEnv {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct WorkflowDockerBuild {
+    pub image: String,
+    pub file: Option<String>,
 }
 
 /// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
@@ -893,6 +911,9 @@ func main() {
                 ssh: None,
                 work_dir: None,
                 capture_output: None,
+                docker_build: None,
+                docker_push: None,
+                set_env: None,
             },
             WorkflowStep {
                 name: "Init go module".to_string(),
@@ -905,6 +926,9 @@ func main() {
                 ssh: None,
                 work_dir: None,
                 capture_output: None,
+                docker_build: None,
+                docker_push: None,
+                set_env: None,
             },
         ];
         let w0_env = vec![
@@ -939,6 +963,9 @@ func main() {
             ssh: None,
             work_dir: None,
             capture_output: None,
+            docker_build: None,
+            docker_push: None,
+            set_env: None,
         }];
         let w1 = WorkflowConfig {
             env: vec![],
@@ -959,6 +986,9 @@ func main() {
             }],
             run: Some(String::from("go build ./...")),
             capture_output: None,
+            docker_build: None,
+            docker_push: None,
+            set_env: None,
         }];
         let w2 = WorkflowConfig {
             env: vec![],
@@ -1054,6 +1084,9 @@ func main() {
                         file: None,
                         run: None,
                         capture_output: None,
+                        docker_build: None,
+                        docker_push: None,
+                        set_env: None,
                     })
                     .collect(),
                 import: imports.into_iter().map(|s| s.to_string()).collect(),

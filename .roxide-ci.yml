@@ -1,10 +1,10 @@
 default:
   import:
-    - build-in-docker
+    - build
     - build-image
     - push-image
 
-build-in-docker:
+build:
   steps:
     - name: Build in docker
       image: "messense/rust-musl-cross:x86_64-musl"
@@ -19,21 +19,24 @@ get-image-name:
       run: git describe --tags --abbrev=0
       capture_output: IMAGE_TAG
 
-    - name: Get image name
-      run: echo "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
-      capture_output: IMAGE_NAME
+    - name: Set image name
+      set_env:
+        name: IMAGE_NAME
+        value: "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
 
 build-image:
   import: ["get-image-name"]
   steps:
     - name: Build docker image
-      run: sudo docker build -f Dockerfile -t ${IMAGE_NAME:?} .
+      docker_build:
+        image: "${IMAGE_NAME:?}"
+        file: "Dockerfile"
 
 push-image:
   import: ["get-image-name"]
   steps:
     - name: Push docker image
-      run: sudo docker push ${IMAGE_NAME:?}
+      docker_push: "${IMAGE_NAME:?}"
 
 clean:
   steps:
