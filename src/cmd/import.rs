@@ -127,7 +127,7 @@ impl Task<Arc<String>> for ImportTask {
         let url = Repo::get_clone_url(self.owner.as_str(), self.name.as_str(), &self.remote_cfg);
         let path = format!("{}", path.display());
 
-        Cmd::git(&["clone", url.as_str(), path.as_str()]).execute_check()?;
+        Cmd::git(&["clone", url.as_str(), path.as_str()]).execute()?;
 
         let git = GitCmd::with_path(path.as_str());
         if let Some(user) = &self.remote_cfg.user {

@@ -13,7 +13,7 @@ pub fn metadir() -> String {
 }
 
 pub fn cmd() -> String {
-    String::from("ro")
+    String::from("rox")
 }
 
 pub fn docker() -> Docker {
@@ -88,6 +88,10 @@ pub fn api_timeout() -> u64 {
 }
 
 pub fn disable() -> bool {
+    false
+}
+
+pub fn enable() -> bool {
     false
 }
 

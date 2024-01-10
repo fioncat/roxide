@@ -1,0 +1,100 @@
+default:
+  include: ["build"]
+
+install:
+  include: ["build"]
+  steps:
+    - name: Install for linux
+      os: "linux"
+      run: cp -f ./target/x86_64-unknown-linux-musl/release/roxide ~/.cargo/bin
+
+    - name: Install for macos
+      os: "macos"
+      run: cp -f ./target/release/roxide ~/.cargo/bin
+
+build:
+  steps:
+    - name: Build in docker
+      image: "messense/rust-musl-cross:x86_64-musl"
+      condition:
+        - env: "BUILD_IN_DOCKER"
+          exists: true
+      run: git config --global --add safe.directory /work; cargo build --release --locked --target x86_64-unknown-linux-musl
+
+    - name: Install musl for archlinux
+      os: "linux"
+      condition:
+        - cmd: "musl-gcc"
+          exists: false
+        - file: "/etc/arch-release"
+          exists: true
+        - env: "BUILD_IN_DOCKER"
+          exists: false
+      run: sudo pacman -S musl
+
+    - name: Install target for linux
+      os: "linux"
+      condition:
+        - env: "BUILD_IN_DOCKER"
+          exists: false
+      run: rustup target add x86_64-unknown-linux-musl
+
+    - name: Build for linux
+      os: "linux"
+      condition:
+        - env: "BUILD_IN_DOCKER"
+          exists: false
+      run: cargo build --release --locked --target x86_64-unknown-linux-musl
+
+    - name: Build for macos
+      os: "macos"
+      condition:
+        - env: "BUILD_IN_DOCKER"
+          exists: false
+      run: cargo build --release --locked
+
+get-image-name:
+  env:
+    - name: IMAGE_DOMAIN
+      value: "fioncat"
+  steps:
+    - name: Get current tag
+      run: git describe --tags --exact-match --abbrev=0
+      allow_failure: true
+      capture_output: IMAGE_TAG
+
+    - name: Get commit id
+      condition:
+        - env: "IMAGE_TAG"
+          exists: false
+      run: echo dev-$(git rev-parse --short HEAD)
+      capture_output: IMAGE_TAG
+
+    - name: Set image name
+      set_env:
+        name: IMAGE_NAME
+        value: "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
+
+    - name: Show image name
+      run: "echo Image is: ${IMAGE_NAME:?}"
+
+build-image:
+  include:
+    - build
+    - get-image-name
+  steps:
+    - name: Build docker image
+      docker_build:
+        image: "${IMAGE_NAME:?}"
+        file: "Dockerfile"
+
+publish-image:
+  include: ["build-image"]
+  steps:
+    - name: Push docker image
+      docker_push: "${IMAGE_NAME:?}"
+
+clean:
+  steps:
+    - name: Remove old build
+      run: rm -rf ./target

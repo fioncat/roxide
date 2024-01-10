@@ -65,7 +65,7 @@ impl Run for TagArgs {
                     Ok(tag) => {
                         Cmd::git(&["tag", "-d", tag.as_str()])
                             .with_display_cmd()
-                            .execute_check()?;
+                            .execute()?;
                     }
                     Err(_) => {}
                 },
@@ -79,16 +79,14 @@ impl Run for TagArgs {
                     self.tag.as_ref().unwrap().as_str(),
                 ])
                 .with_display_cmd()
-                .execute_check()?;
+                .execute()?;
             }
 
             return Ok(());
         }
 
         match self.tag.as_ref() {
-            Some(tag) => Cmd::git(&["checkout", tag])
-                .with_display_cmd()
-                .execute_check()?,
+            Some(tag) => Cmd::git(&["checkout", tag]).with_display_cmd().execute()?,
             None => {
                 let tags = GitTag::list()?;
                 for tag in tags {
@@ -107,12 +105,12 @@ impl TagArgs {
         if let None = tags.iter().find(|t| t.as_str() == tag.as_str()) {
             Cmd::git(&["tag", tag.as_str()])
                 .with_display_cmd()
-                .execute_check()?;
+                .execute()?;
         }
         if self.push {
             Cmd::git(&["push", "origin", tag.as_str()])
                 .with_display_cmd()
-                .execute_check()?;
+                .execute()?;
         }
         Ok(())
     }

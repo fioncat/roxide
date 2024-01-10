@@ -58,7 +58,7 @@ impl Run for SquashArgs {
         let set = format!("HEAD~{}", commits.len());
         Cmd::git(&["reset", "--soft", set.as_str()])
             .with_display_cmd()
-            .execute_check()?;
+            .execute()?;
 
         let mut args = vec!["commit"];
         if let Some(msg) = &self.message {

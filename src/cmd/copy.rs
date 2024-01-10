@@ -109,17 +109,17 @@ impl Run for CopyArgs {
         let path = format!("{}", path.display());
         Cmd::git(&["clone", &clone_url, &path])
             .with_display(format!("Copy to {}", repo.name_with_remote()))
-            .execute_check()?;
+            .execute()?;
 
         if let Some(user) = user {
             Cmd::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
                 .with_display(format!("Set user to {}", user))
-                .execute_check()?;
+                .execute()?;
         }
         if let Some(email) = email {
             Cmd::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
                 .with_display(format!("Set email to {}", email))
-                .execute_check()?;
+                .execute()?;
         }
 
         println!("{path}");

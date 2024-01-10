@@ -64,12 +64,12 @@ impl Run for AttachArgs {
         if let Some(user) = &repo.remote_cfg.user {
             Cmd::git(&["config", "user.name", user.as_str()])
                 .with_display(format!("Set user to '{}'", user))
-                .execute_check()?;
+                .execute()?;
         }
         if let Some(email) = &repo.remote_cfg.email {
             Cmd::git(&["config", "user.email", email.as_str()])
                 .with_display(format!("Set email to '{}'", email))
-                .execute_check()?;
+                .execute()?;
         }
 
         info!("Attach current directory to {}", repo.name_with_remote());

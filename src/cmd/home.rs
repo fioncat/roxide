@@ -95,7 +95,7 @@ impl HomeArgs {
         let path = format!("{}", path.display());
         Cmd::git(&["-C", path.as_str(), "init"])
             .with_display("Git init")
-            .execute_check()?;
+            .execute()?;
         if let Some(owner) = repo.remote_cfg.owners.get(repo.owner.as_ref()) {
             if let Some(workflow_names) = &owner.on_create {
                 for workflow_name in workflow_names.iter() {
@@ -113,17 +113,17 @@ impl HomeArgs {
         let path = format!("{}", path.display());
         Cmd::git(&["clone", url.as_str(), path.as_str()])
             .with_display(format!("Clone {}", repo.name_with_labels()))
-            .execute_check()?;
+            .execute()?;
 
         if let Some(user) = &repo.remote_cfg.user {
             Cmd::git(&["-C", path.as_str(), "config", "user.name", user.as_str()])
                 .with_display(format!("Set user to {}", user))
-                .execute_check()?;
+                .execute()?;
         }
         if let Some(email) = &repo.remote_cfg.email {
             Cmd::git(&["-C", path.as_str(), "config", "user.email", email.as_str()])
                 .with_display(format!("Set email to {}", email))
-                .execute_check()?;
+                .execute()?;
         }
         Ok(())
     }
