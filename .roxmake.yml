@@ -1,6 +1,12 @@
 default:
-  import:
+  include:
     - build
+    - build-image
+    - push-image
+
+local:
+  include:
+    - build-local
     - build-image
     - push-image
 
@@ -10,6 +16,23 @@ build:
       image: "messense/rust-musl-cross:x86_64-musl"
       run: git config --global --add safe.directory /work; cargo build --release --locked --target x86_64-unknown-linux-musl
 
+build-local:
+  steps:
+    - name: Install musl for archlinux
+      os: "linux"
+      condition:
+        - command: "musl-gcc"
+          exists: false
+        - file: "/etc/arch-release"
+          exists: true
+      run: sudo pacman -S musl
+
+    - name: Install target
+      run: rustup target add x86_64-unknown-linux-musl
+
+    - name: Build local
+      run: cargo build --release --locked --target x86_64-unknown-linux-musl
+
 get-image-name:
   env:
     - name: IMAGE_DOMAIN
@@ -17,6 +40,14 @@ get-image-name:
   steps:
     - name: Get tag
       run: git describe --tags --abbrev=0
+      allow_failure: true
+      capture_output: IMAGE_TAG
+
+    - name: Get SHA
+      condition:
+        - env: "IMAGE_TAG"
+          exists: false
+      run: echo dev-$(git rev-parse --short HEAD)
       capture_output: IMAGE_TAG
 
     - name: Set image name
@@ -25,7 +56,7 @@ get-image-name:
         value: "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
 
 build-image:
-  import: ["get-image-name"]
+  include: ["get-image-name"]
   steps:
     - name: Build docker image
       docker_build:
@@ -33,7 +64,7 @@ build-image:
         file: "Dockerfile"
 
 push-image:
-  import: ["get-image-name"]
+  include: ["get-image-name"]
   steps:
     - name: Push docker image
       docker_push: "${IMAGE_NAME:?}"

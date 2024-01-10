@@ -13,7 +13,7 @@ pub fn metadir() -> String {
 }
 
 pub fn cmd() -> String {
-    String::from("ro")
+    String::from("rox")
 }
 
 pub fn docker() -> Docker {
