@@ -293,15 +293,6 @@ pub enum ProviderType {
     Gitlab,
 }
 
-impl WorkflowStep {
-    pub fn is_capture(&self) -> bool {
-        match self.capture_output.as_ref() {
-            Some(_) => true,
-            None => false,
-        }
-    }
-}
-
 impl RemoteConfig {
     pub fn get_name(&self) -> &str {
         self.name.as_ref().unwrap().as_str()

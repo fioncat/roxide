@@ -68,16 +68,16 @@ impl Run for BranchArgs {
                 if self.create {
                     Cmd::git(&["checkout", "-b", name.as_str()])
                         .with_display_cmd()
-                        .execute_check()?;
+                        .execute()?;
                 } else {
                     Cmd::git(&["checkout", name.as_str()])
                         .with_display_cmd()
-                        .execute_check()?;
+                        .execute()?;
                 }
                 if self.push {
                     Cmd::git(&["push", "--set-upstream", "origin", name.as_str()])
                         .with_display_cmd()
-                        .execute_check()?;
+                        .execute()?;
                 }
             }
 
@@ -198,10 +198,10 @@ impl BranchArgs {
                         // checkout to this branch to perform push/pull
                         Cmd::git(&["checkout", branch])
                             .with_display_cmd()
-                            .execute_check()?;
+                            .execute()?;
                         current = branch;
                     }
-                    Cmd::git(&[op]).with_display_cmd().execute_check()?;
+                    Cmd::git(&[op]).with_display_cmd().execute()?;
                 }
                 SyncBranchTask::Delete(branch) => {
                     if current == branch {
@@ -210,19 +210,17 @@ impl BranchArgs {
                         let default = default.as_str();
                         Cmd::git(&["checkout", default])
                             .with_display_cmd()
-                            .execute_check()?;
+                            .execute()?;
                         current = default;
                     }
                     Cmd::git(&["branch", "-D", branch])
                         .with_display_cmd()
-                        .execute_check()?;
+                        .execute()?;
                 }
             }
         }
         if current != back {
-            Cmd::git(&["checkout", back])
-                .with_display_cmd()
-                .execute_check()?;
+            Cmd::git(&["checkout", back]).with_display_cmd().execute()?;
         }
 
         Ok(())
@@ -233,7 +231,7 @@ impl BranchArgs {
         if !mute {
             cmd = cmd.with_display_cmd();
         }
-        cmd.execute_check()
+        cmd.execute()
     }
 
     fn delete(&self, branches: &Vec<GitBranch>) -> Result<()> {
@@ -247,16 +245,16 @@ impl BranchArgs {
             }
             Cmd::git(&["checkout", default.as_str()])
                 .with_display_cmd()
-                .execute_check()?;
+                .execute()?;
         }
 
         Cmd::git(&["branch", "-D", &branch.name])
             .with_display_cmd()
-            .execute_check()?;
+            .execute()?;
         if self.push {
             Cmd::git(&["push", "origin", "--delete", &branch.name])
                 .with_display_cmd()
-                .execute_check()?;
+                .execute()?;
         }
         Ok(())
     }
@@ -265,7 +263,7 @@ impl BranchArgs {
         let branch = self.get_branch_or_current(branches)?;
         Cmd::git(&["push", "--set-upstream", "origin", branch.name.as_ref()])
             .with_display_cmd()
-            .execute_check()
+            .execute()
     }
 
     fn get_branch_or_current<'a>(&self, branches: &'a Vec<GitBranch>) -> Result<&'a GitBranch> {
@@ -314,7 +312,7 @@ impl BranchArgs {
 
         let target = items[idx].as_str();
 
-        Cmd::git(&["checkout", target]).execute_check()
+        Cmd::git(&["checkout", target]).execute()
     }
 
     fn search_and_switch_remote(&self) -> Result<()> {
@@ -328,7 +326,7 @@ impl BranchArgs {
         let idx = term::fzf_search(&branches)?;
         let target = branches[idx].as_str();
 
-        Cmd::git(&["checkout", target]).execute_check()
+        Cmd::git(&["checkout", target]).execute()
     }
 
     pub fn completion() -> Completion {

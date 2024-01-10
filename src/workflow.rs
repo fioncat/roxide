@@ -183,10 +183,10 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         } else if let Some(set_env) = step.set_env.as_ref() {
             let cmd = format!("echo \"{}\"", set_env.value);
             capture_output = Some(set_env.name.clone());
-            Cmd::sh(cmd, true)
+            Cmd::sh(cmd)
         } else if let Some(image) = step.docker_push.as_ref() {
             let cmd = format!("{} push {}", self.docker.cmd, image);
-            Cmd::sh(cmd, step.is_capture())
+            Cmd::sh(cmd)
         } else if let Some(docker_build) = step.docker_build.as_ref() {
             let file = docker_build
                 .file
@@ -197,10 +197,10 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
                 "{} build -f {} -t {} .",
                 self.docker.cmd, file, docker_build.image
             );
-            Cmd::sh(cmd, step.is_capture())
+            Cmd::sh(cmd)
         } else {
             match step.run.as_ref() {
-                Some(run) => Cmd::sh(run, step.is_capture()),
+                Some(run) => Cmd::sh(run),
                 None => return Ok(()),
             }
         };
@@ -222,7 +222,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
                     extra_env.insert(env_name, output);
                     Ok(())
                 }
-                None => cmd.execute_check(),
+                None => cmd.execute(),
             }
         })();
         if let Err(_) = result {
@@ -289,7 +289,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         let script = format!("'{script}'");
         args.push(Cow::Owned(script));
 
-        Cmd::sh(args.join(" ").as_str(), step.is_capture())
+        Cmd::sh(args.join(" ").as_str())
     }
 
     fn ssh_cmd(&self, step: &WorkflowStep) -> Cmd {
@@ -299,7 +299,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         args.push(step.ssh.as_ref().unwrap().as_str());
         args.push(step.run.as_ref().unwrap().as_str());
 
-        Cmd::sh(args.join(" ").as_str(), step.is_capture())
+        Cmd::sh(args.join(" ").as_str())
     }
 
     fn setup_env(&self, idx: usize, cmd: &mut Cmd, extra_env: &HashMap<String, String>) {
@@ -334,7 +334,7 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
         condition: impl AsRef<str>,
     ) -> Result<bool> {
         let cmd = format!("if {}; then echo true; fi", condition.as_ref());
-        let mut cmd = Cmd::sh(cmd, true);
+        let mut cmd = Cmd::sh(cmd);
 
         if let Some(_) = self.display {
             cmd = cmd.with_display_cmd();

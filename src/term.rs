@@ -688,18 +688,9 @@ impl<'a> Cmd<'_> {
     /// ## Compatibility
     ///
     /// This function is only supported on Unix system.
-    pub fn sh(script: impl AsRef<str>, capture: bool) -> Cmd<'static> {
+    pub fn sh(script: impl AsRef<str>) -> Cmd<'static> {
         let raw = script.as_ref().to_string();
-        let mut cmd = if capture {
-            Self::with_args("sh", &["-c", script.as_ref()])
-        } else {
-            // FIXME: We add `> /dev/stderr` at the end of the script to ensure
-            // that the script does not output any content to stdout.
-            // This method is not applicable to Windows and a more universal method
-            // is needed.
-            let script = format!("{} > /dev/stderr", script.as_ref());
-            Self::with_args("sh", &["-c", script.as_str()])
-        };
+        let mut cmd = Self::with_args("sh", &["-c", script.as_ref()]);
         cmd.script = Some(raw);
         cmd
     }
@@ -707,23 +698,32 @@ impl<'a> Cmd<'_> {
     /// Execute the command and return the output as multiple lines.
     /// See: [`CmdResult::lines`].
     pub fn lines(&mut self) -> Result<Vec<String>> {
-        self.execute()?.lines()
+        self.execute_unchecked()?.lines()
     }
 
     /// Execute the command and return the output as string. See: [`CmdResult::read`].
     pub fn read(&mut self) -> Result<String> {
-        self.execute()?.read()
+        self.execute_unchecked()?.read()
     }
 
     /// Execute the command and check result.
-    pub fn execute_check(&mut self) -> Result<()> {
-        self.execute()?.check()
+    pub fn execute(&mut self) -> Result<()> {
+        if let Some(_) = self.display {
+            // In this scenario, when the user does not want to capture the stdout output
+            // into the program, we need to redirect stdout to the parent process's stderr
+            // to prevent the loss of stdout information. The reason for not inheriting is
+            // that some functionalities may depend on the parent process's stdout, and we
+            // cannot allow the stdout of the subprocess to interfere with these
+            // functionalities.
+            self.cmd.stdout(io::stderr());
+        }
+        self.execute_unchecked()?.check()
     }
 
     /// Execute the command without performing result validation.
     ///
     /// See: [`CmdResult`].
-    pub fn execute(&mut self) -> Result<CmdResult> {
+    fn execute_unchecked(&mut self) -> Result<CmdResult> {
         let result_display = self.show();
 
         let mut child = match self.cmd.spawn() {
@@ -832,19 +832,19 @@ impl<'a> GitCmd<'a> {
     /// See: [`Cmd::execute`].
     pub fn exec(&self, args: &[&str]) -> Result<()> {
         let args = [&self.prefix, args].concat();
-        Cmd::git(&args).execute()?.check()
+        Cmd::git(&args).execute()
     }
 
     /// See: [`Cmd::lines`].
     pub fn lines(&self, args: &[&str]) -> Result<Vec<String>> {
         let args = [&self.prefix, args].concat();
-        Cmd::git(&args).execute()?.lines()
+        Cmd::git(&args).lines()
     }
 
     /// See: [`Cmd::read`].
     pub fn read(&self, args: &[&str]) -> Result<String> {
         let args = [&self.prefix, args].concat();
-        Cmd::git(&args).execute()?.read()
+        Cmd::git(&args).read()
     }
 
     /// Use `checkout` to switch to a new branch, tag, or commit. This is a wrapper
@@ -877,7 +877,7 @@ where
     let mut fzf = Cmd::new("fzf");
     fzf.with_input(input);
 
-    let result = fzf.execute()?;
+    let result = fzf.execute_unchecked()?;
     match result.code {
         Some(0) => {
             let output = result.read()?;
@@ -1156,7 +1156,7 @@ impl GitRemote {
         );
 
         Cmd::git(&["remote", "add", "upstream", url.as_str()])
-            .execute()?
+            .execute_unchecked()?
             .check()?;
         Ok(GitRemote(String::from("upstream")))
     }
@@ -1169,7 +1169,7 @@ impl GitRemote {
                 (format!("{}/{}", self.0, branch), branch)
             }
         };
-        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()]).execute_check()?;
+        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()]).execute()?;
         Ok(target)
     }
 
@@ -1259,7 +1259,7 @@ impl GitTag {
     pub fn latest() -> Result<GitTag> {
         Cmd::git(&["fetch", "origin", "--prune-tags"])
             .with_display("Fetch tags")
-            .execute_check()?;
+            .execute()?;
         let output = Cmd::git(&["describe", "--tags", "--abbrev=0"])
             .with_display("Get latest tag")
             .read()?;

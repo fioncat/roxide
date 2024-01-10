@@ -32,7 +32,7 @@ impl Run for ResetArgs {
 
         Cmd::git(&["reset", "--hard", target.as_str()])
             .with_display_cmd()
-            .execute_check()
+            .execute()
     }
 }
 

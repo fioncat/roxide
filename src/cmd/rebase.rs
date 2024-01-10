@@ -33,7 +33,7 @@ impl Run for RebaseArgs {
 
         Cmd::git(&["rebase", target.as_str()])
             .with_display_cmd()
-            .execute_check()
+            .execute()
     }
 }
 

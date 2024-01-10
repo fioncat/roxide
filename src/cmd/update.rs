@@ -42,12 +42,12 @@ impl Run for UpdateArgs {
 
         Cmd::with_args("tar", &["-xzf", target_path, "-C", "/tmp/roxide-update"])
             .with_display("Unpack roxide")
-            .execute_check()?;
+            .execute()?;
 
         let replace_path = format!("{}", exec_dir.join("roxide").display());
         Cmd::with_args("mv", &["/tmp/roxide-update/roxide", &replace_path])
             .with_display("Replace roxide binary")
-            .execute_check()?;
+            .execute()?;
 
         fs::remove_dir_all("/tmp/roxide-update").context("remove update tmp dir")?;
 
