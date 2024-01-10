@@ -688,16 +688,16 @@ impl<'a> Cmd<'_> {
     /// ## Compatibility
     ///
     /// This function is only supported on Unix system.
-    pub fn sh(script: &str, capture: bool) -> Cmd<'static> {
-        let raw = script.to_string();
+    pub fn sh(script: impl AsRef<str>, capture: bool) -> Cmd<'static> {
+        let raw = script.as_ref().to_string();
         let mut cmd = if capture {
-            Self::with_args("sh", &["-c", script])
+            Self::with_args("sh", &["-c", script.as_ref()])
         } else {
             // FIXME: We add `> /dev/stderr` at the end of the script to ensure
             // that the script does not output any content to stdout.
             // This method is not applicable to Windows and a more universal method
             // is needed.
-            let script = format!("{script} > /dev/stderr");
+            let script = format!("{} > /dev/stderr", script.as_ref());
             Self::with_args("sh", &["-c", script.as_str()])
         };
         cmd.script = Some(raw);
