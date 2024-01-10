@@ -1169,7 +1169,9 @@ impl GitRemote {
                 (format!("{}/{}", self.0, branch), branch)
             }
         };
-        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()]).execute()?;
+        Cmd::git(&["fetch", self.0.as_str(), branch.as_str()])
+            .with_display_cmd()
+            .execute()?;
         Ok(target)
     }
 
