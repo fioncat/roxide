@@ -95,7 +95,13 @@ impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
 }
 
 impl<C: AsRef<WorkflowConfig>> Workflow<C> {
-    fn new(cfg: &Config, repo: &Repo, name: impl AsRef<str>, wf_cfg: C, mute: bool) -> Workflow<C> {
+    pub fn new(
+        cfg: &Config,
+        repo: &Repo,
+        name: impl AsRef<str>,
+        wf_cfg: C,
+        mute: bool,
+    ) -> Workflow<C> {
         let path = repo.get_path(cfg);
         let env = Env::build(repo, wf_cfg.as_ref(), &path);
         let display = if mute {
