@@ -1,18 +1,39 @@
 default:
+  import:
+    - build-in-docker
+    - build-image
+    - push-image
+
+build-in-docker:
   steps:
     - name: Build in docker
       image: "messense/rust-musl-cross:x86_64-musl"
       run: git config --global --add safe.directory /work; cargo build --release --locked --target x86_64-unknown-linux-musl
 
+get-image-name:
+  env:
+    - name: IMAGE_DOMAIN
+      value: "fioncat"
+  steps:
     - name: Get tag
       run: git describe --tags --abbrev=0
-      capture_output: BUILD_TAG
+      capture_output: IMAGE_TAG
 
+    - name: Get image name
+      run: echo "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
+      capture_output: IMAGE_NAME
+
+build-image:
+  import: ["get-image-name"]
+  steps:
     - name: Build docker image
-      run: sudo docker build -f Dockerfile -t fioncat/roxide:${BUILD_TAG} .
+      run: sudo docker build -f Dockerfile -t ${IMAGE_NAME:?} .
 
+push-image:
+  import: ["get-image-name"]
+  steps:
     - name: Push docker image
-      run: sudo docker push fioncat/roxide:${BUILD_TAG}
+      run: sudo docker push ${IMAGE_NAME:?}
 
 clean:
   steps:

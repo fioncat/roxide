@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::batch::Task;
 use crate::config::{Config, Docker, WorkflowConfig, WorkflowEnv, WorkflowFromRepo, WorkflowStep};
@@ -257,12 +257,7 @@ impl Workflow<Arc<WorkflowConfig>> {
 
 impl<'a> Workflow<Cow<'a, WorkflowConfig>> {
     pub fn load(cfg: &'a Config, repo: &Repo, name: impl AsRef<str>) -> Result<Self> {
-        let wf_cfg = match cfg.workflows.get(name.as_ref()) {
-            Some(wf_cfg) => wf_cfg,
-            None => bail!("could not find workflow '{}'", name.as_ref()),
-        };
-        let wf_cfg = Cow::Borrowed(wf_cfg);
-
+        let wf_cfg = cfg.get_workflow(name.as_ref())?;
         Ok(Workflow::new(cfg, repo, name, wf_cfg, false))
     }
 }

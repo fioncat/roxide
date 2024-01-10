@@ -74,6 +74,9 @@ pub struct WorkflowConfig {
 
     #[serde(default = "defaults::empty_vec")]
     pub steps: Vec<WorkflowStep>,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub import: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -538,6 +541,83 @@ impl Config {
         self.now.unwrap()
     }
 
+    pub fn get_workflow(&self, name: impl AsRef<str>) -> Result<Cow<'_, WorkflowConfig>> {
+        Self::get_workflow_from_map(&self.workflows, name)
+    }
+
+    pub fn get_workflow_from_map(
+        workflows: &HashMap<String, WorkflowConfig>,
+        name: impl AsRef<str>,
+    ) -> Result<Cow<'_, WorkflowConfig>> {
+        let workflow = match workflows.get(name.as_ref()) {
+            Some(workflow) => workflow,
+            None => bail!("could not find workflow '{}'", name.as_ref()),
+        };
+
+        if workflow.import.is_empty() {
+            return Ok(Cow::Borrowed(workflow));
+        }
+
+        let mut import_names = Vec::with_capacity(workflow.import.len());
+        Self::insert_workflow_imports(workflows, workflow, name.as_ref(), &mut import_names)?;
+
+        let mut workflow = workflow.clone();
+        // When inserting, it needs to be reversed because we are inserting the
+        // imported workflow at the beginning of the original workflow. When
+        // inserting at the beginning, it should be done in reverse order to ensure
+        // the correct sequence.
+        // For example, assuming the original workflow's steps are [5, 6, 7], and
+        // the workflows to be imported are [1, 2] and [3, 4], the first time
+        // processing [3, 4], the insertion will result in [3, 4, 5, 6, 7]; the
+        // second time processing [1, 2], the insertion will result in [1, 2, 3, 4, 5, 6, 7].
+        for import_name in import_names.into_iter().rev() {
+            let import_workflow = workflows.get(&import_name).unwrap();
+
+            // Merge imported workflow to main workflow.
+            let WorkflowConfig {
+                env,
+                steps,
+                import: _,
+            } = import_workflow.clone();
+
+            workflow.env.splice(0..0, env);
+            workflow.steps.splice(0..0, steps);
+        }
+
+        Ok(Cow::Owned(workflow))
+    }
+
+    fn insert_workflow_imports(
+        workflows: &HashMap<String, WorkflowConfig>,
+        workflow: &WorkflowConfig,
+        name: impl AsRef<str>,
+        imports: &mut Vec<String>,
+    ) -> Result<()> {
+        for import_name in workflow.import.iter() {
+            // If this workflow has already been imported, it should not be imported
+            // again to avoid the possibility of infinite circular imports.
+            if imports.contains(import_name) {
+                continue;
+            }
+            let import_workflow = match workflows.get(import_name) {
+                Some(import_workflow) => import_workflow,
+                None => bail!(
+                    "could not find import workflow '{}' in '{}'",
+                    import_name,
+                    name.as_ref()
+                ),
+            };
+
+            // Note that the order here must not be confused; dependencies of the
+            // import must be imported first before importing the import itself.
+            if !import_workflow.import.is_empty() {
+                Self::insert_workflow_imports(workflows, import_workflow, import_name, imports)?;
+            }
+            imports.push(import_name.clone());
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     pub fn set_now(&mut self, now: u64) {
         self.now = Some(now);
@@ -847,6 +927,7 @@ func main() {
         let w0 = WorkflowConfig {
             env: w0_env,
             steps: w0_steps,
+            import: vec![],
         };
 
         let w1_steps = vec![WorkflowStep {
@@ -862,6 +943,7 @@ func main() {
         let w1 = WorkflowConfig {
             env: vec![],
             steps: w1_steps,
+            import: vec![],
         };
 
         let w2_steps = vec![WorkflowStep {
@@ -881,6 +963,7 @@ func main() {
         let w2 = WorkflowConfig {
             env: vec![],
             steps: w2_steps,
+            import: vec![],
         };
 
         let wf = hashmap![
@@ -890,5 +973,110 @@ func main() {
         ];
 
         assert_eq!(cfg.workflows, wf);
+    }
+
+    #[test]
+    fn test_workflows_import() {
+        let cases = vec![
+            (
+                vec!["step0", "step1", "step2"],
+                vec!["job0", "job1"],
+                vec![
+                    ("job0", vec![], vec!["step-0-0", "step-0-1"]),
+                    ("job1", vec!["job2"], vec!["step-1-0"]),
+                    ("job2", vec![], vec!["step-2-0", "step-2-1"]),
+                ],
+                vec![
+                    "step-0-0", "step-0-1", "step-2-0", "step-2-1", "step-1-0", "step0", "step1",
+                    "step2",
+                ],
+            ),
+            (
+                vec![],
+                vec!["job0", "job1"],
+                vec![
+                    ("job0", vec!["job2"], vec!["step-0-0"]),
+                    ("job1", vec!["job2"], vec!["step-1-0"]),
+                    ("job2", vec![], vec!["step-2-0", "step-2-1"]),
+                ],
+                vec!["step-2-0", "step-2-1", "step-0-0", "step-1-0"],
+            ),
+            (
+                vec!["step0", "step1", "step2"],
+                vec!["job0"],
+                vec![
+                    ("job0", vec!["job1"], vec!["step-0"]),
+                    ("job1", vec!["job2"], vec!["step-1"]),
+                    ("job2", vec!["job3"], vec!["step-2"]),
+                    ("job3", vec![], vec!["step-3"]),
+                ],
+                vec![
+                    "step-3", "step-2", "step-1", "step-0", "step0", "step1", "step2",
+                ],
+            ),
+            (
+                vec![],
+                vec!["compile", "docker-build", "docker-push"],
+                vec![
+                    (
+                        "compile",
+                        vec!["get-version", "prepare-env"],
+                        vec!["prepare", "check", "test"],
+                    ),
+                    ("docker-build", vec!["get-version"], vec!["docker-build"]),
+                    ("docker-push", vec!["get-version"], vec!["docker-push"]),
+                    ("get-version", vec![], vec!["get-version"]),
+                    ("prepare-env", vec!["get-version"], vec!["prepare-env"]),
+                ],
+                vec![
+                    "get-version",
+                    "prepare-env",
+                    "prepare",
+                    "check",
+                    "test",
+                    "docker-build",
+                    "docker-push",
+                ],
+            ),
+        ];
+
+        let build_workflow = |imports: Vec<&str>, steps: Vec<&str>| -> WorkflowConfig {
+            WorkflowConfig {
+                env: vec![],
+                steps: steps
+                    .into_iter()
+                    .map(|name| WorkflowStep {
+                        name: name.to_string(),
+                        image: None,
+                        ssh: None,
+                        work_dir: None,
+                        env: vec![],
+                        file: None,
+                        run: None,
+                        capture_output: None,
+                    })
+                    .collect(),
+                import: imports.into_iter().map(|s| s.to_string()).collect(),
+            }
+        };
+
+        for case in cases {
+            let (main_steps, main_imports, jobs, expect) = case;
+            let main_workflow = build_workflow(main_imports, main_steps);
+
+            let mut workflows: HashMap<String, WorkflowConfig> = HashMap::new();
+            workflows.insert("main".to_string(), main_workflow);
+
+            for job in jobs {
+                let (job_name, job_imports, job_steps) = job;
+                let job_workflow = build_workflow(job_imports, job_steps);
+                workflows.insert(job_name.to_string(), job_workflow);
+            }
+
+            let main = Config::get_workflow_from_map(&workflows, "main").unwrap();
+            let steps: Vec<&str> = main.steps.iter().map(|step| step.name.as_str()).collect();
+
+            assert_eq!(steps, expect);
+        }
     }
 }
