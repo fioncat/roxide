@@ -698,6 +698,9 @@ impl Database<'_> {
 
     fn build_labels_index(&mut self, repo: &Repo) -> Option<HashSet<u64>> {
         let labels = repo.labels.as_ref()?;
+        if labels.is_empty() {
+            return None;
+        }
 
         let label_name_map: HashMap<_, _> = self
             .bucket
