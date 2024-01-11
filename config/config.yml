@@ -92,16 +92,64 @@ remotes:
         # After cloning or creating a repo, perform some additional workflows.
         on_create: []
 
+  # A local remote without a "clone" field means that we cannot perform
+  # operations such as cloning or calling APIs on this remote. Typically, it
+  # represents a local test remote.
+  test:
+    owners:
+      rust:
+        on_create: ["cargo"]
+      golang:
+        on_create: ["go-module"]
+
 # Workflow can execute some pre-defined scripts on the repo.
 workflows:
-  init-gomod:
+  cargo:
+    steps:
+      # Execute `cargo init` after rust repo creation.
+      - name: Init cargo
+        run: cargo init
+
+  go-module:
+    env:
+      # The values of the env can dynamically be obtained from some predefined
+      # attributes of the repository, such as the repository name and owner.
+      - name: REPO_REMOTE
+        from_repo: clone
+      - name: REPO_OWNER
+        from_repo: owner
+      - name: REPO_NAME
+        from_repo: name
+
     # Indicates an execution step in Workflow, which can be writing a file or
     # executing a shell command.
     steps:
-      # If the Step is to write to a file, then name is the file name. If Step
-      # is an execution command, name is the name of the step. (required)
+      # The types of steps are diverse, allowing the execution of various
+      # commands. They also support adding various conditions, setting
+      # environment variables, etc. It serves as a lightweight local CI system.
+      # For more details, please refer to the relevant documentation on
+      # workflows.
+      # The below is a simple example that utilizes some features of the
+      # workflow to initialize different Go module names for different
+      # remotes.
+      - name: Test module
+        condition:
+          - env: REPO_REMOTE
+            exists: false
+        set_env:
+          name: MODULE_NAME
+          value: test-${REPO_NAME}
+
+      - name: Module
+        condition:
+          - env: REPO_REMOTE
+            exists: true
+        set_env:
+          name: MODULE_NAME
+          value: "${REPO_REMOTE}/${REPO_OWNER}/${REPO_NAME}"
+
+      # Write file to repository, path is the step name.
       - name: main.go
-        # If not empty, it is the file content.
         file: |
           package main
 
@@ -110,14 +158,9 @@ workflows:
           func main() {
           \tfmt.Println("hello, world!")
           }
-      - name: Init go module
-        # If not empty, it is the command to execute.
-        run: go mod init ${REPO_NAME}
 
-  init-cargo:
-    steps:
-      - name: Init cargo
-        run: cargo init
+      - name: Init go module
+        run: go mod init ${REPO_NAME}
 
 # The tag release rule.
 release:

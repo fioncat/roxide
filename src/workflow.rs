@@ -155,6 +155,7 @@ impl StepContext<'_> {
             }
             StepOperation::File(content) => {
                 let path = self.path.join(&self.cfg.name);
+                let content = content.replace("\\t", "\t");
                 utils::write_file(&path, content.as_bytes())?;
                 Ok(StepResult::File)
             }
