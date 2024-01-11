@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -274,16 +272,16 @@ impl StepContext<'_> {
             s,
             |key| -> StdResult<Option<Cow<str>>, &'static str> {
                 if let Some(value) = self.env_mut.get(key) {
-                    return StdResult::Ok(Some(Cow::Borrowed(value)));
+                    return Ok(Some(Cow::Borrowed(value)));
                 }
                 if let Some(value) = self.env_readonly.get(key) {
-                    return StdResult::Ok(Some(Cow::Borrowed(value)));
+                    return Ok(Some(Cow::Borrowed(value)));
                 }
-                StdResult::Ok(None)
+                Err("env not found")
             },
         ) {
-            StdResult::Ok(value) => value,
-            StdResult::Err(err) => bail!("{err}"),
+            Ok(value) => value,
+            Err(err) => bail!("expand env for '{s}': {err}"),
         };
         Ok(value)
     }
