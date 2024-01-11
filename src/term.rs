@@ -601,9 +601,7 @@ impl CmdResult {
 /// Cmd::git(&["status", "-s"]).with_display("Get git status").lines().unwrap();
 /// Cmd::git(&["branch"]).with_display_cmd().read().unwrap();
 /// ```
-pub struct Cmd<'a> {
-    name: &'a str,
-
+pub struct Cmd {
     cmd: Command,
     input: Option<String>,
 
@@ -612,15 +610,15 @@ pub struct Cmd<'a> {
     script: Option<String>,
 }
 
-impl<'a> Cmd<'_> {
+impl Cmd {
     /// Use `program` to create a new [`Cmd`].
-    pub fn new(program: &str) -> Cmd {
+    pub fn new(program: impl AsRef<str>) -> Cmd {
         Self::with_args(program, &[])
     }
 
     /// Create a new [`Cmd`], with args.
-    pub fn with_args(program: &'a str, args: &[&str]) -> Cmd<'a> {
-        let mut cmd = Command::new(program);
+    pub fn with_args<S: AsRef<str>>(program: S, args: &[&str]) -> Cmd {
+        let mut cmd = Command::new(program.as_ref());
         if !args.is_empty() {
             cmd.args(args);
         }
@@ -629,7 +627,6 @@ impl<'a> Cmd<'_> {
         cmd.stderr(Stdio::piped());
 
         Cmd {
-            name: program,
             cmd,
             input: None,
             display: None,
@@ -638,7 +635,7 @@ impl<'a> Cmd<'_> {
     }
 
     /// Create a new git [`Cmd`].
-    pub fn git(args: &[&str]) -> Cmd<'a> {
+    pub fn git(args: &[&str]) -> Cmd {
         Self::with_args("git", args)
     }
 
@@ -688,7 +685,7 @@ impl<'a> Cmd<'_> {
     /// ## Compatibility
     ///
     /// This function is only supported on Unix system.
-    pub fn sh(script: impl AsRef<str>) -> Cmd<'static> {
+    pub fn sh(script: impl AsRef<str>) -> Cmd {
         let raw = script.as_ref().to_string();
         let mut cmd = Self::with_args("sh", &["-c", script.as_ref()]);
         cmd.script = Some(raw);
@@ -731,18 +728,20 @@ impl<'a> Cmd<'_> {
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 bail!(
                     "could not find command `{}`, please make sure it is installed",
-                    self.name
+                    self.get_name()
                 );
             }
             Err(e) => {
-                return Err(e).with_context(|| format!("could not launch command `{}`", self.name))
+                return Err(e)
+                    .with_context(|| format!("could not launch command `{}`", self.get_name()))
             }
         };
 
         if let Some(input) = &self.input {
             let handle = child.stdin.as_mut().unwrap();
             if let Err(err) = write!(handle, "{}", input) {
-                return Err(err).with_context(|| format!("write input to command `{}`", self.name));
+                return Err(err)
+                    .with_context(|| format!("write input to command `{}`", self.get_name()));
             }
 
             drop(child.stdin.take());
@@ -757,7 +756,7 @@ impl<'a> Cmd<'_> {
                 let mut out = String::new();
                 stdout
                     .read_to_string(&mut out)
-                    .with_context(|| format!("read stdout from command `{}`", self.name))?;
+                    .with_context(|| format!("read stdout from command `{}`", self.get_name()))?;
                 out
             }
             None => String::new(),
@@ -767,7 +766,7 @@ impl<'a> Cmd<'_> {
                 let mut out = String::new();
                 stderr
                     .read_to_string(&mut out)
-                    .with_context(|| format!("read stderr from command `{}`", self.name))?;
+                    .with_context(|| format!("read stderr from command `{}`", self.get_name()))?;
                 out
             }
             None => String::new(),
@@ -805,6 +804,10 @@ impl<'a> Cmd<'_> {
         }
         stderrln!("{} {}", style("::").cyan().bold(), cmd_name);
         None
+    }
+
+    fn get_name(&self) -> &str {
+        self.cmd.get_program().to_str().unwrap_or("<unknown>")
     }
 }
 

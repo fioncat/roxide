@@ -60,8 +60,11 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct Docker {
-    #[serde(default = "defaults::docker_cmd")]
-    pub cmd: String,
+    #[serde(default = "defaults::docker_name")]
+    pub name: String,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub args: Vec<String>,
 
     #[serde(default = "defaults::docker_shell")]
     pub shell: String,
@@ -131,7 +134,8 @@ pub struct WorkflowStep {
 
     pub docker_push: Option<String>,
 
-    pub work_dir: Option<String>,
+    #[serde(default = "defaults::step_work_dir")]
+    pub work_dir: String,
 
     #[serde(default = "defaults::empty_vec")]
     pub env: Vec<WorkflowEnv>,
@@ -154,7 +158,9 @@ pub struct WorkflowSetEnv {
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct WorkflowDockerBuild {
     pub image: String,
-    pub file: Option<String>,
+
+    #[serde(default = "defaults::docker_file")]
+    pub file: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -936,7 +942,7 @@ func main() {
                 image: None,
                 env: vec![],
                 ssh: None,
-                work_dir: None,
+                work_dir: defaults::step_work_dir(),
                 capture_output: None,
                 docker_build: None,
                 docker_push: None,
@@ -955,7 +961,7 @@ func main() {
                 image: None,
                 env: vec![],
                 ssh: None,
-                work_dir: None,
+                work_dir: defaults::step_work_dir(),
                 capture_output: None,
                 docker_build: None,
                 docker_push: None,
@@ -996,7 +1002,7 @@ func main() {
             image: None,
             env: vec![],
             ssh: None,
-            work_dir: None,
+            work_dir: defaults::step_work_dir(),
             capture_output: None,
             docker_build: None,
             docker_push: None,
@@ -1017,7 +1023,7 @@ func main() {
             file: None,
             image: Some("golang:latest".to_string()),
             ssh: None,
-            work_dir: None,
+            work_dir: defaults::step_work_dir(),
             env: vec![WorkflowEnv {
                 name: "GO111MODULE".to_string(),
                 value: Some("on".to_string()),
@@ -1122,7 +1128,7 @@ func main() {
                         name: name.to_string(),
                         image: None,
                         ssh: None,
-                        work_dir: None,
+                        work_dir: defaults::step_work_dir(),
                         env: vec![],
                         file: None,
                         run: None,
