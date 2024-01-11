@@ -18,7 +18,8 @@ pub fn cmd() -> String {
 
 pub fn docker() -> Docker {
     Docker {
-        cmd: docker_cmd(),
+        name: docker_name(),
+        args: empty_vec(),
         shell: docker_shell(),
     }
 }
@@ -43,7 +44,7 @@ pub fn remote(remote: impl AsRef<str>) -> RemoteConfig {
     }
 }
 
-pub fn docker_cmd() -> String {
+pub fn docker_name() -> String {
     String::from("docker")
 }
 
@@ -73,6 +74,14 @@ pub fn release() -> HashMap<String, String> {
     map.insert(String::from("date-dot"), String::from("{%Y}.{%m}.{%d}"));
 
     map
+}
+
+pub fn docker_file() -> String {
+    String::from("Dockerfile")
+}
+
+pub fn step_work_dir() -> String {
+    String::from("/work")
 }
 
 pub fn cache_hours() -> u32 {

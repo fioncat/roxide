@@ -42,7 +42,7 @@ impl Run for RunArgs {
 
         if self.current {
             let repo = db.must_get_current()?;
-            let workflow = Workflow::load(cfg, &repo, &self.name)?;
+            let workflow = Workflow::load(&self.name, cfg, &repo)?;
             return workflow.run();
         }
 
@@ -67,8 +67,7 @@ impl Run for RunArgs {
 
         for repo in repos {
             let show_name = repo.to_string(&level);
-            let workflow =
-                Workflow::load_for_batch(cfg, &repo, &self.name, Arc::clone(&workflow_cfg));
+            let workflow = Workflow::load_for_batch(cfg, &repo, Arc::clone(&workflow_cfg));
             tasks.push((show_name, workflow))
         }
 

@@ -27,7 +27,7 @@ impl Run for MakeArgs {
         let repo = db.must_get_current()?;
         let workflows = Self::load_workflow_cfg(cfg, &repo)?;
         let workflow_cfg = Config::get_workflow_from_map(&workflows, &self.name)?;
-        let workflow = Workflow::new(cfg, &repo, &self.name, workflow_cfg, false);
+        let workflow = Workflow::new(cfg, &repo, workflow_cfg, true);
         workflow.run()
     }
 }

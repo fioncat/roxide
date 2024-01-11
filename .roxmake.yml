@@ -73,7 +73,7 @@ get-image-name:
     - name: Set image name
       set_env:
         name: IMAGE_NAME
-        value: "${IMAGE_DOMAIN:?}/roxide:${IMAGE_TAG:?}"
+        value: "${IMAGE_DOMAIN}/roxide:${IMAGE_TAG}"
 
     - name: Show image name
       run: "echo Image is: ${IMAGE_NAME:?}"
@@ -85,14 +85,14 @@ build-image:
   steps:
     - name: Build docker image
       docker_build:
-        image: "${IMAGE_NAME:?}"
+        image: "${IMAGE_NAME}"
         file: "Dockerfile"
 
 publish-image:
   include: ["build-image"]
   steps:
     - name: Push docker image
-      docker_push: "${IMAGE_NAME:?}"
+      docker_push: "${IMAGE_NAME}"
 
 clean:
   steps:

@@ -99,7 +99,7 @@ impl HomeArgs {
         if let Some(owner) = repo.remote_cfg.owners.get(repo.owner.as_ref()) {
             if let Some(workflow_names) = &owner.on_create {
                 for workflow_name in workflow_names.iter() {
-                    let wf = Workflow::load(cfg, repo, workflow_name)?;
+                    let wf = Workflow::load(workflow_name, cfg, repo)?;
                     wf.run()?;
                 }
             }
