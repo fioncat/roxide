@@ -126,13 +126,13 @@ impl StepContext<'_> {
         }
 
         match self.op {
-            StepOperation::Run(run) => Ok(StepResult::Cmd(Cmd::sh(run))),
+            StepOperation::Run(run) => Ok(StepResult::Cmd(Cmd::sh(run, self.display))),
             StepOperation::Ssh(ssh, run) => {
                 let mut args = Vec::new();
                 args.push("ssh");
                 args.push(ssh);
                 args.push(run);
-                Ok(StepResult::Cmd(Cmd::sh(args.join(" "))))
+                Ok(StepResult::Cmd(Cmd::sh(args.join(" "), self.display)))
             }
             StepOperation::DockerRun(image, run) => {
                 Ok(StepResult::Cmd(self.build_docker_run(image, run)?))
@@ -164,7 +164,7 @@ impl StepContext<'_> {
 
     fn check_if(&self, cond: impl AsRef<str>) -> Result<bool> {
         let cmd = format!("if {}; then echo true; fi", cond.as_ref());
-        let mut cmd = self.setup_cmd(Cmd::sh(cmd));
+        let mut cmd = self.setup_cmd(Cmd::sh(cmd, self.display));
 
         let result = cmd.read().context("check if condition")?;
         Ok(result.trim() == "true")
@@ -237,7 +237,9 @@ impl StepContext<'_> {
         args.push(Cow::Borrowed("-c"));
         args.push(Cow::Borrowed(run));
 
-        Ok(self.build_docker_cmd(&args))
+        let mut cmd = self.build_docker_cmd(&args);
+        cmd.display_docker(image.to_string(), run.to_string());
+        Ok(cmd)
     }
 
     fn build_docker_cmd<S: AsRef<str>>(&self, args: &[S]) -> Cmd {
@@ -350,7 +352,7 @@ impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
             let msg: Cow<str> = match result {
                 StepResult::Cmd(cmd) => self.run_cmd(&mut ctx, cmd)?,
                 StepResult::SetEnv => Cow::Borrowed("Set env done"),
-                StepResult::Skip(msg) => Cow::Owned(format!("Skip {}", msg)),
+                StepResult::Skip(msg) => Cow::Owned(format!("Skip: {}", style(msg).bold())),
                 StepResult::File => Cow::Borrowed("Write to file done"),
             };
 

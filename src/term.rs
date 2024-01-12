@@ -605,9 +605,15 @@ pub struct Cmd {
     cmd: Command,
     input: Option<String>,
 
-    display: Option<String>,
+    display: CmdDisplay,
+}
 
-    script: Option<String>,
+enum CmdDisplay {
+    Cmd,
+    Hint(String),
+    Docker(String, String),
+    Script(String),
+    None,
 }
 
 impl Cmd {
@@ -629,8 +635,7 @@ impl Cmd {
         Cmd {
             cmd,
             input: None,
-            display: None,
-            script: None,
+            display: CmdDisplay::None,
         }
     }
 
@@ -642,18 +647,16 @@ impl Cmd {
     /// When executing a command, display the command name, args, and a prompt.
     /// If this function is called, the command's stderr will be redirected to the
     /// terminal, and if it fails during execution, it will return a [`SilentExit`].
-    pub fn with_display(mut self, display: impl ToString) -> Self {
-        self.display = Some(display.to_string());
-        // We redirect command's stderr to program's. So that user can view command's
-        // error output directly.
-        self.cmd.stderr(Stdio::inherit());
+    pub fn with_display(mut self, hint: impl ToString) -> Self {
+        self.set_display(CmdDisplay::Hint(hint.to_string()));
         self
     }
 
     /// Similar to [`Cmd::with_display`], but when executed, only display the
     /// command without showing prompt information.
-    pub fn with_display_cmd(self) -> Self {
-        self.with_display("")
+    pub fn with_display_cmd(mut self) -> Self {
+        self.set_display(CmdDisplay::Cmd);
+        self
     }
 
     /// Set stdin as piped and pass `input` to the command's stdin.
@@ -685,11 +688,25 @@ impl Cmd {
     /// ## Compatibility
     ///
     /// This function is only supported on Unix system.
-    pub fn sh(script: impl AsRef<str>) -> Cmd {
-        let raw = script.as_ref().to_string();
+    pub fn sh(script: impl AsRef<str>, display: bool) -> Cmd {
         let mut cmd = Self::with_args("sh", &["-c", script.as_ref()]);
-        cmd.script = Some(raw);
+        if display {
+            cmd.set_display(CmdDisplay::Script(script.as_ref().to_string()));
+        }
         cmd
+    }
+
+    pub fn display_docker(&mut self, image: String, script: String) {
+        self.set_display(CmdDisplay::Docker(image, script))
+    }
+
+    fn set_display(&mut self, display: CmdDisplay) {
+        if let CmdDisplay::None = self.display {
+            self.display = display;
+            // We redirect command's stderr to program's. So that user can view
+            // command's error output directly.
+            self.cmd.stderr(Stdio::inherit());
+        }
     }
 
     /// Execute the command and return the output as multiple lines.
@@ -705,14 +722,18 @@ impl Cmd {
 
     /// Execute the command and check result.
     pub fn execute(&mut self) -> Result<()> {
-        if let Some(_) = self.display {
-            // In this scenario, when the user does not want to capture the stdout output
-            // into the program, we need to redirect stdout to the parent process's stderr
-            // to prevent the loss of stdout information. The reason for not inheriting is
-            // that some functionalities may depend on the parent process's stdout, and we
-            // cannot allow the stdout of the subprocess to interfere with these
-            // functionalities.
-            self.cmd.stdout(io::stderr());
+        match self.display {
+            CmdDisplay::None => {}
+            _ => {
+                // In this scenario, when the user does not want to capture the
+                // stdout output into the program, we need to redirect stdout to
+                // the parent process's stderr to prevent the loss of stdout
+                // information. The reason for not inheriting is that some
+                // functionalities may depend on the parent process's stdout, and we
+                // cannot allow the stdout of the subprocess to interfere with these
+                // functionalities.
+                self.cmd.stdout(io::stderr());
+            }
         }
         self.execute_unchecked()?.check()
     }
@@ -781,31 +802,52 @@ impl Cmd {
     }
 
     fn show(&self) -> Option<String> {
-        let cmd_name = match self.script.as_ref() {
-            Some(script) => format!(">> {}", style(script).bold()),
-            None => {
-                let mut cmd_args = Vec::with_capacity(1);
-                cmd_args.push(self.cmd.get_program().to_str().unwrap());
-                let args = self.cmd.get_args();
-                for arg in args {
-                    cmd_args.push(arg.to_str().unwrap());
-                }
-                cmd_args.join(" ")
+        match &self.display {
+            CmdDisplay::None => Some(self.full()),
+            CmdDisplay::Cmd => {
+                self.show_cmd(self.full());
+                None
             }
-        };
-
-        if let None = self.display {
-            return Some(cmd_name);
+            CmdDisplay::Hint(hint) => {
+                info!("{}", hint);
+                self.show_cmd(self.full());
+                None
+            }
+            CmdDisplay::Script(script) => {
+                self.show_script(script);
+                None
+            }
+            CmdDisplay::Docker(image, script) => {
+                info!("Use docker image {}", style(image).bold());
+                self.show_script(script);
+                None
+            }
         }
-        let display = self.display.as_ref().unwrap().as_str();
-
-        if !display.is_empty() {
-            exec!("{}", display);
-        }
-        stderrln!("{} {}", style("::").cyan().bold(), cmd_name);
-        None
     }
 
+    #[inline]
+    fn show_script(&self, s: impl AsRef<str>) {
+        let script = format!(">> {}", style(s.as_ref()).bold());
+        self.show_cmd(script);
+    }
+
+    #[inline]
+    fn show_cmd(&self, s: impl AsRef<str>) {
+        stderrln!("{} {}", style("::").cyan().bold(), s.as_ref());
+    }
+
+    #[inline]
+    fn full(&self) -> String {
+        let mut cmd_args = Vec::with_capacity(1);
+        cmd_args.push(self.get_name());
+        let args = self.cmd.get_args();
+        for arg in args {
+            cmd_args.push(arg.to_str().unwrap());
+        }
+        cmd_args.join(" ")
+    }
+
+    #[inline]
     fn get_name(&self) -> &str {
         self.cmd.get_program().to_str().unwrap_or("<unknown>")
     }
