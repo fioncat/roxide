@@ -6,7 +6,7 @@ use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::Database;
 use crate::term::{self, GitBranch, GitRemote};
-use crate::{api, confirm, info, stderrln, utils};
+use crate::{api, confirm, info, utils};
 
 /// Create or open MergeRequest (PullRequest for Github)
 #[derive(Args)]
@@ -95,9 +95,9 @@ impl Run for MergeArgs {
             (format!("{} commits", commits.len()), None)
         };
 
-        stderrln!();
-        stderrln!("About to create merge: {}", merge.pretty_display());
-        stderrln!("With {}", commit_desc);
+        eprintln!();
+        eprintln!("About to create merge: {}", merge.pretty_display());
+        eprintln!("With {}", commit_desc);
         confirm!("Continue");
 
         let title = term::input("Please input title", true, init_title)?;

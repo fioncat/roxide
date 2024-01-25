@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use console::style;
 
-use crate::{stderrln, term};
+use crate::term;
 
 /// `Task` is used to represent a concurrent task that needs to be executed.
 ///
@@ -129,8 +129,8 @@ impl<R> Tracker<R> {
         };
 
         term::cursor_up();
-        stderrln!();
-        stderrln!(
+        eprintln!();
+        eprintln!(
             "{} result: {}. {} ok; {} failed; finished in {}",
             self.desc_pure,
             result,
@@ -139,12 +139,12 @@ impl<R> Tracker<R> {
             Self::format_elapsed(elapsed_time),
         );
         if let Some(fail_message) = self.fail_message.as_ref() {
-            stderrln!();
-            stderrln!("Error message:");
+            eprintln!();
+            eprintln!("Error message:");
             for (name, msg) in fail_message {
-                stderrln!("  {}: {}", name, msg);
+                eprintln!("  {}: {}", name, msg);
             }
-            stderrln!();
+            eprintln!();
         }
 
         self.done
@@ -160,7 +160,7 @@ impl<R> Tracker<R> {
         self.running.push((idx, name));
         let line = self.render();
         term::cursor_up();
-        stderrln!("{}", line);
+        eprintln!("{}", line);
     }
 
     /// Print completed task on terminal.
@@ -181,11 +181,11 @@ impl<R> Tracker<R> {
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
-                stderrln!("{} {} {}", self.desc_head, name, style("ok").green());
+                eprintln!("{} {} {}", self.desc_head, name, style("ok").green());
             }
             Err(err) => {
                 self.fail_count += 1;
-                stderrln!("{} {} {}", self.desc_head, name, style("fail").red());
+                eprintln!("{} {} {}", self.desc_head, name, style("fail").red());
                 if self.show_fail {
                     let item = (name, format!("{}", err));
                     match self.fail_message.as_mut() {
@@ -197,7 +197,7 @@ impl<R> Tracker<R> {
         }
         self.done.push((idx, result));
         let line = self.render();
-        stderrln!("{}", line);
+        eprintln!("{}", line);
     }
 
     /// Render tracing line. The format is:
@@ -381,7 +381,7 @@ where
         .bold()
         .cyan()
         .underlined();
-    stderrln!("{}\n", title);
+    eprintln!("{}\n", title);
     let mut handlers = Vec::with_capacity(worker_len);
     for _ in 0..worker_len {
         let task_shared_rx = Arc::clone(&task_shared_rx);

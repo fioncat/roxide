@@ -17,7 +17,6 @@ use crate::config::WorkflowOS;
 use crate::config::WorkflowStep;
 use crate::info;
 use crate::repo::Repo;
-use crate::stderrln;
 use crate::term::Cmd;
 use crate::{exec, utils};
 
@@ -361,7 +360,7 @@ impl<C: AsRef<WorkflowConfig>> Task<()> for Workflow<C> {
                     info!("{}", msg);
                 }
                 if idx != step_len - 1 {
-                    stderrln!();
+                    eprintln!();
                 }
             }
         }

@@ -11,7 +11,7 @@ use crate::config::{Config, RemoteConfig};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
 use crate::term::{self, Cmd, GitCmd};
-use crate::{stderrln, utils};
+use crate::utils;
 
 /// Import repositories from remote in batches.
 #[derive(Args)]
@@ -48,7 +48,7 @@ impl Run for ImportArgs {
 
         let (remote_cfg, owner, names) = selector.many_remote(&db)?;
         if names.is_empty() {
-            stderrln!("No repo to import");
+            eprintln!("No repo to import");
             return Ok(());
         }
         let remote = remote_cfg.get_name().to_string();

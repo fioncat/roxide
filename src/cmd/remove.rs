@@ -5,7 +5,7 @@ use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
-use crate::{confirm, stderrln, term, utils};
+use crate::{confirm, term, utils};
 
 /// Remove repository from database and disk.
 #[derive(Args)]
@@ -83,7 +83,7 @@ impl RemoveArgs {
         let (repos, level) = selector.many_local(db)?;
         let repos = self.filter_many(cfg, repos)?;
         if repos.is_empty() {
-            stderrln!("No repo to remove");
+            eprintln!("No repo to remove");
             return Ok(());
         }
 
