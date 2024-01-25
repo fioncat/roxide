@@ -104,7 +104,7 @@ impl From<MergeOptions> for PullRequestOptions {
         let (head, head_search, owner, name) = match upstream {
             Some(upstream) => {
                 let head = format!("{owner}:{source}");
-                let head_search = format!("{owner}/{source}");
+                let head_search = format!("{owner}/{name}:{source}");
                 (head, head_search, upstream.owner, upstream.name)
             }
             None => {
