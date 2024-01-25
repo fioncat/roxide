@@ -9,7 +9,7 @@ use semver::VersionReq;
 
 use crate::cmd::Run;
 use crate::config::Config;
-use crate::{stderr, stderrln, term, utils};
+use crate::{term, utils};
 
 /// Check system environment.
 #[derive(Args)]
@@ -26,24 +26,24 @@ impl Run for CheckArgs {
 
         let mut fail_message = Vec::new();
         for (name, check) in checks {
-            stderr!("Check {} ... ", name);
+            eprint!("Check {} ... ", name);
             match check(cfg) {
-                Ok(_) => stderrln!("{}", style("pass").green()),
+                Ok(_) => eprintln!("{}", style("pass").green()),
                 Err(err) => {
                     fail_message.push(format!("{name}: {err}"));
-                    stderrln!("{}", style("fail").red());
+                    eprintln!("{}", style("fail").red());
                 }
             }
         }
 
-        stderrln!();
+        eprintln!();
         if !fail_message.is_empty() {
-            stderrln!("Check failed:");
+            eprintln!("Check failed:");
             for msg in fail_message {
-                stderrln!("  {}", msg);
+                eprintln!("  {}", msg);
             }
         } else {
-            stderrln!("All checks passed");
+            eprintln!("All checks passed");
         }
 
         Ok(())

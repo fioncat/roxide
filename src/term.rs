@@ -91,92 +91,14 @@ macro_rules! info {
     };
 }
 
-/// The macro for [`write_stderrln`].
-///
-/// # Examples
-///
-/// ```
-/// stderrln!("Process repo done");
-/// stderrln!("Process repo {} done", "hello");
-/// ```
-#[macro_export]
-macro_rules! stderrln {
-    () => {
-        {
-            $crate::term::write_stderrln("");
-        }
-    };
-    ($dst:expr $(,)?) => {
-        {
-            $crate::term::write_stderrln($dst);
-        }
-    };
-    ($fmt:expr, $($arg:tt)*) => {
-        {
-            let msg = format!($fmt, $($arg)*);
-            $crate::term::write_stderrln(msg.as_str());
-        }
-    };
-}
-
-/// The macro for [`write_stderr`].
-///
-/// # Examples
-///
-/// ```
-/// stderr!("Process repo done");
-/// stderr!("Process repo {} done", "hello");
-/// ```
-#[macro_export]
-macro_rules! stderr {
-    () => {
-        {
-            $crate::term::write_stderr("");
-        }
-    };
-    ($dst:expr $(,)?) => {
-        {
-            $crate::term::write_stderr($dst);
-        }
-    };
-    ($fmt:expr, $($arg:tt)*) => {
-        {
-            let msg = format!($fmt, $($arg)*);
-            $crate::term::write_stderr(msg.as_str());
-        }
-    };
-}
-
 /// Display logs at the `exec` level.
 pub fn show_exec(msg: impl AsRef<str>) {
-    let msg = format!("{} {}", style("==>").cyan(), msg.as_ref());
-    write_stderrln(msg);
+    eprintln!("{} {}", style("==>").cyan(), msg.as_ref());
 }
 
 /// Display logs at the `info` level.
 pub fn show_info(msg: impl AsRef<str>) {
-    let msg = format!("{} {}", style("==>").green(), msg.as_ref());
-    write_stderrln(msg);
-}
-
-/// Output the content to `stderr`, with line break.
-pub fn write_stderrln(msg: impl AsRef<str>) {
-    if cfg!(test) {
-        // In testing, do not print anything
-        return;
-    }
-
-    _ = writeln!(io::stderr(), "{}", msg.as_ref());
-}
-
-/// Output the content to `stderr`.
-pub fn write_stderr(msg: impl AsRef<str>) {
-    if cfg!(test) {
-        // In testing, do not print anything
-        return;
-    }
-
-    _ = write!(io::stderr(), "{}", msg.as_ref());
+    eprintln!("{} {}", style("==>").green(), msg.as_ref());
 }
 
 /// Output the object in pretty JSON format in the terminal.
@@ -196,7 +118,7 @@ pub fn cursor_up() {
         return;
     }
     const CURSOR_UP_CHARS: &'static str = "\x1b[A\x1b[K";
-    stderr!("{}", CURSOR_UP_CHARS);
+    eprint!("{CURSOR_UP_CHARS}");
 }
 
 /// Return the current terminal width size.
@@ -252,7 +174,7 @@ pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
     }
 
     let msg = format!(":: {}?", msg.as_ref());
-    stderr!("{} [Y/n] ", style(msg).bold());
+    eprint!("{} [Y/n] ", style(msg).bold());
 
     let mut answer = String::new();
     scanf::scanf!("{}", answer).context("confirm: scan terminal stdin")?;
@@ -286,12 +208,12 @@ pub fn confirm_items(
     }
 
     if items.is_empty() {
-        stderrln!("Nothing to {}", action);
+        eprintln!("Nothing to {}", action);
         return Ok(false);
     }
 
     info!("Require confirm to {}", action);
-    stderrln!();
+    eprintln!();
 
     let term = Term::stdout();
     let (_, col_size) = term.size();
@@ -307,9 +229,9 @@ pub fn confirm_items(
         let item_size = console::measure_text_width(&item);
         if current_size == 0 {
             if idx == 0 {
-                stderr!("{}{}", head, item);
+                eprint!("{}{}", head, item);
             } else {
-                stderr!("{}{}", head_space, item);
+                eprint!("{}{}", head_space, item);
             }
             current_size = head_size + item_size;
             continue;
@@ -317,26 +239,26 @@ pub fn confirm_items(
 
         current_size += 2 + item_size;
         if current_size > col_size {
-            stderrln!();
-            stderr!("{}{}", head_space, item);
+            eprintln!();
+            eprint!("{}{}", head_space, item);
             current_size = head_size + item_size;
             continue;
         }
 
-        stderr!("  {}", item);
+        eprint!("  {}", item);
     }
-    stderrln!("\n");
+    eprintln!("\n");
 
-    stderrln!(
+    eprintln!(
         "Total {} {} to {}",
         items.len(),
         name.to_lowercase(),
         action
     );
-    stderrln!();
+    eprintln!();
     let ok = confirm(format!("Proceed with {noun}"))?;
     if ok {
-        stderrln!();
+        eprintln!();
     }
     Ok(ok)
 }
@@ -833,7 +755,7 @@ impl Cmd {
 
     #[inline]
     fn show_cmd(&self, s: impl AsRef<str>) {
-        stderrln!("{} {}", style("::").cyan().bold(), s.as_ref());
+        eprintln!("{} {}", style("::").cyan().bold(), s.as_ref());
     }
 
     #[inline]
@@ -1444,7 +1366,7 @@ impl ProgressWrapper {
             start: Instant::now(),
             done: false,
         };
-        write_stderrln(pw.render());
+        eprintln!("{}", pw.render());
         pw
     }
 
@@ -1523,7 +1445,7 @@ impl ProgressWrapper {
         let delta = now - self.last_report;
         if delta >= Self::REPORT_INTERVAL {
             cursor_up();
-            write_stderrln(self.render());
+            eprintln!("{}", self.render());
             self.last_report = now;
         }
     }

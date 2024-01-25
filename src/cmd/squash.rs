@@ -8,7 +8,7 @@ use crate::cmd::{self, Completion, Run};
 use crate::config::Config;
 use crate::errors::SilentExit;
 use crate::term::Cmd;
-use crate::{confirm, exec, stderrln};
+use crate::{confirm, exec};
 
 /// Squash multiple commits into one
 #[derive(Args)]
@@ -39,18 +39,18 @@ impl Run for SquashArgs {
         };
         let commits = remote.commits_between(branch)?;
         if commits.is_empty() {
-            stderrln!("No commit to squash");
+            eprintln!("No commit to squash");
             return Ok(());
         }
         if commits.len() == 1 {
-            stderrln!("Only found one commit ahead target, no need to squash");
+            eprintln!("Only found one commit ahead target, no need to squash");
             return Ok(());
         }
 
-        stderrln!();
-        stderrln!("Found {} commits ahead:", style(commits.len()).yellow());
+        eprintln!();
+        eprintln!("Found {} commits ahead:", style(commits.len()).yellow());
         for commit in commits.iter() {
-            stderrln!("  * {}", commit);
+            eprintln!("  * {}", commit);
         }
 
         confirm!("Continue");

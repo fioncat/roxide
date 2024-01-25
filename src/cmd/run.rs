@@ -8,7 +8,7 @@ use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::workflow::Workflow;
-use crate::{stderrln, term, utils};
+use crate::{term, utils};
 
 /// Run workflow in repository.
 #[derive(Args)]
@@ -54,7 +54,7 @@ impl Run for RunArgs {
 
         let (repos, level) = selector.many_local(&db)?;
         if repos.is_empty() {
-            stderrln!("No repo to run");
+            eprintln!("No repo to run");
             return Ok(());
         }
 

@@ -8,7 +8,7 @@ use clap::Args;
 use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::Database;
-use crate::{info, stderrln, term, utils};
+use crate::{info, term, utils};
 
 /// Remove unused file(s) and dir(s) in workspace
 #[derive(Args)]
@@ -57,7 +57,7 @@ impl Run for GcArgs {
         })?;
 
         if items.is_empty() {
-            stderrln!("No orphan to remove");
+            eprintln!("No orphan to remove");
             return Ok(());
         }
 
