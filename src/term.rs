@@ -300,12 +300,21 @@ pub fn input(msg: impl AsRef<str>, require: bool, default: Option<&str>) -> Resu
 }
 
 /// Ask user to input password in tty.
-pub fn input_password() -> Result<String> {
+pub fn input_password(confirm: bool) -> Result<String> {
     let msg = format!("{} Input password: ", style("::").bold().magenta());
     let password = rpassword::prompt_password(msg).context("input password from tty")?;
     if password.is_empty() {
         bail!("password can't be empty");
     }
+
+    if confirm {
+        let msg = format!("{} Confirm password: ", style("::").bold().magenta());
+        let confirm = rpassword::prompt_password(msg).context("confirm password from tty")?;
+        if password != confirm {
+            bail!("passwords do not match");
+        }
+    }
+
     Ok(password)
 }
 

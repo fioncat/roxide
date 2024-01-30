@@ -35,7 +35,7 @@ impl Write for StdoutWrap {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match String::from_utf8(buf.to_vec()) {
             Ok(s) => s,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "the plain data is not utf-8 encoded (maybe a binary file?), please consider save data to file by using `-f` flag or pipe")),
+            Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "the plain data is not utf-8 encoded (maybe a binary file), please consider save data to file by using `-f` flag or pipe")),
         };
         self.stdout.write(buf)
     }
@@ -153,10 +153,17 @@ pub fn handle<P: AsRef<Path>>(
     let read_count = src
         .read_at(&mut head_buffer, 0)
         .context("read head from src file")?;
-
+    let mut is_encrypt = true;
+    if read_count == SECRET_BEGIN_LINE.len() {
+        if let Ok(head) = String::from_utf8(head_buffer.to_vec()) {
+            if head == SECRET_BEGIN_LINE {
+                is_encrypt = false;
+            }
+        }
+    }
     let password = password
         .map(|s| Ok(s.to_string()))
-        .unwrap_or(term::input_password())?;
+        .unwrap_or(term::input_password(is_encrypt))?;
 
     let reader: Box<dyn Read> = if is_dest_file && src_meta.len() > SHOW_PROGRESS_BAR_SIZE {
         // The progress bar for encryption/decryption will only be displayed in the
@@ -171,15 +178,11 @@ pub fn handle<P: AsRef<Path>>(
         Box::new(src)
     };
 
-    if read_count == SECRET_BEGIN_LINE.len() {
-        if let Ok(head) = String::from_utf8(head_buffer.to_vec()) {
-            if head == SECRET_BEGIN_LINE {
-                return decrypt(reader, dest, password).context("decrypt file");
-            }
-        }
+    if is_encrypt {
+        encrypt(reader, dest, password).context("encrypt file")
+    } else {
+        decrypt(reader, dest, password).context("decrypt file")
     }
-
-    encrypt(reader, dest, password).context("encrypt file")
 }
 
 /// See: [`handle`].
