@@ -30,17 +30,20 @@ jobs:
 
           - os: macos-11
             target: x86_64-apple-darwin
-          - os: macos-11
+
+          - os: macos-latest
             target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Release
-        uses: taiki-e/upload-rust-binary-action@v1
+      - name: Install Dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev libssl-dev:arm64
+
+      - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: roxide
           tar: unix
