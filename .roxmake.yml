@@ -19,7 +19,7 @@ build:
       condition:
         - env: "BUILD_IN_DOCKER"
           exists: true
-      run: git config --global --add safe.directory /work; cargo build --release --locked --target x86_64-unknown-linux-musl
+      run: git config --global --add safe.directory /work; cargo build --release --locked --target x86_64-unknown-linux-musl --features openssl-vendored
 
     - name: Install musl for archlinux
       os: "linux"

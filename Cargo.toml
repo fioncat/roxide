@@ -10,6 +10,21 @@ readme = "README.md"
 repository = "https://github.com/fioncat/roxide"
 description = "🎁 A simple and fast tool to manage your git repositories"
 
+[features]
+# If your build or runtime environment lacks the openssl dependency, you can enable
+# this feature to statically compile openssl into the binary.
+# The side effects include an increase in the binary size and a slowdown in the
+# compilation speed.
+# See: https://docs.rs/openssl/latest/openssl/#vendored
+openssl-vendored = ["reqwest/native-tls-vendored"]
+
+[dependencies.reqwest]
+version = "0.11.23"
+features = [
+  "blocking",
+  "json",
+]
+
 [dependencies]
 aes-gcm = "0.10.3"
 anyhow = "1.0.79"
@@ -22,11 +37,9 @@ dialoguer = "0.11.0"
 file-lock = "2.1.10"
 num_cpus = "1.16.0"
 open = "5.0.1"
-openssl = "0.10.63"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
 regex = "1.10.3"
-reqwest = { version = "0.11.23", features = ["blocking", "json"] }
 rpassword = "7.3.1"
 scanf = "1.2.1"
 semver = "1.0.21"
@@ -44,6 +57,6 @@ simple-error = "0.3.0"
 vergen = { version = "8.3.1", features = [ "build", "rustc" ] }
 
 [profile.release]
-# Reduce binary size for release
 lto = true
 strip = true
+incremental = false

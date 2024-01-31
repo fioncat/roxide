@@ -1311,7 +1311,7 @@ impl Table {
         if self.ncol == 0 {
             self.ncol = row.len();
         } else if row.len() != self.ncol {
-            panic!("unexpect row len");
+            panic!("unexpected row len");
         }
         self.rows.push(row);
     }

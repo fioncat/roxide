@@ -16,7 +16,7 @@
 
 - [x] `copy` command, copy current repo to another remote/group.
 - [x] `home` support clone url (both HTTPS and SSH).
-- [x] `home` support use keywork to do fuzzy seaching on remote, usage: `rox home github xxx -s`
+- [x] `home` support use keyword to do fuzzy searching on remote, usage: `rox home github xxx -s`
 - [x] Support `labels`, the `sync`, `remove`, etc will use them to filter repos.
 - [x] Update database to `v2` to support `labels`.
 - [x] Workflow now support running commands in `docker` and `ssh`.
