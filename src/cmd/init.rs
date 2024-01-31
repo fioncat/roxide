@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use strum::{EnumVariantNames, VariantNames};
+use strum::VariantNames;
 
 use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
@@ -12,7 +12,7 @@ pub struct InitArgs {
     pub shell: Shell,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, EnumVariantNames)]
+#[derive(Clone, ValueEnum, VariantNames)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Shell {
     Bash,

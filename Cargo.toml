@@ -13,34 +13,40 @@ description = "🎁 A simple and fast tool to manage your git repositories"
 [dependencies]
 aes-gcm = "0.10.3"
 anyhow = "1.0.79"
-base64 = "0.21.6"
+base64 = "0.21.7"
 bincode = "1.3.3"
-chrono = "0.4.31"
-clap = { version = "4.4.13", features = ["derive"] }
-console = "0.15.7"
+chrono = "0.4.33"
+clap = { version = "4.4.18", features = ["derive"] }
+console = "0.15.8"
 dialoguer = "0.11.0"
 file-lock = "2.1.10"
 num_cpus = "1.16.0"
 open = "5.0.1"
 # We need this to let cargo build can run in Github workflow.
 # Otherwise, the compile will fail because workflow missing openssl dependency.
-openssl = { version = "0.10.62", features = ["vendored"] }
+# openssl = { version = "0.10.63", features = ["vendored"] }
+openssl = "0.10.63"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
-regex = "1.10.2"
+regex = "1.10.3"
 reqwest = { version = "0.11.23", features = ["blocking", "json"] }
 rpassword = "7.3.1"
 scanf = "1.2.1"
 semver = "1.0.21"
-serde = { version = "1.0.195", features = ["derive"] }
-serde_json = "1.0.111"
-serde_yaml = "0.9.30"
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
+serde_yaml = "0.9.31"
 sha2 = "0.10.8"
 shellexpand = "3.1.0"
-strum = { version = "0.25.0", features = ["derive"] }
+strum = { version = "0.26.1", features = ["derive"] }
 termion = "3.0.0"
 urlencoding = "2.1.3"
 
 [build-dependencies]
 simple-error = "0.3.0"
-vergen = { version = "8.2.6", features = [ "build", "rustc" ] }
+vergen = { version = "8.3.1", features = [ "build", "rustc" ] }
+
+[profile.release]
+# Reduce binary size for release
+lto = true
+strip = true

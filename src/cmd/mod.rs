@@ -32,7 +32,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use strum::EnumVariantNames;
+use strum::VariantNames;
 
 use crate::config::Config;
 use crate::repo::database::{self, Database};
@@ -47,7 +47,7 @@ pub struct App {
     pub command: Commands,
 }
 
-#[derive(Subcommand, EnumVariantNames)]
+#[derive(Subcommand, VariantNames)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Commands {
     Attach(attach::AttachArgs),
