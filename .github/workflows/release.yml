@@ -41,7 +41,7 @@ jobs:
 
       - name: Install openssl
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install openssl libssl-dev
+        run: sudo apt-get install pkg-config libssl-dev
 
       - name: Setup cross
         if: matrix.os == 'ubuntu-latest'
