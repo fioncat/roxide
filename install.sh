@@ -3,8 +3,8 @@
 set -eu
 
 targets=( \
-	"x86_64-unknown-linux-musl" \
-	"aarch64-unknown-linux-musl" \
+	"x86_64-unknown-linux-gnu" \
+	"aarch64-unknown-linux-gnu" \
 	"x86_64-apple-darwin" \
 	"aarch64-apple-darwin" \
 )
@@ -102,7 +102,7 @@ detect_arch() {
 detect_os() {
 	os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 	case "${os}" in
-		linux) os="unknown-linux-musl" ;;
+		linux) os="unknown-linux-gnu" ;;
 		darwin) os="apple-darwin" ;;
 	esac
 	printf '%s' "${os}"

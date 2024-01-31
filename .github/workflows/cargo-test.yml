@@ -1,4 +1,4 @@
-name: Check
+name: Cargo Test
 
 on:
   push:
@@ -9,11 +9,10 @@ on:
       - "main"
 
 jobs:
-  check:
+  cargo-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@master
@@ -21,5 +20,5 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
-      - name: Cargo test
+      - name: Cargo Test
         run: cargo test

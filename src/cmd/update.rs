@@ -59,7 +59,7 @@ impl Run for UpdateArgs {
 impl UpdateArgs {
     fn target_filename() -> Result<String> {
         let os = match env::consts::OS {
-        "linux" => "unknown-linux-musl",
+        "linux" => "unknown-linux-gnu",
         "macos" => "apple-darwin",
         _ => bail!("Downloading roxide for os {} from the release page is not supported. Please build roxide manually", env::consts::OS),
     };
