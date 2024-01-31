@@ -5,6 +5,6 @@ pre-build = [
 
 [target.aarch64-unknown-linux-gnu]
 pre-build = [
-    "dpkg --add-architecture arm",
-    "apt-get update && apt-get install --assume-yes libssl-dev:arm"
+    "dpkg --add-architecture arm64",
+    "apt-get update && apt-get install --assume-yes libssl-dev:arm64"
 ]
