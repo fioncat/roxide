@@ -70,6 +70,6 @@ impl UpdateArgs {
         _ => bail!("Downloading roxide for arch {} from the release page is not supported. Please build roxide manually", env::consts::ARCH),
     };
 
-        Ok(format!("roxide_{arch}-{os}.tar.gz"))
+        Ok(format!("roxide-{arch}-{os}.tar.gz"))
     }
 }
