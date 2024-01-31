@@ -135,7 +135,7 @@ PLATFORM="$(detect_os)"
 ARCH="$(detect_arch)"
 
 TARGET="${ARCH}-${PLATFORM}"
-URL="${BASE_URL}/latest/download/roxide_${TARGET}.tar.gz"
+URL="${BASE_URL}/latest/download/roxide-${TARGET}.tar.gz"
 
 SUPPORT=""
 for support_target in "${targets[@]}"; do
