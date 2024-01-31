@@ -22,9 +22,6 @@ dialoguer = "0.11.0"
 file-lock = "2.1.10"
 num_cpus = "1.16.0"
 open = "5.0.1"
-# We need this to let cargo build can run in Github workflow.
-# Otherwise, the compile will fail because workflow missing openssl dependency.
-# openssl = { version = "0.10.63", features = ["vendored"] }
 openssl = "0.10.63"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
