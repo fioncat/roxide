@@ -262,13 +262,13 @@ where
     let mut must_read_line = || -> Result<String> {
         match lines.next() {
             Some(line) => line.context("read data from file"),
-            None => bail!("unexpect end of the file, the file is too short"),
+            None => bail!("unexpected end of the file, the file is too short"),
         }
     };
 
     let begin = must_read_line()?;
     if begin != SECRET_BEGIN_LINE {
-        bail!("unexpect begin line of the file");
+        bail!("unexpected begin line of the file");
     }
 
     let head = B64Engine
