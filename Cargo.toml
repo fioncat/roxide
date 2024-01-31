@@ -22,11 +22,10 @@ dialoguer = "0.11.0"
 file-lock = "2.1.10"
 num_cpus = "1.16.0"
 open = "5.0.1"
-openssl = "0.10.63"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
 regex = "1.10.3"
-reqwest = { version = "0.11.23", features = ["blocking", "json"] }
+reqwest = { version = "0.11.23", features = ["blocking", "json", "native-tls-vendored"] }
 rpassword = "7.3.1"
 scanf = "1.2.1"
 semver = "1.0.21"
@@ -47,3 +46,4 @@ vergen = { version = "8.3.1", features = [ "build", "rustc" ] }
 # Reduce binary size for release
 lto = true
 strip = true
+incremental = false
