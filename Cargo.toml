@@ -10,15 +10,14 @@ readme = "README.md"
 repository = "https://github.com/fioncat/roxide"
 description = "🎁 A simple and fast tool to manage your git repositories"
 
+[features]
+openssl-vendored = ["reqwest/native-tls-vendored"]
+
 [dependencies.reqwest]
 version = "0.11.23"
 features = [
   "blocking",
-  "json"
-  # This is necessary to cross-compile.
-  # See https://github.com/cross-rs/cross/wiki/Recipes#openssl
-  # TODO: This increase the binary size, a better solution?
-  # "native-tls-vendored"
+  "json",
 ]
 
 [dependencies]
@@ -53,7 +52,6 @@ simple-error = "0.3.0"
 vergen = { version = "8.3.1", features = [ "build", "rustc" ] }
 
 [profile.release]
-# Reduce binary size for release
 lto = true
 strip = true
 incremental = false
