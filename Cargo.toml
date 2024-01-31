@@ -11,6 +11,11 @@ repository = "https://github.com/fioncat/roxide"
 description = "🎁 A simple and fast tool to manage your git repositories"
 
 [features]
+# If your build or runtime environment lacks the openssl dependency, you can enable
+# this feature to statically compile openssl into the binary.
+# The side effects include an increase in the binary size and a slowdown in the
+# compilation speed.
+# See: https://docs.rs/openssl/latest/openssl/#vendored
 openssl-vendored = ["reqwest/native-tls-vendored"]
 
 [dependencies.reqwest]
