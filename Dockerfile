@@ -15,17 +15,9 @@ RUN apk add --no-cache git fzf zsh neovim starship
 COPY --from=builder /usr/local/cargo/bin/roxide /usr/local/bin
 
 RUN mkdir -p /root/.config/roxide
-COPY ./config/minimal.yml /root/.config/roxide/config.yml
+COPY ./config/docker-config.yml /root/.config/roxide/config.yml
 
-RUN echo "export EDITOR='nvim'" >> ~/.zshrc
-RUN echo "export SHELL=$(which zsh)" >> ~/.zshrc
-
-RUN echo "autoload -Uz compinit" >> ~/.zshrc
-RUN echo "compinit" >> ~/.zshrc
-RUN echo "source <(/usr/local/bin/roxide init zsh)" >> ~/.zshrc
-RUN echo "alias zz='rox home'" >> ~/.zshrc
-
-RUN echo 'eval "$(starship init zsh)"' >> ~/.zshrc
+COPY ./scripts/docker-zshrc.zsh /root/.zshrc
 
 WORKDIR /root
 

@@ -25,8 +25,8 @@ impl Run for InitArgs {
         let init_script = String::from_utf8_lossy(init_bytes).to_string();
 
         let complete_bytes = match self.shell {
-            Shell::Bash => include_bytes!("../../scripts/complete_bash.sh").as_slice(),
-            Shell::Zsh => include_bytes!("../../scripts/complete_zsh.zsh").as_slice(),
+            Shell::Bash => include_bytes!("../../scripts/comp-bash.sh").as_slice(),
+            Shell::Zsh => include_bytes!("../../scripts/comp-zsh.zsh").as_slice(),
         };
         let complete_script = String::from_utf8_lossy(complete_bytes).to_string();
 
