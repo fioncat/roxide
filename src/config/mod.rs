@@ -651,7 +651,7 @@ pub mod config_tests {
     use crate::config::*;
     use crate::{hashmap, hashmap_strings, hashset_strings};
 
-    const TEST_CONFIG_YAML: &'static str = r#"
+    const TEST_CONFIG_TOML: &'static str = r#"
 workspace = "${PWD}/_test/{NAME}/workspace"
 metadir = "${PWD}/_test/{NAME}/meta"
 
@@ -735,8 +735,8 @@ env = [
 "#;
 
     pub fn load_test_config(name: &str) -> Config {
-        let yaml = TEST_CONFIG_YAML.replace("{NAME}", name);
-        let cfg = Config::read_data(yaml.as_str()).unwrap();
+        let toml_str = TEST_CONFIG_TOML.replace("{NAME}", name);
+        let cfg = Config::read_data(toml_str.as_str()).unwrap();
         cfg
     }
 

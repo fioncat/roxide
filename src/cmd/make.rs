@@ -11,10 +11,10 @@ use crate::repo::database::Database;
 use crate::repo::Repo;
 use crate::workflow::Workflow;
 
-/// Run make workflow for current repository (.roxmake.yml)
+/// Run make workflow for current repository (.roxmake.toml)
 #[derive(Args)]
 pub struct MakeArgs {
-    /// The workflow name, define in '.roxmake.yml'
+    /// The workflow name, define in '.roxmake.toml'
     #[clap(default_value = "default")]
     name: String,
 }
