@@ -148,7 +148,7 @@ pub fn build_provider(
     remote_cfg: &RemoteConfig,
     force: bool,
 ) -> Result<Box<dyn Provider>> {
-    if let None = remote_cfg.provider {
+    if remote_cfg.provider.is_none() {
         bail!(
             "missing provider config for remote '{}'",
             remote_cfg.get_name()
@@ -156,8 +156,8 @@ pub fn build_provider(
     }
 
     let mut provider = match remote_cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::new(remote_cfg),
-        ProviderType::Gitlab => Gitlab::new(remote_cfg),
+        ProviderType::Github => Github::build(remote_cfg),
+        ProviderType::Gitlab => Gitlab::build(remote_cfg),
     };
 
     if remote_cfg.cache_hours > 0 {
@@ -167,7 +167,7 @@ pub fn build_provider(
 
     if remote_cfg.has_alias() {
         let (alias_owner, alias_repo) = remote_cfg.get_alias_map();
-        provider = Alias::new(alias_owner, alias_repo, provider);
+        provider = Alias::build(alias_owner, alias_repo, provider);
     }
 
     Ok(provider)
@@ -188,7 +188,7 @@ pub mod api_tests {
     }
 
     impl StaticProvider {
-        pub fn new(repos: Vec<(&str, Vec<&str>)>) -> Box<dyn Provider> {
+        pub fn build(repos: Vec<(&str, Vec<&str>)>) -> Box<dyn Provider> {
             let p = StaticProvider {
                 repos: repos
                     .into_iter()
@@ -205,7 +205,7 @@ pub mod api_tests {
         }
 
         pub fn mock() -> Box<dyn Provider> {
-            Self::new(vec![
+            Self::build(vec![
                 (
                     "fioncat",
                     vec!["roxide", "spacenvim", "dotfiles", "fioncat"],

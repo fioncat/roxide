@@ -75,7 +75,7 @@ impl Run for MergeArgs {
 
         info!("Get merge info from remote API");
         if let Some(url) = provider.get_merge(merge.clone())? {
-            utils::open_url(&url)?;
+            utils::open_url(url)?;
             return Ok(());
         }
 

@@ -234,7 +234,7 @@ impl BranchArgs {
         cmd.execute()
     }
 
-    fn delete(&self, branches: &Vec<GitBranch>) -> Result<()> {
+    fn delete(&self, branches: &[GitBranch]) -> Result<()> {
         let branch = self.get_branch_or_current(branches)?;
 
         if branch.current {
@@ -259,14 +259,14 @@ impl BranchArgs {
         Ok(())
     }
 
-    fn push(&self, branches: &Vec<GitBranch>) -> Result<()> {
+    fn push(&self, branches: &[GitBranch]) -> Result<()> {
         let branch = self.get_branch_or_current(branches)?;
         Cmd::git(&["push", "--set-upstream", "origin", branch.name.as_ref()])
             .with_display_cmd()
             .execute()
     }
 
-    fn get_branch_or_current<'a>(&self, branches: &'a Vec<GitBranch>) -> Result<&'a GitBranch> {
+    fn get_branch_or_current<'a>(&self, branches: &'a [GitBranch]) -> Result<&'a GitBranch> {
         match &self.name {
             Some(name) => match branches.iter().find(|b| b.name.eq(name)) {
                 Some(b) => Ok(b),
@@ -276,14 +276,14 @@ impl BranchArgs {
         }
     }
 
-    fn must_get_current_branch(branches: &Vec<GitBranch>) -> Result<&GitBranch> {
+    fn must_get_current_branch(branches: &[GitBranch]) -> Result<&GitBranch> {
         match branches.iter().find(|b| b.current) {
             Some(b) => Ok(b),
             None => bail!("could not find current branch"),
         }
     }
 
-    fn search_and_switch(&self, branches: &Vec<GitBranch>) -> Result<()> {
+    fn search_and_switch(&self, branches: &[GitBranch]) -> Result<()> {
         if self.remote {
             return self.search_and_switch_remote();
         }

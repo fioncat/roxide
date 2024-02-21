@@ -19,7 +19,7 @@ struct GitlabRepo {
 }
 
 impl GitlabRepo {
-    fn to_api(self) -> ApiRepo {
+    fn api(self) -> ApiRepo {
         ApiRepo {
             default_branch: self.default_branch,
             upstream: None,
@@ -70,11 +70,11 @@ impl Provider for Gitlab {
         let id = format!("{owner}/{name}");
         let id_encode = urlencoding::encode(&id);
         let path = format!("projects/{id_encode}");
-        Ok(self.execute_get::<GitlabRepo>(&path)?.to_api())
+        Ok(self.execute_get::<GitlabRepo>(&path)?.api())
     }
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
-        if let Some(_) = merge.upstream {
+        if merge.upstream.is_some() {
             bail!("GitLab now does not support upstream");
         }
         let id = format!("{}/{}", merge.owner, merge.name);
@@ -91,7 +91,7 @@ impl Provider for Gitlab {
     }
 
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String> {
-        if let Some(_) = merge.upstream {
+        if merge.upstream.is_some() {
             bail!("GitLab now does not support upstream");
         }
         let id = format!("{}/{}", merge.owner, merge.name);
@@ -122,7 +122,7 @@ impl Provider for Gitlab {
 impl Gitlab {
     const API_VERSION: u8 = 4;
 
-    pub fn new(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+    pub fn build(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
         let client = super::build_common_client(remote_cfg);
         let domain = match &remote_cfg.api_domain {
             Some(domain) => domain.clone(),

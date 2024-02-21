@@ -61,7 +61,7 @@ impl Provider for Alias {
 }
 
 impl Alias {
-    pub fn new(
+    pub fn build(
         owner_map: HashMap<String, String>,
         repo_map: HashMap<String, HashMap<String, String>>,
         upstream: Box<dyn Provider>,
@@ -143,7 +143,7 @@ mod tests {
 
         let upstream = StaticProvider::mock();
 
-        let mut alias = Alias::new(owner_map, repo_map, upstream);
+        let mut alias = Alias::build(owner_map, repo_map, upstream);
         let result = alias.list_repos("test-alias").unwrap();
         let expect: Vec<String> = vec!["ro", "vim", "dotfiles", "fioncat"]
             .into_iter()

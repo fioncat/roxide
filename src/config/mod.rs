@@ -304,10 +304,10 @@ impl RemoteConfig {
     }
 
     pub fn has_alias(&self) -> bool {
-        if let Some(_) = self.alias_owner_map {
+        if self.alias_owner_map.is_some() {
             return true;
         }
-        if let Some(_) = self.alias_repo_map {
+        if self.alias_repo_map.is_some() {
             return true;
         }
         false
@@ -400,8 +400,7 @@ impl Config {
             Some(path) => PathBuf::from(path),
             None => {
                 let home = utils::get_home_dir()?;
-                let path = PathBuf::from(home);
-                path.join(".config").join("roxide.toml")
+                home.join(".config").join("roxide.toml")
             }
         };
 
@@ -423,7 +422,7 @@ impl Config {
     pub fn load() -> Result<Config> {
         let path = Self::get_path()?;
         let cfg = match path.as_ref() {
-            Some(path) => Self::read(&path)?,
+            Some(path) => Self::read(path)?,
             None => Self::default()?,
         };
         Ok(cfg)
@@ -510,7 +509,7 @@ impl Config {
     }
 
     pub fn list_remotes(&self) -> Vec<String> {
-        let mut names: Vec<_> = self.remotes.iter().map(|(key, _)| key.clone()).collect();
+        let mut names: Vec<_> = self.remotes.keys().cloned().collect();
         names.sort();
         names
     }
@@ -651,7 +650,7 @@ pub mod config_tests {
     use crate::config::*;
     use crate::{hashmap, hashmap_strings, hashset_strings};
 
-    const TEST_CONFIG_TOML: &'static str = r#"
+    const TEST_CONFIG_TOML: &str = r#"
 workspace = "${PWD}/_test/{NAME}/workspace"
 metadir = "${PWD}/_test/{NAME}/meta"
 
@@ -887,7 +886,7 @@ env = [
         assert_eq!(cfg.get_remote("test").unwrap().as_ref(), &test_remote);
     }
 
-    const TEST_MAIN_GO_CONTENT: &'static str = r#"package main
+    const TEST_MAIN_GO_CONTENT: &str = r#"package main
 
 import "fmt"
 
@@ -903,7 +902,7 @@ func main() {
         let w0_steps = vec![
             WorkflowStep {
                 name: "main.go".to_string(),
-                file: Some(format!("{}", TEST_MAIN_GO_CONTENT)),
+                file: Some(TEST_MAIN_GO_CONTENT.to_string()),
                 run: None,
                 image: None,
                 env: vec![],

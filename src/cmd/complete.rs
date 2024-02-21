@@ -18,7 +18,7 @@ pub struct CompleteArgs {
 impl Run for CompleteArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
         let cmds = Commands::VARIANTS;
-        let mut cmds: Vec<_> = cmds.into_iter().map(|key| key.to_string()).collect();
+        let mut cmds: Vec<_> = cmds.iter().map(|key| key.to_string()).collect();
         cmds.sort();
 
         let comps = Commands::get_completions();
@@ -62,17 +62,17 @@ impl CompleteArgs {
                 None => break,
             };
 
-            if arg.starts_with("-") {
-                if let None = completion.flags {
+            if arg.starts_with('-') {
+                if completion.flags.is_none() {
                     continue;
                 }
 
-                let flag = arg.trim_start_matches("-");
+                let flag = arg.trim_start_matches('-');
                 if flag.is_empty() {
                     continue;
                 }
 
-                let flag = match flag.bytes().into_iter().last() {
+                let flag = match flag.bytes().last() {
                     Some(ch) => ch as char,
                     None => continue,
                 };
@@ -85,7 +85,7 @@ impl CompleteArgs {
                 let result = completion.flags.as_ref().unwrap()(cfg, &flag, &to_complete)?;
                 if let Some(result) = result {
                     args_iter.next();
-                    if let None = args_iter.view() {
+                    if args_iter.view().is_none() {
                         return Ok(result);
                     }
                 }
@@ -106,9 +106,9 @@ struct ArgsIter<'a> {
     idx: usize,
 }
 
-impl<'a> ArgsIter<'_> {
+impl ArgsIter<'_> {
     fn new(args: &Vec<String>) -> ArgsIter {
-        return ArgsIter { args, idx: 0 };
+        ArgsIter { args, idx: 0 }
     }
 
     fn next(&mut self) -> Option<&str> {

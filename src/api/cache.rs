@@ -81,10 +81,7 @@ impl Cache {
     ) -> Result<Cache> {
         let lock = FileLock::acquire(cfg, "cache")?;
         let expire = Duration::from_secs(remote_cfg.cache_hours as u64 * 3600);
-        let dir = cfg
-            .get_meta_dir()
-            .join("cache")
-            .join(&remote_cfg.get_name());
+        let dir = cfg.get_meta_dir().join("cache").join(remote_cfg.get_name());
         Ok(Cache {
             dir,
             expire,
@@ -96,18 +93,18 @@ impl Cache {
     }
 
     fn list_repos_path(&self, owner: &str) -> PathBuf {
-        let owner = owner.replace("/", ".");
+        let owner = owner.replace('/', ".");
         self.dir.join(format!("list.{owner}"))
     }
 
     fn get_repo_path(&self, owner: &str, name: &str) -> PathBuf {
-        let owner = owner.replace("/", ".");
-        let name = name.replace("/", ".");
-        self.dir.join(format!("repo.{owner}.{name}"))
+        let owner = owner.replace('/', ".");
+        let name = name.replace('/', ".");
+        self.dir.join(format!("repn.{owner}.{name}"))
     }
 
     fn search_repo_path(&self, query: &str) -> PathBuf {
-        let query = query.replace("/", ".");
+        let query = query.replace('/', ".");
         self.dir.join(format!("search.{query}"))
     }
 
@@ -180,7 +177,7 @@ mod cache_tests {
 
         assert_eq!(cache.list_repos("fioncat").unwrap(), expect_repos);
 
-        let upstream = StaticProvider::new(vec![("fioncat", vec!["hello0", "hello1", "hello2"])]);
+        let upstream = StaticProvider::build(vec![("fioncat", vec!["hello0", "hello1", "hello2"])]);
         cache.upstream = upstream;
         cache.force = false;
 
@@ -203,7 +200,7 @@ mod cache_tests {
         cache.now = fake_now;
 
         let expect_repos = vec!["hello0", "hello1", "hello2"];
-        let upstream = StaticProvider::new(vec![("kubernetes", expect_repos.clone())]);
+        let upstream = StaticProvider::build(vec![("kubernetes", expect_repos.clone())]);
         cache.upstream = upstream;
         cache.force = false;
 

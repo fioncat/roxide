@@ -117,7 +117,7 @@ pub fn cursor_up() {
     if cfg!(test) {
         return;
     }
-    const CURSOR_UP_CHARS: &'static str = "\x1b[A\x1b[K";
+    const CURSOR_UP_CHARS: &str = "\x1b[A\x1b[K";
     eprint!("{CURSOR_UP_CHARS}");
 }
 
@@ -182,7 +182,7 @@ pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
         return Ok(false);
     }
 
-    return Ok(true);
+    Ok(true)
 }
 
 /// Ask user to confirm. Return error if user choose `no`.
@@ -196,7 +196,7 @@ pub fn must_confirm(msg: impl AsRef<str>) -> Result<()> {
 
 /// Ask user to confirm operation. Display multiple items.
 pub fn confirm_items(
-    items: &Vec<String>,
+    items: &[String],
     action: &str,
     noun: &str,
     name: &str,
@@ -226,7 +226,7 @@ pub fn confirm_items(
 
     let mut current_size: usize = 0;
     for (idx, item) in items.iter().enumerate() {
-        let item_size = console::measure_text_width(&item);
+        let item_size = console::measure_text_width(item);
         if current_size == 0 {
             if idx == 0 {
                 eprint!("{}{}", head, item);
@@ -265,7 +265,7 @@ pub fn confirm_items(
 
 /// The same as [`confirm_items`], return error if user choose `no`.
 pub fn must_confirm_items(
-    items: &Vec<String>,
+    items: &[String],
     action: &str,
     noun: &str,
     name: &str,
@@ -333,7 +333,7 @@ where
         let data = raw.as_ref().to_string();
         utils::write_file(&edit_path, data.as_bytes())?;
     }
-    edit_file(&editor, &edit_path)?;
+    edit_file(editor, &edit_path)?;
 
     let data = fs::read(&edit_path).context("read edit file")?;
     fs::remove_file(&edit_path).context("remove edit file")?;
@@ -367,7 +367,7 @@ pub fn edit_file(editor: impl AsRef<str>, path: &PathBuf) -> Result<()> {
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
     cmd.stdin(Stdio::inherit());
-    cmd.arg(&path);
+    cmd.arg(path);
     cmd.output()
         .with_context(|| format!("use editor {} to edit {}", editor.as_ref(), path.display()))?;
     Ok(())
@@ -390,7 +390,7 @@ pub fn git_version() -> Result<Version> {
         None => bail!("unknown git version output: '{version}'"),
     };
 
-    match Version::parse(&version) {
+    match Version::parse(version) {
         Ok(ver) => Ok(ver),
         Err(_) => bail!("git version '{version}' is bad format"),
     }
@@ -399,12 +399,12 @@ pub fn git_version() -> Result<Version> {
 /// Get and parse fzf version from `fzf --version` command.
 pub fn fzf_version() -> Result<Version> {
     let version = Cmd::with_args("fzf", &["--version"]).read()?;
-    let mut fields = version.split(" ");
+    let mut fields = version.split(' ');
     let version = match fields.next() {
         Some(v) => v.trim(),
         None => bail!("Unknown fzf version output: '{version}'"),
     };
-    match Version::parse(&version) {
+    match Version::parse(version) {
         Ok(ver) => Ok(ver),
         Err(_) => bail!("fzf version '{version}' is bad format"),
     }
@@ -455,7 +455,7 @@ impl CmdResult {
                 return Ok(());
             }
         }
-        if let None = self.display {
+        if self.display.is_none() {
             // The command has already been output to the terminal, and its output
             // has been redirected. No need to print any error messages here.
             bail!(SilentExit { code: 130 });
@@ -494,7 +494,7 @@ impl CmdResult {
     pub fn lines(&self) -> Result<Vec<String>> {
         let output = self.read()?;
         let lines: Vec<String> = output
-            .split("\n")
+            .split('\n')
             .filter_map(|line| {
                 if line.is_empty() {
                     return None;
@@ -505,10 +505,10 @@ impl CmdResult {
         Ok(lines)
     }
 
-    fn trim_output(s: &String, no_break: bool) -> String {
+    fn trim_output(s: &str, no_break: bool) -> String {
         let s = s.trim();
         if no_break {
-            s.replace("\n", "; ").replace("'", "")
+            s.replace('\n', "; ").replace('\'', "")
         } else {
             String::from(s)
         }
@@ -801,7 +801,11 @@ pub struct GitCmd<'a> {
 impl<'a> GitCmd<'a> {
     /// Create a [`GitCmd`] and set the working directory at the same time.
     pub fn with_path(path: &'a str) -> GitCmd<'a> {
-        let prefix = if path != "" { vec!["-C", path] } else { vec![] };
+        let prefix = if !path.is_empty() {
+            vec!["-C", path]
+        } else {
+            vec![]
+        };
         GitCmd { prefix }
     }
 
@@ -840,14 +844,14 @@ impl<'a> GitCmd<'a> {
 /// let idx = fzf_search(&items).unwrap();
 /// let result = items[idx];
 /// ```
-pub fn fzf_search<S>(keys: &Vec<S>) -> Result<usize>
+pub fn fzf_search<S>(keys: &[S]) -> Result<usize>
 where
     S: AsRef<str>,
 {
     let mut input = String::with_capacity(keys.len());
     for key in keys {
         input.push_str(key.as_ref());
-        input.push_str("\n");
+        input.push('\n');
     }
 
     let mut fzf = Cmd::new("fzf");
@@ -969,8 +973,8 @@ impl GitBranch {
             if line.is_empty() {
                 continue;
             }
-            if line.starts_with("*") {
-                line = line.strip_prefix("*").unwrap().trim();
+            if line.starts_with('*') {
+                line = line.strip_prefix('*').unwrap().trim();
             }
             local_branch_map.insert(line.to_string());
         }
@@ -1048,7 +1052,7 @@ impl GitBranch {
             bail!(parse_err)
         }
         let mut current = false;
-        if let Some(_) = caps.get(1) {
+        if caps.get(1).is_some() {
             current = true;
         }
 
@@ -1115,7 +1119,7 @@ impl GitRemote {
 
         info!("Get upstream for {}", repo.name_with_remote());
         let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
-        if let None = api_repo.upstream {
+        if api_repo.upstream.is_none() {
             bail!(
                 "repo {} is not forked, so it has not an upstream",
                 repo.name_with_remote()
@@ -1170,17 +1174,16 @@ impl GitRemote {
                 // with "<", it means that this commit is from the target branch.
                 // Since we only list commits from current branch, ignore such
                 // commits.
-                line.trim().starts_with("<")
+                line.trim().starts_with('<')
             })
-            .map(|line| line.strip_prefix("<").unwrap().to_string())
+            .map(|line| line.strip_prefix('<').unwrap().to_string())
             .map(|line| {
                 let mut fields = line.split_whitespace();
                 fields.next();
-                let commit = fields
+                fields
                     .map(|field| field.to_string())
                     .collect::<Vec<String>>()
-                    .join(" ");
-                commit
+                    .join(" ")
             })
             .collect();
         Ok(commits)
@@ -1576,7 +1579,7 @@ mod term_tests {
                 String::from("631029386@qq.com"),
             ],
         };
-        show_json(&info).unwrap();
+        show_json(info).unwrap();
     }
 
     #[test]

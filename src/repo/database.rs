@@ -148,7 +148,7 @@ impl Bucket {
             bail!("unsupported version {version}");
         }
 
-        Ok(decoder.deserialize(data).context("decode repo data")?)
+        decoder.deserialize(data).context("decode repo data")
     }
 
     /// Encode and write binary data to a file.
@@ -348,7 +348,7 @@ impl Database<'_> {
             .scan("", "", |_remote, _owner, _name, bucket| {
                 self.filter_labels(bucket, labels)
             })
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         self.sort_repos(&mut repos);
         repos
     }
@@ -363,7 +363,7 @@ impl Database<'_> {
             .scan(remote, "", |_remote, _owner, _name, bucket| {
                 self.filter_labels(bucket, labels)
             })
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         self.sort_repos(&mut repos);
         repos
     }
@@ -427,7 +427,7 @@ impl Database<'_> {
             if let Some((owner, mut owner_bucket)) = remote_bucket.remove_entry(repo.owner.as_ref())
             {
                 if let Some(bucket) = owner_bucket.remove(repo.name.as_ref()) {
-                    if let Some(_) = bucket.labels {
+                    if bucket.labels.is_some() {
                         self.clean_labels = true;
                     }
                 };
@@ -457,7 +457,7 @@ impl Database<'_> {
             .scan(remote, owner, |_remote, _owner, _name, bucket| {
                 self.filter_labels(bucket, labels)
             })
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         self.sort_repos(&mut repos);
         repos
     }
@@ -527,7 +527,7 @@ impl Database<'_> {
 
     #[inline]
     fn filter_labels(&self, bucket: &RepoBucket, labels: &Option<HashSet<String>>) -> Option<bool> {
-        if let None = labels {
+        if labels.is_none() {
             return Some(true);
         }
         let labels = labels.as_ref().unwrap();
@@ -554,7 +554,7 @@ impl Database<'_> {
     }
 
     #[inline]
-    fn sort_repos(&self, repos: &mut Vec<Repo>) {
+    fn sort_repos(&self, repos: &mut [Repo]) {
         repos.sort_unstable_by(|a, b| {
             let score_a = a.score(self.cfg);
             let score_b = b.score(self.cfg);
@@ -713,7 +713,7 @@ impl Database<'_> {
         for label in labels {
             let id = label_name_map
                 .get(label.as_ref())
-                .map(|id| *id)
+                .copied()
                 .unwrap_or_else(|| {
                     let id = self.bucket.label_index;
                     self.bucket.label_index += 1;
@@ -732,7 +732,7 @@ impl Database<'_> {
 /// it is inconvenient to directly use some functionalities of the terminal.
 pub trait TerminalHelper {
     /// Searching in terminal, typically accomplished by directly invoking `fzf`.
-    fn search(&self, items: &Vec<String>) -> Result<usize>;
+    fn search(&self, items: &[String]) -> Result<usize>;
 
     /// Use an editor to edit and filter multiple items.
     fn edit(&self, cfg: &Config, items: Vec<String>) -> Result<Vec<String>>;
@@ -772,7 +772,7 @@ impl ProviderBuilder for DefaultProviderBuilder {
 pub struct DefaultTerminalHelper {}
 
 impl TerminalHelper for DefaultTerminalHelper {
-    fn search(&self, items: &Vec<String>) -> Result<usize> {
+    fn search(&self, items: &[String]) -> Result<usize> {
         term::fzf_search(items)
     }
 
@@ -892,9 +892,9 @@ impl<T: TerminalHelper, P: ProviderBuilder> SelectOptions<T, P> {
 
     /// Search repos from vec
     fn search_from_vec<'a>(&self, mut repos: Vec<Repo<'a>>, level: &NameLevel) -> Result<Repo<'a>> {
-        let items: Vec<String> = repos.iter().map(|repo| repo.to_string(&level)).collect();
+        let items: Vec<String> = repos.iter().map(|repo| repo.to_string(level)).collect();
         let idx = self.terminal_helper.search(&items)?;
-        if let None = repos.get(idx) {
+        if repos.get(idx).is_none() {
             bail!("internal error, terminal_helper returned an invalid index {idx}");
         }
         Ok(repos.remove(idx))
@@ -1017,7 +1017,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         if self.query.is_empty() {
-            if self.head.starts_with("@") {
+            if self.head.starts_with('@') {
                 return self.one_from_latest(db, "", "", self.head);
             }
 
@@ -1034,7 +1034,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 if self.head.starts_with("http") {
                     let url = self.head.strip_suffix(".git").unwrap();
                     SelectOneType::Url(
-                        Url::parse(&url).with_context(|| format!("parse clone url '{url}'"))?,
+                        Url::parse(url).with_context(|| format!("parse clone url '{url}'"))?,
                     )
                 } else if self.head.starts_with("git@") {
                     SelectOneType::Ssh(self.head)
@@ -1050,7 +1050,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 // We prioritize treating `head` as a URL, so we attempt to parse
                 // it using URL rules. If parsing fails, then consider it as a
                 // remote or keyword.
-                match Url::parse(&self.head) {
+                match Url::parse(self.head) {
                     Ok(url) => SelectOneType::Url(url),
                     Err(_) => SelectOneType::Direct,
                 }
@@ -1147,7 +1147,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         let path = segs.join("/");
-        let (mut owner, mut name) = parse_owner(&path);
+        let (mut owner, mut name) = parse_owner(path);
 
         let remote_cfg = db.cfg.must_get_remote(&remote)?;
         if remote_cfg.has_alias() {
@@ -1181,7 +1181,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             .unwrap()
             .strip_suffix(".git")
             .unwrap();
-        let full_name = full_name.replacen(":", "/", 1);
+        let full_name = full_name.replacen(':', "/", 1);
 
         let convert_url = format!("https://{full_name}");
         let url = Url::parse(&convert_url).with_context(|| {
@@ -1222,16 +1222,16 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let remote = self.head;
         let remote_cfg = db.cfg.must_get_remote(remote)?;
 
-        if self.query.starts_with("@") {
+        if self.query.starts_with('@') {
             return self.one_from_latest(db, remote, "", self.query);
         }
 
         // A special syntax: If `query` ends with "/", it indicates a search
         // within the owner.
-        if self.query.ends_with("/") {
-            let owner = self.query.strip_suffix("/").unwrap();
+        if self.query.ends_with('/') {
+            let owner = self.query.strip_suffix('/').unwrap();
             let mut search_local = self.opts.force_local;
-            if let None = remote_cfg.provider {
+            if remote_cfg.provider.is_none() {
                 search_local = true;
             }
 
@@ -1244,7 +1244,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             }
 
             let provider = self.opts.provider_builder.build_provider(
-                &db.cfg,
+                db.cfg,
                 &remote_cfg,
                 self.opts.force_no_cache,
             )?;
@@ -1255,10 +1255,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
                 let owner_repos = db.list_by_owner(remote, owner, &None);
                 let repos_set: HashSet<&str> =
                     owner_repos.iter().map(|repo| repo.name.as_ref()).collect();
-                api_repos = api_repos
-                    .into_iter()
-                    .filter(|name| !repos_set.contains(name.as_str()))
-                    .collect();
+                api_repos.retain(|name| !repos_set.contains(name.as_str()));
             }
 
             let idx = self.opts.terminal_helper.search(&api_repos)?;
@@ -1280,7 +1277,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             };
         }
 
-        if name.starts_with("@") {
+        if name.starts_with('@') {
             return self.one_from_latest(db, remote, &owner, &name);
         }
 
@@ -1294,7 +1291,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         remote_cfg: &RemoteConfig,
     ) -> Result<(Repo<'b>, bool)> {
         let provider = self.opts.provider_builder.build_provider(
-            &db.cfg,
+            db.cfg,
             remote_cfg,
             self.opts.force_no_cache,
         )?;
@@ -1325,8 +1322,8 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         owner: &str,
         query: &str,
     ) -> Result<(Repo<'b>, bool)> {
-        let n = query.strip_prefix("@").unwrap();
-        let n: u32 = if n == "" {
+        let n = query.strip_prefix('@').unwrap();
+        let n: u32 = if n.is_empty() {
             Self::DEFAULT_SELECT_LATEST_COUNT
         } else {
             n.parse().with_context(|| {
@@ -1337,9 +1334,9 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             })?
         };
 
-        let (mut repos, level) = if remote == "" {
+        let (mut repos, level) = if remote.is_empty() {
             (db.list_all(&self.opts.filter_labels), NameLevel::Remote)
-        } else if owner == "" {
+        } else if owner.is_empty() {
             (
                 db.list_by_remote(remote, &self.opts.filter_labels),
                 NameLevel::Owner,
@@ -1503,8 +1500,8 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let remote = self.head;
         let _ = db.cfg.must_get_remote(remote)?;
 
-        if self.query.ends_with("/") {
-            let owner = self.query.strip_suffix("/").unwrap();
+        if self.query.ends_with('/') {
+            let owner = self.query.strip_suffix('/').unwrap();
             return Ok((
                 db.list_by_owner(remote, owner, &self.opts.filter_labels),
                 NameLevel::Name,
@@ -1554,7 +1551,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             return Ok((remote_cfg, owner, vec![self.query.to_string()]));
         }
 
-        let owner = self.query.strip_suffix("/").unwrap_or_else(|| self.query);
+        let owner = self.query.strip_suffix('/').unwrap_or(self.query);
 
         let provider = self.opts.provider_builder.build_provider(
             db.cfg,
@@ -1587,7 +1584,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
 /// assert_eq!(Selector::parse_owner("roxide"), (format!(""), format!("roxide")));
 /// ```
 pub fn parse_owner(path: impl AsRef<str>) -> (String, String) {
-    let items: Vec<_> = path.as_ref().split("/").collect();
+    let items: Vec<_> = path.as_ref().split('/').collect();
     let items_len = items.len();
     let mut group_buffer: Vec<String> = Vec::with_capacity(items_len - 1);
     let mut base = "";
@@ -1614,15 +1611,7 @@ pub mod database_tests {
         name: &'static str,
         labels: Option<Vec<&'static str>>,
     ) -> Repo<'a> {
-        let labels = match labels {
-            Some(labels) => Some(
-                labels
-                    .into_iter()
-                    .map(|label| Cow::Borrowed(label))
-                    .collect(),
-            ),
-            None => None,
-        };
+        let labels = labels.map(|labels| labels.into_iter().map(Cow::Borrowed).collect());
         Repo {
             remote: Cow::Borrowed(remote),
             owner: Cow::Borrowed(owner),
@@ -1794,7 +1783,7 @@ pub mod database_tests {
         let mut expect: Vec<_> = repos
             .iter()
             .filter(|repo| repo.remote.as_ref() == "github")
-            .map(|repo| repo.clone())
+            .cloned()
             .collect();
 
         let mut db = Database::load(&cfg).unwrap();
@@ -1831,7 +1820,7 @@ pub mod database_tests {
         let mut expect: Vec<_> = repos
             .iter()
             .filter(|repo| repo.remote.as_ref() == "github" && repo.owner.as_ref() == "kubernetes")
-            .map(|repo| repo.clone())
+            .cloned()
             .collect();
 
         let mut db = Database::load(&cfg).unwrap();
@@ -1892,8 +1881,8 @@ pub mod database_tests {
         let labels: HashSet<&str> = db
             .bucket
             .labels
-            .iter()
-            .map(|(_id, label)| label.as_str())
+            .values()
+            .map(|label| label.as_str())
             .collect();
         // The mark label should be removed
         assert_eq!(labels, hashset!["sync", "pin"]);
@@ -1936,8 +1925,8 @@ pub mod database_tests {
         let labels: HashSet<&str> = db
             .bucket
             .labels
-            .iter()
-            .map(|(_id, label)| label.as_str())
+            .values()
+            .map(|label| label.as_str())
             .collect();
         // The mark label should be removed
         assert_eq!(labels, hashset!["sync", "pin"]);
@@ -1959,11 +1948,11 @@ mod select_tests {
     }
 
     impl TerminalHelper for TestTerminalHelper {
-        fn search(&self, items: &Vec<String>) -> Result<usize> {
+        fn search(&self, items: &[String]) -> Result<usize> {
             if items.is_empty() {
                 bail!("no item to search");
             }
-            if let None = self.target {
+            if self.target.is_none() {
                 return Ok(0);
             }
             let target = self.target.as_ref().unwrap().as_str();
