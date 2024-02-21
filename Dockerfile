@@ -1,4 +1,4 @@
-FROM rust:1.75-alpine3.19 AS builder
+FROM rust:1.76-alpine3.19 AS builder
 
 WORKDIR /usr/src/csync
 COPY . .
