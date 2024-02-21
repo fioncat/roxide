@@ -24,9 +24,9 @@ make install
 
 ## Config
 
-Please save config file to `$HOME/.config/roxide/config.yml`, or you can use command `roxide config` to create and edit config file directly.
+Please save config file to `$HOME/.config/roxide.toml`, or you can use command `roxide config` to create and edit config file directly.
 
-See: [config.yml](config/config.yml).
+See: [config.toml](config/config.toml).
 
 ## Shell Support
 
