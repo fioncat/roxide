@@ -2,7 +2,6 @@ pub mod defaults;
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{env, fs, io};
@@ -397,55 +396,28 @@ impl RemoteConfig {
 
 impl Config {
     pub fn get_path() -> Result<Option<PathBuf>> {
-        if let Some(path) = env::var_os("ROXIDE_CONFIG") {
-            let path = PathBuf::from(path);
-            return match fs::metadata(&path) {
-                Ok(meta) => {
-                    if meta.is_dir() {
-                        bail!(
-                            "config file '{}' from env is a directory, require file",
-                            path.display()
-                        );
-                    }
-                    Ok(Some(path))
-                }
-                Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(err) => Err(err)
-                    .with_context(|| format!("read config file '{}' from env", path.display())),
-            };
-        }
-
-        let home = utils::get_home_dir()?;
-        let dir = home.join(".config").join("roxide");
-        let ents = match fs::read_dir(&dir) {
-            Ok(ents) => ents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => {
-                return Err(err).with_context(|| format!("read config dir '{}'", dir.display()))
+        let path = match env::var_os("ROXIDE_CONFIG") {
+            Some(path) => PathBuf::from(path),
+            None => {
+                let home = utils::get_home_dir()?;
+                let path = PathBuf::from(home);
+                path.join(".config").join("roxide.toml")
             }
         };
-        for ent in ents {
-            let ent =
-                ent.with_context(|| format!("read sub entry for config dir '{}'", dir.display()))?;
-            let name = ent.file_name();
-            let name = match name.to_str() {
-                Some(name) => name,
-                None => continue,
-            };
-            let path = dir.join(&name);
-            let meta = ent
-                .metadata()
-                .with_context(|| format!("read metadata for config entry '{}'", path.display()))?;
-            if meta.is_dir() {
-                continue;
-            }
 
-            if name == "config.yaml" || name == "config.yml" {
-                return Ok(Some(path));
+        match fs::metadata(&path) {
+            Ok(meta) => {
+                if meta.is_dir() {
+                    bail!(
+                        "config file '{}' from env is a directory, require file",
+                        path.display()
+                    );
+                }
+                Ok(Some(path))
             }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err).with_context(|| format!("read config file '{}'", path.display())),
         }
-
-        Ok(None)
     }
 
     pub fn load() -> Result<Config> {
@@ -458,10 +430,9 @@ impl Config {
     }
 
     pub fn read(path: &PathBuf) -> Result<Config> {
-        let file =
-            File::open(path).with_context(|| format!("open config file '{}'", path.display()))?;
-        let mut cfg: Config = serde_yaml::from_reader(file)
-            .with_context(|| format!("parse config file yaml '{}'", path.display()))?;
+        let data = fs::read(path).context("read config file")?;
+        let toml_str = String::from_utf8_lossy(&data);
+        let mut cfg: Config = toml::from_str(&toml_str).context("parse config file toml")?;
         cfg.validate().context("validate config content")?;
         Ok(cfg)
     }
@@ -486,8 +457,8 @@ impl Config {
     }
 
     #[cfg(test)]
-    pub fn read_data(data: &[u8]) -> Result<Config> {
-        let mut cfg: Config = serde_yaml::from_slice(data).context("parse config data")?;
+    pub fn read_data(str: &str) -> Result<Config> {
+        let mut cfg: Config = toml::from_str(str).context("parse config toml")?;
         cfg.validate().context("validate config content")?;
         Ok(cfg)
     }
@@ -680,97 +651,92 @@ pub mod config_tests {
     use crate::config::*;
     use crate::{hashmap, hashmap_strings, hashset_strings};
 
-    const TEST_CONFIG_YAML: &'static str = r#"
-workspace: "${PWD}/_test/{NAME}/workspace"
-metadir: "${PWD}/_test/{NAME}/meta"
+    const TEST_CONFIG_TOML: &'static str = r#"
+workspace = "${PWD}/_test/{NAME}/workspace"
+metadir = "${PWD}/_test/{NAME}/meta"
 
-cmd: "rox"
+cmd = "rox"
 
-remotes:
-  github:
-    clone: github.com
-    user: "fioncat"
-    email: "lazycat7706@gmail.com"
-    ssh: false
-    labels: ["sync"]
-    provider: "github"
+[remotes]
 
-    owners:
-      fioncat:
-        labels: ["pin"]
-        ssh: true
-        repo_alias:
-          spacenvim: vim
-          roxide: rox
-      kubernetes:
-        alias: "k8s"
-        labels: ["huge"]
-        repo_alias:
-          kubernetes: k8s
+[remotes.github]
+clone = "github.com"
+user = "fioncat"
+email = "lazycat7706@gmail.com"
+ssh = false
+labels = ["sync"]
+provider = "github"
+[remotes.github.owners.fioncat]
+labels = ["pin"]
+ssh = true
+repo_alias = { spacenvim = "vim", roxide = "rox" }
+[remotes.github.owners.kubernetes]
+alias = "k8s"
+labels = ["huge"]
+repo_alias = { kubernetes = "k8s" }
 
-  gitlab:
-    clone: gitlab.com
-    user: "test"
-    email: "test-email@test.com"
-    ssh: false
-    provider: "gitlab"
-    token: "test-token-gitlab"
-    cache_hours: 100
-    list_limit: 500
-    api_timeout: 30
-    api_domain: "gitlab.com"
-    owners:
-      test:
-        labels: ["sync", "pin"]
+[remotes.gitlab]
+clone = "gitlab.com"
+user = "test"
+email = "test-email@test.com"
+ssh = false
+provider = "gitlab"
+token = "test-token-gitlab"
+cache_hours = 100
+list_limit = 500
+api_timeout = 30
+api_domain = "gitlab.com"
+[remotes.gitlab.owners.test]
+labels = ["sync", "pin"]
 
-  test:
-    owners:
-      golang:
-        on_create: ["golang"]
-      rust:
-        on_create: ["rust"]
+[remotes.test]
+[remotes.test.owners.golang]
+on_create = ["golang"]
+[remotes.test.owners.rust]
+on_create = ["rust"]
 
-workflows:
-  golang:
-    env:
-      - name: MODULE_DOMAIN
-        from_repo: clone
-      - name: MODULE_OWNER
-        from_repo: owner
-      - name: MODULE_NAME
-        from_repo: name
-    steps:
-      - name: main.go
-        file: |
-          package main
+[workflows]
 
-          import "fmt"
+[workflows.golang]
+env = [
+    {name = "MODULE_DOMAIN", from_repo = "clone"},
+    {name = "MODULE_OWNER", from_repo = "owner"},
+    {name = "MODULE_NAME", from_repo = "name"}
+]
+[[workflows.golang.steps]]
+name = "main.go"
+file = '''
+package main
 
-          func main() {
-          \tfmt.Println("hello, world!")
-          }
-      - name: Init go module
-        run: go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}
+import "fmt"
 
-  rust:
-    steps:
-      - name: Init cargo
-        run: cargo init
+func main() {
+\tfmt.Println("hello, world!")
+}
+'''
+[[workflows.golang.steps]]
+name = "Init go module"
+run = "go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}"
 
-  build-go:
-    steps:
-      - name: Build go
-        image: "golang:latest"
-        env:
-          - name: GO111MODULE
-            value: "on"
-        run: go build ./...
+[workflows.rust]
+[[workflows.rust.steps]]
+name = "Init cargo"
+run = "cargo init"
+
+[workflows.build-go]
+[[workflows.build-go.steps]]
+name = "Build go"
+image = "golang:latest"
+run = "go build ./..."
+env = [
+    {name = "GO111MODULE", value = "on"}
+]
 
 "#;
 
     pub fn load_test_config(name: &str) -> Config {
-        let yaml = TEST_CONFIG_YAML.replace("{NAME}", name);
-        let cfg = Config::read_data(yaml.as_bytes()).unwrap();
+        let toml_str = TEST_CONFIG_TOML.replace("{NAME}", name);
+        let cfg = Config::read_data(toml_str.as_str()).unwrap();
         cfg
     }
 

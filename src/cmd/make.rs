@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io;
+use std::fs;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::batch::Task;
@@ -12,10 +11,10 @@ use crate::repo::database::Database;
 use crate::repo::Repo;
 use crate::workflow::Workflow;
 
-/// Run make workflow for current repository (.roxmake.yml)
+/// Run make workflow for current repository (.roxmake.toml)
 #[derive(Args)]
 pub struct MakeArgs {
-    /// The workflow name, define in '.roxmake.yml'
+    /// The workflow name, define in '.roxmake.toml'
     #[clap(default_value = "default")]
     name: String,
 }
@@ -33,23 +32,14 @@ impl Run for MakeArgs {
 }
 
 impl MakeArgs {
-    const WORKFLOW_FILE_NAME: &'static str = ".roxmake.yml";
+    const WORKFLOW_FILE_NAME: &'static str = ".roxmake.toml";
 
     fn load_workflow_cfg(cfg: &Config, repo: &Repo) -> Result<HashMap<String, WorkflowConfig>> {
         let path = repo.get_path(cfg).join(Self::WORKFLOW_FILE_NAME);
-
-        match File::open(&path) {
-            Ok(file) => {
-                serde_yaml::from_reader(file).context("invalid yaml in your roxide make file")
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => bail!(
-                "could not find file '{}' in your repo, please create it first",
-                Self::WORKFLOW_FILE_NAME
-            ),
-            Err(err) => {
-                Err(err).with_context(|| format!("read file '{}'", Self::WORKFLOW_FILE_NAME))
-            }
-        }
+        let data = fs::read(&path)
+            .with_context(|| format!("read roxmake file '{}'", Self::WORKFLOW_FILE_NAME))?;
+        let toml_str = String::from_utf8_lossy(&data);
+        toml::from_str(&toml_str).context("parse roxmake toml")
     }
 
     pub fn completion() -> Completion {

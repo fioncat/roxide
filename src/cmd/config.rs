@@ -32,11 +32,11 @@ impl ConfigArgs {
             Some(path) => PathBuf::from(path),
             None => {
                 let home = utils::get_home_dir()?;
-                home.join(".config").join("roxide").join("config.yml")
+                home.join(".config").join("roxide.toml")
             }
         };
 
-        let data = include_bytes!("../../config/config.yml");
+        let data = include_bytes!("../../config/config.toml");
         utils::write_file(&path, data)?;
 
         Ok(path)

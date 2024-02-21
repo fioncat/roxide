@@ -1,0 +1,12 @@
+workspace = "~/dev"
+metadir = "~/.local/share/roxide"
+
+cmd = "rox"
+
+[remotes.github]
+clone = "github.com"
+user = "fioncat"
+email = "lazycat7706@gmail.com"
+ssh = false
+labels = ["sync"]
+provider = "github"

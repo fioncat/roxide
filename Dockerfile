@@ -15,7 +15,7 @@ RUN apk add --no-cache git fzf zsh neovim starship
 COPY --from=builder /usr/local/cargo/bin/roxide /usr/local/bin
 
 RUN mkdir -p /root/.config/roxide
-COPY ./config/docker-config.yml /root/.config/roxide/config.yml
+COPY ./config/docker-config.toml /root/.config/roxide.toml
 
 COPY ./scripts/docker-zshrc.zsh /root/.zshrc
 
