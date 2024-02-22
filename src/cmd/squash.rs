@@ -33,10 +33,7 @@ impl Run for SquashArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
         let remote = cmd::get_git_remote(cfg, self.upstream, self.force)?;
 
-        let branch = match &self.target {
-            Some(target) => Some(target.as_str()),
-            None => None,
-        };
+        let branch = self.target.as_deref();
         let commits = remote.commits_between(branch)?;
         if commits.is_empty() {
             eprintln!("No commit to squash");

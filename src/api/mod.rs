@@ -3,6 +3,7 @@ mod cache;
 pub mod github;
 mod gitlab;
 
+use std::fmt::Display;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
@@ -43,10 +44,9 @@ pub struct ApiUpstream {
     pub default_branch: String,
 }
 
-impl ApiUpstream {
-    /// Convert fork source to string, the format is '{owner}/{name}'.
-    pub fn to_string(&self) -> String {
-        format!("{}/{}", self.owner, self.name)
+impl Display for ApiUpstream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
@@ -69,6 +69,12 @@ pub struct MergeOptions {
     pub target: String,
 }
 
+impl Display for MergeOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
+    }
+}
+
 impl MergeOptions {
     /// Display merge options with terminal color.
     pub fn pretty_display(&self) -> String {
@@ -86,11 +92,6 @@ impl MergeOptions {
                 style(&self.target).magenta()
             ),
         }
-    }
-
-    /// Convert merge options to string, the format is '{owner}/{name}'.
-    pub fn to_string(&self) -> String {
-        format!("{}/{}", self.owner, self.name)
     }
 }
 
@@ -148,7 +149,7 @@ pub fn build_provider(
     remote_cfg: &RemoteConfig,
     force: bool,
 ) -> Result<Box<dyn Provider>> {
-    if let None = remote_cfg.provider {
+    if remote_cfg.provider.is_none() {
         bail!(
             "missing provider config for remote '{}'",
             remote_cfg.get_name()
@@ -156,8 +157,8 @@ pub fn build_provider(
     }
 
     let mut provider = match remote_cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::new(remote_cfg),
-        ProviderType::Gitlab => Gitlab::new(remote_cfg),
+        ProviderType::Github => Github::build(remote_cfg),
+        ProviderType::Gitlab => Gitlab::build(remote_cfg),
     };
 
     if remote_cfg.cache_hours > 0 {
@@ -167,7 +168,7 @@ pub fn build_provider(
 
     if remote_cfg.has_alias() {
         let (alias_owner, alias_repo) = remote_cfg.get_alias_map();
-        provider = Alias::new(alias_owner, alias_repo, provider);
+        provider = Alias::build(alias_owner, alias_repo, provider);
     }
 
     Ok(provider)
@@ -188,7 +189,7 @@ pub mod api_tests {
     }
 
     impl StaticProvider {
-        pub fn new(repos: Vec<(&str, Vec<&str>)>) -> Box<dyn Provider> {
+        pub fn build(repos: Vec<(&str, Vec<&str>)>) -> Box<dyn Provider> {
             let p = StaticProvider {
                 repos: repos
                     .into_iter()
@@ -205,7 +206,7 @@ pub mod api_tests {
         }
 
         pub fn mock() -> Box<dyn Provider> {
-            Self::new(vec![
+            Self::build(vec![
                 (
                     "fioncat",
                     vec!["roxide", "spacenvim", "dotfiles", "fioncat"],

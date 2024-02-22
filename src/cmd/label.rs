@@ -55,12 +55,7 @@ impl Run for LabelArgs {
 
         if let Some(set_labels) = self.set.as_ref() {
             let set_labels = utils::parse_labels_str(set_labels);
-            repo.labels = Some(
-                set_labels
-                    .into_iter()
-                    .map(|label| Cow::Owned(label))
-                    .collect(),
-            );
+            repo.labels = Some(set_labels.into_iter().map(Cow::Owned).collect());
         } else if let Some(append_labels) = self.append.as_ref() {
             let append_labels = utils::parse_labels_str(append_labels);
             repo.append_labels(Some(append_labels));

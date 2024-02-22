@@ -23,10 +23,7 @@ pub struct ResetArgs {
 impl Run for ResetArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
         let remote = cmd::get_git_remote(cfg, self.upstream, self.force)?;
-        let branch = match &self.target {
-            Some(target) => Some(target.as_str()),
-            None => None,
-        };
+        let branch = self.target.as_deref();
 
         let target = remote.target(branch)?;
 

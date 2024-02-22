@@ -66,7 +66,10 @@ impl Run for CopyArgs {
         )?;
         repo.append_labels(Some(labels));
 
-        if let Some(_) = db.get(&self.remote, repo.owner.as_ref(), repo.name.as_ref()) {
+        if db
+            .get(&self.remote, repo.owner.as_ref(), repo.name.as_ref())
+            .is_some()
+        {
             confirm!(
                 "Do you want to overwrite the repo {}",
                 repo.name_with_remote()

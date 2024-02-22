@@ -39,7 +39,7 @@ impl Run for GcArgs {
                 return Ok(false);
             }
 
-            if let Some(_) = repo_set.get(&path) {
+            if repo_set.get(&path).is_some() {
                 return Ok(false);
             }
 

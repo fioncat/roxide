@@ -36,7 +36,7 @@ impl MakeArgs {
 
     fn load_workflow_cfg(cfg: &Config, repo: &Repo) -> Result<HashMap<String, WorkflowConfig>> {
         let path = repo.get_path(cfg).join(Self::WORKFLOW_FILE_NAME);
-        let data = fs::read(&path)
+        let data = fs::read(path)
             .with_context(|| format!("read roxmake file '{}'", Self::WORKFLOW_FILE_NAME))?;
         let toml_str = String::from_utf8_lossy(&data);
         toml::from_str(&toml_str).context("parse roxmake toml")

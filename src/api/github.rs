@@ -48,7 +48,7 @@ struct Release {
 }
 
 impl Repo {
-    fn to_api(self) -> ApiRepo {
+    fn api(self) -> ApiRepo {
         let Repo {
             name: _,
             html_url,
@@ -145,7 +145,7 @@ impl Provider for Github {
 
     fn get_repo(&self, owner: &str, name: &str) -> Result<ApiRepo> {
         let path = format!("repos/{}/{}", owner, name);
-        Ok(self.execute_get::<Repo>(&path)?.to_api())
+        Ok(self.execute_get::<Repo>(&path)?.api())
     }
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
@@ -192,7 +192,7 @@ impl Provider for Github {
 impl Github {
     const API_VERSION: &'static str = "2022-11-28";
 
-    pub fn new(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+    pub fn build(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
         let client = super::build_common_client(remote_cfg);
         Box::new(Github {
             token: remote_cfg.token.clone(),

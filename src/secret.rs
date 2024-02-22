@@ -22,8 +22,8 @@ const SALT_LENGTH: usize = 5;
 const NONCE_LENGTH: usize = 12;
 const HEADER_LENGTH: usize = SALT_LENGTH + NONCE_LENGTH;
 
-const SECRET_BEGIN_LINE: &'static str = "-----BEGIN ROXIDE SECRET-----";
-const SECRET_END_LINE: &'static str = "-----END ROXIDE SECRET-----";
+const SECRET_BEGIN_LINE: &str = "-----BEGIN ROXIDE SECRET-----";
+const SECRET_END_LINE: &str = "-----END ROXIDE SECRET-----";
 
 const PBKDF2_ROUNDS: u32 = 600_000;
 
@@ -205,7 +205,7 @@ where
 
     // Generate salt.
     let mut salt: [u8; SALT_LENGTH] = [0; SALT_LENGTH];
-    let mut rng = OsRng::default();
+    let mut rng = OsRng;
     rng.fill_bytes(&mut salt);
 
     // Use PBKDF2 to generate private key according to user password and generated
@@ -214,7 +214,7 @@ where
     let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), &salt, PBKDF2_ROUNDS);
     let key = Key::<Aes256Gcm>::from_slice(&key);
 
-    let cipher = Aes256Gcm::new(&key);
+    let cipher = Aes256Gcm::new(key);
     // Generate the nonce in aes-256-gcm.
     let nonce = Aes256Gcm::generate_nonce(&mut rng);
     assert_eq!(nonce.len(), NONCE_LENGTH);
@@ -287,7 +287,7 @@ where
 
     let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_ref().as_bytes(), salt, PBKDF2_ROUNDS);
     let key = Key::<Aes256Gcm>::from_slice(&key);
-    let cipher = Aes256Gcm::new(&key);
+    let cipher = Aes256Gcm::new(key);
 
     let nonce = Nonce::<Aes256Gcm>::from_slice(nonce);
 
@@ -302,7 +302,7 @@ where
             .decode(line)
             .context("decode content as base64 string")?;
         let buffer: &[u8] = &buffer;
-        let plain = match cipher.decrypt(&nonce, buffer) {
+        let plain = match cipher.decrypt(nonce, buffer) {
             Ok(data) => data,
             Err(_) => bail!("decrypt secret failed, incorrect password or content"),
         };

@@ -270,9 +270,9 @@ impl<R> Tracker<R> {
         let mut list = String::with_capacity(size);
         for (idx, (_, name)) in self.running.iter().enumerate() {
             let add_size = if idx == 0 {
-                Self::get_size(&name)
+                Self::get_size(name)
             } else {
-                Self::get_size(&name) + Self::SEP_SIZE
+                Self::get_size(name) + Self::SEP_SIZE
             };
             let is_last = idx == self.running.len() - 1;
             let list_size = Self::get_size(&list);
@@ -285,14 +285,14 @@ impl<R> Tracker<R> {
                 if delta < Self::OMIT_SIZE {
                     list.push_str(&".".repeat(delta));
                 } else {
-                    list.push_str(&Self::OMIT);
+                    list.push_str(Self::OMIT);
                 }
                 break;
             }
             if idx != 0 {
                 list.push_str(Self::SEP);
             }
-            list.push_str(&name);
+            list.push_str(name);
         }
         list
     }
@@ -436,7 +436,7 @@ where
 /// Returns `true` if all tasks are ok.
 pub fn is_ok<R>(results: &Vec<Result<R>>) -> bool {
     for result in results {
-        if let Err(_) = result {
+        if result.is_err() {
             return false;
         }
     }
@@ -474,8 +474,8 @@ mod batch_tests {
             .map(|result| result.unwrap())
             .collect();
         assert_eq!(results.len(), COUNT);
-        for i in 0..COUNT {
-            assert_eq!(i, results[i]);
+        for (i, result) in results.into_iter().enumerate() {
+            assert_eq!(i, result);
         }
     }
 }

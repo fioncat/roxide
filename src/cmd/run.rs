@@ -82,11 +82,8 @@ impl RunArgs {
             args: Completion::repo_args,
             flags: Some(|cfg, flag, to_complete| match flag {
                 'n' => {
-                    let mut names: Vec<String> = cfg
-                        .workflows
-                        .iter()
-                        .map(|(key, _)| key.to_string())
-                        .collect();
+                    let mut names: Vec<String> =
+                        cfg.workflows.keys().map(|key| key.to_string()).collect();
                     names.sort();
                     Ok(Some(CompletionResult::from(names)))
                 }

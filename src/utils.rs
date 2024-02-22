@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
 use anyhow::{bail, Context, Error, Result};
@@ -79,7 +79,7 @@ pub const MONTH: u64 = 30 * DAY;
 pub const YEAR: u64 = 365 * DAY;
 
 /// If the file directory doesn't exist, create it; if it exists, take no action.
-pub fn ensure_dir(path: &PathBuf) -> Result<()> {
+pub fn ensure_dir(path: &Path) -> Result<()> {
     if let Some(dir) = path.parent() {
         match fs::read_dir(dir) {
             Ok(_) => Ok(()),
@@ -340,8 +340,7 @@ where
     F: FnMut(&PathBuf, fs::Metadata) -> Result<bool>,
 {
     let mut stack = vec![root];
-    while !stack.is_empty() {
-        let dir = stack.pop().unwrap();
+    while let Some(dir) = stack.pop() {
         let dir_read = match fs::read_dir(&dir) {
             Ok(dir_read) => dir_read,
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
@@ -397,14 +396,14 @@ pub fn human_bytes<T: Into<u64>>(bytes: T) -> String {
 
 /// If the length of `vec` is less than or equal to 1, return `name` itself; if
 /// greater than 1, return the plural form of `name`.
-pub fn plural<T>(vec: &Vec<T>, name: &str) -> String {
+pub fn plural<T>(vec: &[T], name: &str) -> String {
     let plural = format!("{name}s");
     plural_full(vec, name, plural.as_str())
 }
 
 /// Similar to [`plural`] but allows manually specifying the plural word. Suitable
 /// for special plural scenarios.
-pub fn plural_full<T>(vec: &Vec<T>, name: &str, plural: &str) -> String {
+pub fn plural_full<T>(vec: &[T], name: &str, plural: &str) -> String {
     if vec.is_empty() {
         return format!("0 {}", name);
     }
@@ -427,7 +426,7 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
     fs::remove_dir_all(&path).context("remove directory")?;
 
     let dir = path.parent();
-    if let None = dir {
+    if dir.is_none() {
         return Ok(());
     }
     let mut dir = dir.unwrap();
@@ -453,15 +452,14 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
 
 /// Parse labels from string to set.
 pub fn parse_labels_str(str: impl AsRef<str>) -> HashSet<String> {
-    str.as_ref().split(",").map(|s| s.to_string()).collect()
+    str.as_ref().split(',').map(|s| s.to_string()).collect()
 }
 
 /// Parse labels flag to hashset, the format is: "[label0][,label1]...".
 pub fn parse_labels(labels: &Option<String>) -> Option<HashSet<String>> {
-    match labels {
-        Some(s) => Some(s.split(",").map(|s| s.to_string()).collect()),
-        None => None,
-    }
+    labels
+        .as_ref()
+        .map(|s| s.split(',').map(|s| s.to_string()).collect())
 }
 
 /// Get home dir, that is env $HOME. Not supported on Windows.

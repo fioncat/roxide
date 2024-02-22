@@ -69,10 +69,6 @@ impl PartialEq for Repo<'_> {
         }
         true
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 
 impl Repo<'_> {
@@ -87,15 +83,12 @@ impl Repo<'_> {
         let remote_cfg = cfg.must_get_remote(remote.as_ref())?;
         let owner_cfg = cfg.get_owner(remote.as_ref(), owner.as_ref());
 
-        let mut labels: Option<HashSet<Cow<'a, str>>> = match remote_cfg.labels.as_ref() {
-            Some(labels) => Some(
-                labels
-                    .iter()
-                    .map(|label| Cow::Owned(label.to_string()))
-                    .collect(),
-            ),
-            None => None,
-        };
+        let mut labels: Option<HashSet<Cow<'a, str>>> = remote_cfg.labels.as_ref().map(|labels| {
+            labels
+                .iter()
+                .map(|label| Cow::Owned(label.to_string()))
+                .collect()
+        });
         if let Some(owner_cfg) = owner_cfg.as_ref() {
             if let Some(owner_labels) = owner_cfg.labels.as_ref() {
                 let owner_labels = owner_labels
@@ -118,7 +111,7 @@ impl Repo<'_> {
             labels,
             owner_cfg,
             remote_cfg,
-            path: path.map(|path| Cow::Owned(path)),
+            path: path.map(Cow::Owned),
         })
     }
 
@@ -302,14 +295,10 @@ impl Repo<'_> {
     }
 
     pub fn append_labels(&mut self, labels: Option<HashSet<String>>) {
-        if let None = labels {
+        if labels.is_none() {
             return;
         }
-        let append_labels: HashSet<_> = labels
-            .unwrap()
-            .into_iter()
-            .map(|label| Cow::Owned(label))
-            .collect();
+        let append_labels: HashSet<_> = labels.unwrap().into_iter().map(Cow::Owned).collect();
         if let Some(labels) = self.labels.as_mut() {
             labels.extend(append_labels);
         } else {

@@ -23,10 +23,9 @@ impl Run for ConfigArgs {
 
 impl ConfigArgs {
     fn get_path(&self) -> Result<PathBuf> {
-        match Config::get_path()? {
-            Some(path) => return Ok(path),
-            None => {}
-        };
+        if let Some(path) = Config::get_path()? {
+            return Ok(path);
+        }
 
         let path = match env::var_os("ROXIDE_CONFIG") {
             Some(path) => PathBuf::from(path),

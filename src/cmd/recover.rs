@@ -31,11 +31,14 @@ impl Run for RecoverArgs {
         let to_add: Vec<Repo> = workspace_repos
             .into_iter()
             .filter(|repo| {
-                if let Some(_) = db.get(
-                    repo.remote.as_ref(),
-                    repo.owner.as_ref(),
-                    repo.name.as_ref(),
-                ) {
+                if db
+                    .get(
+                        repo.remote.as_ref(),
+                        repo.owner.as_ref(),
+                        repo.name.as_ref(),
+                    )
+                    .is_some()
+                {
                     return false;
                 }
                 true

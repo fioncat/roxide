@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -127,10 +128,7 @@ impl StepContext<'_> {
         match self.op {
             StepOperation::Run(run) => Ok(StepResult::Cmd(Cmd::sh(run, self.display))),
             StepOperation::Ssh(ssh, run) => {
-                let mut args = Vec::new();
-                args.push("ssh");
-                args.push(ssh);
-                args.push(run);
+                let args = ["ssh", ssh, run];
                 Ok(StepResult::Cmd(Cmd::sh(args.join(" "), self.display)))
             }
             StepOperation::DockerRun(image, run) => {
@@ -169,7 +167,7 @@ impl StepContext<'_> {
         Ok(result.trim() == "true")
     }
 
-    fn parse_condition(&self, condition: &Vec<WorkflowCondition>) -> String {
+    fn parse_condition(&self, condition: &[WorkflowCondition]) -> String {
         let mut conds: Vec<String> = Vec::with_capacity(condition.len());
         for cond in condition.iter() {
             let cond = if let Some(env) = cond.env.as_ref() {
@@ -252,7 +250,7 @@ impl StepContext<'_> {
         Cmd::with_args(&self.docker.name, &cmd_args)
     }
 
-    fn setup_cmd<'a>(&self, cmd: Cmd) -> Cmd {
+    fn setup_cmd(&self, cmd: Cmd) -> Cmd {
         let mut cmd = if self.display {
             cmd.with_display_cmd()
         } else {
@@ -270,18 +268,16 @@ impl StepContext<'_> {
 
     fn expandenv<'a>(&self, s: &'a str) -> Result<Cow<'a, str>> {
         use std::prelude::v1::Result as StdResult;
-        let value: Cow<str> = match shellexpand::env_with_context(
-            s,
-            |key| -> StdResult<Option<Cow<str>>, &'static str> {
-                if let Some(value) = self.env_mut.get(key) {
-                    return Ok(Some(Cow::Borrowed(value)));
-                }
-                if let Some(value) = self.env_readonly.get(key) {
-                    return Ok(Some(Cow::Borrowed(value)));
-                }
-                Err("env not found")
-            },
-        ) {
+        let match_env = |key: &_| -> StdResult<Option<Cow<str>>, &'static str> {
+            if let Some(value) = self.env_mut.get(key) {
+                return Ok(Some(Cow::Borrowed(value)));
+            }
+            if let Some(value) = self.env_readonly.get(key) {
+                return Ok(Some(Cow::Borrowed(value)));
+            }
+            Err("env not found")
+        };
+        let value: Cow<str> = match shellexpand::env_with_context(s, match_env) {
             Ok(value) => value,
             Err(err) => bail!("expand env for '{s}': {err}"),
         };
@@ -410,17 +406,15 @@ impl<C: AsRef<WorkflowConfig>> Workflow<C> {
             }
         })();
 
-        if let Err(_) = result {
-            if ctx.cfg.allow_failure {
-                return Ok(Cow::Borrowed("Ignore step failure"));
-            }
+        if result.is_err() && ctx.cfg.allow_failure {
+            return Ok(Cow::Borrowed("Ignore step failure"));
         }
 
         result
     }
 }
 
-fn build_env(repo: &Repo, env_cfg: &Vec<WorkflowEnv>, path: &PathBuf) -> HashMap<String, String> {
+fn build_env(repo: &Repo, env_cfg: &[WorkflowEnv], path: &Path) -> HashMap<String, String> {
     let mut map = HashMap::with_capacity(env_cfg.len());
     for env in env_cfg.iter() {
         let key = env.name.clone();
@@ -430,12 +424,10 @@ fn build_env(repo: &Repo, env_cfg: &Vec<WorkflowEnv>, path: &PathBuf) -> HashMap
                 WorkflowFromRepo::Name => repo.name.to_string(),
                 WorkflowFromRepo::Owner => repo.owner.to_string(),
                 WorkflowFromRepo::Remote => repo.remote.to_string(),
-                WorkflowFromRepo::Clone => {
-                    match repo.remote_cfg.clone.as_ref().map(|u| u.clone()) {
-                        Some(clone) => clone.clone(),
-                        None => String::new(),
-                    }
-                }
+                WorkflowFromRepo::Clone => match repo.remote_cfg.clone.as_ref().cloned() {
+                    Some(clone) => clone.clone(),
+                    None => String::new(),
+                },
                 WorkflowFromRepo::Path => format!("{}", path.display()),
             };
             let from_repo = if from_repo.is_empty() {
@@ -448,7 +440,7 @@ fn build_env(repo: &Repo, env_cfg: &Vec<WorkflowEnv>, path: &PathBuf) -> HashMap
             };
             value = Some(from_repo);
         }
-        let value = value.unwrap_or_else(|| String::new());
+        let value = value.unwrap_or(String::new());
         map.insert(key, value);
     }
     map
