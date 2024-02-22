@@ -100,7 +100,7 @@ impl Cache {
     fn get_repo_path(&self, owner: &str, name: &str) -> PathBuf {
         let owner = owner.replace('/', ".");
         let name = name.replace('/', ".");
-        self.dir.join(format!("repn.{owner}.{name}"))
+        self.dir.join(format!("repo.{owner}.{name}"))
     }
 
     fn search_repo_path(&self, query: &str) -> PathBuf {
