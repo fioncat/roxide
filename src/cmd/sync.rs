@@ -51,7 +51,7 @@ pub struct SyncArgs {
 
 impl Run for SyncArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        let ops: HashSet<String> = self.ops.split(",").map(|s| s.to_string()).collect();
+        let ops: HashSet<String> = self.ops.split(',').map(|s| s.to_string()).collect();
         if ops.is_empty() {
             bail!("invalid ops, could not be empty");
         }
@@ -169,7 +169,7 @@ impl SyncArgs {
     fn show_dry_run(results: Vec<Option<String>>) {
         let mut count: usize = 0;
         for result in results.iter() {
-            if let Some(_) = result {
+            if result.is_some() {
                 count += 1;
             }
         }
@@ -179,14 +179,7 @@ impl SyncArgs {
             return;
         }
 
-        let items: Vec<_> = results
-            .into_iter()
-            .filter(|s| match s {
-                Some(_) => true,
-                None => false,
-            })
-            .map(|s| s.unwrap())
-            .collect();
+        let items: Vec<_> = results.into_iter().flatten().collect();
         println!();
         println!("DryRun: {} to perform", utils::plural(&items, "repo"));
 
@@ -223,7 +216,7 @@ struct SyncTask {
 
 impl Task<()> for SyncTask {
     fn run(&self) -> Result<()> {
-        if let None = self.remote_cfg.clone {
+        if self.remote_cfg.clone.is_none() {
             return Ok(());
         }
 
@@ -330,7 +323,7 @@ impl Task<()> for SyncTask {
             }
         }
 
-        let target = head.as_ref().unwrap_or_else(|| &backup_branch);
+        let target = head.as_ref().unwrap_or(&backup_branch);
         git.checkout(target)?;
 
         Ok(())
@@ -354,7 +347,7 @@ impl Task<Option<String>> for SyncTask {
 
 impl SyncTask {
     fn dry_run(&self) -> Result<Option<String>> {
-        if let None = self.remote_cfg.clone.as_ref() {
+        if self.remote_cfg.clone.as_ref().is_none() {
             return Ok(None);
         }
 
@@ -379,7 +372,7 @@ impl SyncTask {
 
         let lines = git.lines(&["status", "-s"])?;
         if !lines.is_empty() {
-            if let Some(_) = self.message.as_ref() {
+            if self.message.as_ref().is_some() {
                 actions.push(String::from("commit change(s)"));
             } else {
                 return Ok(Some(String::from("skip due to uncommitted change(s)")));
@@ -391,7 +384,7 @@ impl SyncTask {
 
         let lines = git.lines(&["branch", "-vv"])?;
         for line in lines {
-            if line.starts_with("*") && head_detached {
+            if line.starts_with('*') && head_detached {
                 continue;
             }
             let branch = GitBranch::parse(&self.branch_re, line.as_str())?;

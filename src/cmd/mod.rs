@@ -217,7 +217,7 @@ impl Completion {
     pub fn repo_args(cfg: &Config, args: &[&str]) -> Result<CompletionResult> {
         match args.len() {
             0 | 1 => {
-                let to_complete = args.get(0).map(|s| *s).unwrap_or("");
+                let to_complete = args.first().copied().unwrap_or("");
                 let remotes = cfg.list_remotes();
                 Self::wrap_with_keywords(cfg, "", to_complete, remotes, false)
             }
@@ -227,7 +227,7 @@ impl Completion {
                 let remote = &args[0];
                 let query = &args[1];
 
-                if !query.contains("/") {
+                if !query.contains('/') {
                     let owners = db.list_owners(remote);
                     let items: Vec<_> = owners
                         .into_iter()
@@ -241,7 +241,7 @@ impl Completion {
                 let items: Vec<_> = repos
                     .into_iter()
                     .filter(|repo| repo.owner.as_ref() == owner.as_str())
-                    .map(|repo| format!("{}", repo.name_with_owner()))
+                    .map(|repo| repo.name_with_owner())
                     .collect();
                 Ok(CompletionResult::from(items))
             }
@@ -260,7 +260,7 @@ impl Completion {
         items: Vec<String>,
         no_space: bool,
     ) -> Result<CompletionResult> {
-        if to_complete == "" {
+        if to_complete.is_empty() {
             if no_space {
                 return Ok(CompletionResult::from(items).no_space());
             }
@@ -289,7 +289,7 @@ impl Completion {
         let keywords = Keywords::load(cfg)?;
         let mut keywords = keywords.complete(remote);
         let db = Database::load(cfg)?;
-        let names: Vec<_> = if remote != "" {
+        let names: Vec<_> = if !remote.is_empty() {
             db.list_by_remote(remote, &None)
         } else {
             db.list_all(&None)
@@ -331,7 +331,7 @@ impl Completion {
             }
             2 => {
                 let remote = &args[0];
-                let db = Database::load(&cfg)?;
+                let db = Database::load(cfg)?;
                 let owners = db.list_owners(remote);
                 let items: Vec<_> = owners
                     .into_iter()
@@ -395,13 +395,13 @@ impl Completion {
         }
 
         let mut items = Vec::with_capacity(candidates.len());
-        if to_complete.ends_with(",") {
+        if to_complete.ends_with(',') {
             for item in candidates {
                 let item = format!("{to_complete}{item}");
                 items.push(item);
             }
         } else {
-            let last_to_complete = to_complete.split(",").last();
+            let last_to_complete = to_complete.split(',').last();
             match last_to_complete {
                 Some(last) => {
                     for item in candidates {

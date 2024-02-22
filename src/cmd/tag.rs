@@ -61,14 +61,13 @@ impl Run for TagArgs {
 
         if self.delete {
             match self.tag.as_ref() {
-                Some(tag) => match GitTag::get(tag) {
-                    Ok(tag) => {
+                Some(tag) => {
+                    if let Ok(tag) = GitTag::get(tag) {
                         Cmd::git(&["tag", "-d", tag.as_str()])
                             .with_display_cmd()
                             .execute()?;
                     }
-                    Err(_) => {}
-                },
+                }
                 None => bail!("please provide tag to delete"),
             };
             if self.push {
@@ -102,7 +101,7 @@ impl Run for TagArgs {
 impl TagArgs {
     fn create_tag(&self, tag: GitTag) -> Result<()> {
         let tags = GitTag::list()?;
-        if let None = tags.iter().find(|t| t.as_str() == tag.as_str()) {
+        if !tags.iter().any(|t| t.as_str() == tag.as_str()) {
             Cmd::git(&["tag", tag.as_str()])
                 .with_display_cmd()
                 .execute()?;
@@ -127,8 +126,7 @@ impl TagArgs {
             },
             flags: Some(|cfg, flag, _to_complete| match flag {
                 'r' => {
-                    let mut rules: Vec<_> =
-                        cfg.release.iter().map(|(key, _)| key.to_string()).collect();
+                    let mut rules: Vec<_> = cfg.release.keys().map(|key| key.to_string()).collect();
                     rules.sort();
                     Ok(Some(CompletionResult::from(rules)))
                 }

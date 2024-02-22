@@ -34,16 +34,14 @@ impl Run for MergeArgs {
         info!("Get repo info from remote API");
         let mut api_repo = provider.get_repo(repo.owner.as_ref(), repo.name.as_ref())?;
         if self.upstream {
-            if let None = &api_repo.upstream {
+            if api_repo.upstream.is_none() {
                 bail!(
                     "the repo '{}' does not have an upstream",
                     repo.name_with_remote()
                 );
             }
-        } else {
-            if let Some(_) = &api_repo.upstream {
-                api_repo.upstream = None;
-            }
+        } else if api_repo.upstream.is_some() {
+            api_repo.upstream = None;
         }
 
         let target = match &self.target {
@@ -110,7 +108,7 @@ impl Run for MergeArgs {
         info!("Call remote API to create merge");
         let url = provider.create_merge(merge, title, body)?;
 
-        utils::open_url(&url)
+        utils::open_url(url)
     }
 }
 

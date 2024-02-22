@@ -62,10 +62,7 @@ impl Run for InfoArgs {
             let (remote, mut remote_info) = remotes
                 .remove_entry(repo.remote.as_ref())
                 .unwrap_or_else(|| {
-                    let clone = match repo.remote_cfg.clone.as_ref() {
-                        Some(_) => true,
-                        None => false,
-                    };
+                    let clone = repo.remote_cfg.clone.is_some();
                     (
                         repo.remote.to_string(),
                         RemoteInfo {
@@ -184,7 +181,7 @@ impl InfoArgs {
         let meta_size = utils::dir_size(PathBuf::from(&meta_dir))?;
 
         let db_path = cfg.get_meta_dir().join("database");
-        let db_meta = fs::metadata(&db_path)?;
+        let db_meta = fs::metadata(db_path)?;
         let db_size = utils::human_bytes(db_meta.len());
 
         Ok(ConfigInfo {

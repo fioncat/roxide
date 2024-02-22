@@ -39,7 +39,7 @@ pub struct SnapshotArgs {
 
 impl Run for SnapshotArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        if let None = self.name {
+        if self.name.is_none() {
             let names = Snapshot::list(cfg)?;
             for name in names {
                 println!("{name}");

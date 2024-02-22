@@ -61,10 +61,7 @@ struct RepoInfo<'a> {
 
 impl RepoInfo<'_> {
     fn from_repo<'a>(cfg: &Config, repo: Repo<'a>) -> Result<RepoInfo<'a>> {
-        let workspace = match repo.path {
-            Some(_) => false,
-            None => true,
-        };
+        let workspace = repo.path.is_none();
         let path = repo.get_path(cfg);
         let path = format!("{}", path.display());
         let size = utils::dir_size(repo.get_path(cfg))?;

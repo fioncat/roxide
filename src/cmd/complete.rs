@@ -56,11 +56,8 @@ impl CompleteArgs {
         let mut args_iter = ArgsIter::new(&self.args);
         // Skip the first command name.
         args_iter.next();
-        loop {
-            let arg = match args_iter.next() {
-                Some(arg) => arg.to_string(),
-                None => break,
-            };
+        while let Some(arg) = args_iter.next() {
+            let arg = arg.to_string();
 
             if arg.starts_with('-') {
                 if completion.flags.is_none() {

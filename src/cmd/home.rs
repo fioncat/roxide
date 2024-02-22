@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -54,9 +55,9 @@ impl Run for HomeArgs {
         let (mut repo, exists) = selector.one(&db)?;
 
         if self.open {
-            let provider = api::build_provider(&cfg, &repo.remote_cfg, self.force)?;
+            let provider = api::build_provider(cfg, &repo.remote_cfg, self.force)?;
             let api_repo = provider.get_repo(&repo.owner, &repo.name)?;
-            return utils::open_url(&api_repo.web_url);
+            return utils::open_url(api_repo.web_url);
         }
 
         if !exists {
@@ -67,7 +68,7 @@ impl Run for HomeArgs {
         match fs::read_dir(&path) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                self.create_dir(&cfg, &repo, &path)?;
+                self.create_dir(cfg, &repo, &path)?;
             }
             Err(err) => {
                 return Err(err).with_context(|| format!("read repo directory {}", path.display()));
@@ -86,7 +87,7 @@ impl Run for HomeArgs {
 
 impl HomeArgs {
     fn create_dir(&self, cfg: &Config, repo: &Repo, path: &PathBuf) -> Result<()> {
-        if let Some(_) = repo.remote_cfg.clone {
+        if repo.remote_cfg.clone.is_some() {
             return self.clone(repo, path);
         }
 
@@ -108,7 +109,7 @@ impl HomeArgs {
         Ok(())
     }
 
-    fn clone(&self, repo: &Repo, path: &PathBuf) -> Result<()> {
+    fn clone(&self, repo: &Repo, path: &Path) -> Result<()> {
         let url = repo.clone_url();
         let path = format!("{}", path.display());
         Cmd::git(&["clone", url.as_str(), path.as_str()])
