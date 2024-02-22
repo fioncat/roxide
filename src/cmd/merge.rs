@@ -78,7 +78,7 @@ impl Run for MergeArgs {
         }
 
         let git_remote = if self.upstream {
-            GitRemote::from_upstream(cfg, &repo, &provider)?
+            GitRemote::from_upstream(cfg, &repo, provider.as_ref())?
         } else {
             GitRemote::new()
         };

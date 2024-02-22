@@ -1104,11 +1104,7 @@ impl GitRemote {
         GitRemote(String::from("origin"))
     }
 
-    pub fn from_upstream(
-        cfg: &Config,
-        repo: &Repo,
-        provider: &Box<dyn Provider>,
-    ) -> Result<GitRemote> {
+    pub fn from_upstream(cfg: &Config, repo: &Repo, provider: &dyn Provider) -> Result<GitRemote> {
         let remotes = Self::list()?;
         let upstream_remote = remotes
             .into_iter()

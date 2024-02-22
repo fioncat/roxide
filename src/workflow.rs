@@ -268,18 +268,16 @@ impl StepContext<'_> {
 
     fn expandenv<'a>(&self, s: &'a str) -> Result<Cow<'a, str>> {
         use std::prelude::v1::Result as StdResult;
-        let value: Cow<str> = match shellexpand::env_with_context(
-            s,
-            |key| -> StdResult<Option<Cow<str>>, &'static str> {
-                if let Some(value) = self.env_mut.get(key) {
-                    return Ok(Some(Cow::Borrowed(value)));
-                }
-                if let Some(value) = self.env_readonly.get(key) {
-                    return Ok(Some(Cow::Borrowed(value)));
-                }
-                Err("env not found")
-            },
-        ) {
+        let match_env = |key: &_| -> StdResult<Option<Cow<str>>, &'static str> {
+            if let Some(value) = self.env_mut.get(key) {
+                return Ok(Some(Cow::Borrowed(value)));
+            }
+            if let Some(value) = self.env_readonly.get(key) {
+                return Ok(Some(Cow::Borrowed(value)));
+            }
+            Err("env not found")
+        };
+        let value: Cow<str> = match shellexpand::env_with_context(s, match_env) {
             Ok(value) => value,
             Err(err) => bail!("expand env for '{s}': {err}"),
         };

@@ -3,6 +3,7 @@ mod cache;
 pub mod github;
 mod gitlab;
 
+use std::fmt::Display;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
@@ -43,10 +44,9 @@ pub struct ApiUpstream {
     pub default_branch: String,
 }
 
-impl ApiUpstream {
-    /// Convert fork source to string, the format is '{owner}/{name}'.
-    pub fn to_string(&self) -> String {
-        format!("{}/{}", self.owner, self.name)
+impl Display for ApiUpstream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
@@ -69,6 +69,12 @@ pub struct MergeOptions {
     pub target: String,
 }
 
+impl Display for MergeOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
+    }
+}
+
 impl MergeOptions {
     /// Display merge options with terminal color.
     pub fn pretty_display(&self) -> String {
@@ -86,11 +92,6 @@ impl MergeOptions {
                 style(&self.target).magenta()
             ),
         }
-    }
-
-    /// Convert merge options to string, the format is '{owner}/{name}'.
-    pub fn to_string(&self) -> String {
-        format!("{}/{}", self.owner, self.name)
     }
 }
 

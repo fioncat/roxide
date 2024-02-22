@@ -207,10 +207,12 @@ impl CompletionResult {
     }
 }
 
+type FlagCompletion = fn(&Config, &char, &str) -> Result<Option<CompletionResult>>;
+
 pub struct Completion {
     pub args: fn(&Config, &[&str]) -> Result<CompletionResult>,
 
-    pub flags: Option<fn(&Config, &char, &str) -> Result<Option<CompletionResult>>>,
+    pub flags: Option<FlagCompletion>,
 }
 
 impl Completion {
@@ -441,7 +443,7 @@ pub fn get_git_remote(cfg: &Config, upstream: bool, force: bool) -> Result<GitRe
         let repo = db.must_get_current()?;
         let provider = api::build_provider(cfg, &repo.remote_cfg, force)?;
 
-        GitRemote::from_upstream(cfg, &repo, &provider)
+        GitRemote::from_upstream(cfg, &repo, provider.as_ref())
     } else {
         Ok(GitRemote::new())
     }

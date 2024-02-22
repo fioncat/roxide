@@ -15,9 +15,11 @@ use crate::{term, utils};
 #[derive(Args)]
 pub struct CheckArgs {}
 
+type CheckItem = (&'static str, fn(&Config) -> Result<()>);
+
 impl Run for CheckArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        let checks: Vec<(&str, fn(&Config) -> Result<()>)> = vec![
+        let checks: Vec<CheckItem> = vec![
             ("git", Self::check_git),
             ("fzf", Self::check_fzf),
             ("shell", Self::check_shell),
