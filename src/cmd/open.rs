@@ -18,7 +18,7 @@ pub struct OpenArgs {
     #[clap(short)]
     pub branch: bool,
 
-    /// Open workflow action run (pipline in gitlab) for currect commit or branch.
+    /// Open workflow action run (pipeline in gitlab) for current commit or branch.
     #[clap(short)]
     pub action: bool,
 
