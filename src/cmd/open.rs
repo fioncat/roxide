@@ -71,7 +71,8 @@ impl OpenArgs {
 
         let url = provider.get_action(opts)?;
         if url.is_none() {
-            bail!("cannot find action (pipeline) for current commit or branch");
+            let desc = if self.branch { "branch" } else { "commit" };
+            bail!("cannot find action run for current {desc}");
         }
 
         utils::open_url(url.unwrap())
