@@ -95,6 +95,23 @@ impl MergeOptions {
     }
 }
 
+/// Represents the information needed to create or retrieve an Github Action
+/// (Pipeline in GitHub).
+pub struct ActionOptions {
+    /// The repository owner.
+    pub owner: String,
+    /// The repository name.
+    pub name: String,
+
+    /// Use to get the target action.
+    pub target: ActionTarget,
+}
+
+pub enum ActionTarget {
+    Commit(String),
+    Branch(String),
+}
+
 /// A `Provider` is an API abstraction for a remote, providing functions for
 /// interacting with remote repository storage.
 ///
@@ -119,6 +136,9 @@ pub trait Provider {
 
     /// Search repositories using the specified `query`.
     fn search_repos(&self, query: &str) -> Result<Vec<String>>;
+
+    /// Get the action (Pipeline in Gitlab) url for a commit.
+    fn get_action(&self, action: ActionOptions) -> Result<Option<String>>;
 }
 
 /// Build common http client.
@@ -264,6 +284,10 @@ pub mod api_tests {
 
         fn search_repos(&self, _query: &str) -> Result<Vec<String>> {
             Ok(Vec::new())
+        }
+
+        fn get_action(&self, _action: ActionOptions) -> Result<Option<String>> {
+            Ok(None)
         }
     }
 }

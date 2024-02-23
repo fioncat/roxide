@@ -6,7 +6,7 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiRepo, ApiUpstream, MergeOptions, Provider};
+use crate::api::{ActionOptions, ActionTarget, ApiRepo, ApiUpstream, MergeOptions, Provider};
 use crate::config::RemoteConfig;
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +45,16 @@ struct Error {
 #[derive(Debug, Deserialize)]
 struct Release {
     pub tag_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ListActionResult {
+    pub workflow_runs: Vec<WorkflowRun>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowRun {
+    pub html_url: String,
 }
 
 impl Repo {
@@ -186,6 +196,23 @@ impl Provider for Github {
             .collect();
 
         Ok(repos)
+    }
+
+    fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
+        let target = match &action.target {
+            ActionTarget::Commit(commit) => format!("head_sha={commit}"),
+            ActionTarget::Branch(branch) => format!("branch={branch}"),
+        };
+        let path = format!(
+            "repos/{}/{}/actions/runs?{target}",
+            action.owner, action.name
+        );
+        let mut result = self.execute_get::<ListActionResult>(&path)?;
+        if result.workflow_runs.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(result.workflow_runs.remove(0).html_url))
     }
 }
 

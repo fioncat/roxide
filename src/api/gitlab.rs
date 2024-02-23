@@ -4,7 +4,7 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::api::{ActionOptions, ActionTarget, ApiRepo, MergeOptions, Provider};
 use crate::config::{defaults, RemoteConfig};
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +40,11 @@ struct CreateMergeRequest {
     target_branch: String,
     title: String,
     description: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Pipeline {
+    web_url: String,
 }
 
 pub struct Gitlab {
@@ -116,6 +121,22 @@ impl Provider for Gitlab {
             .map(|repo| repo.path_with_namespace)
             .collect();
         Ok(repos)
+    }
+
+    fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
+        let sha = match &action.target {
+            ActionTarget::Commit(sha) => sha,
+            _ => bail!("sorry, gitlab api now does not support get pipeline by branch"),
+        };
+        let id = format!("{}/{}", action.owner, action.name);
+        let id_encode = urlencoding::encode(&id);
+        let path = format!("projects/{id_encode}/pipelines?sha={sha}");
+        let mut pipelines = self.execute_get::<Vec<Pipeline>>(&path)?;
+        if pipelines.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(pipelines.remove(0).web_url))
     }
 }
 

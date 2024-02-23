@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::api::{ActionOptions, ApiRepo, MergeOptions, Provider};
 
 pub struct Alias {
     upstream: Box<dyn Provider>,
@@ -57,6 +57,10 @@ impl Provider for Alias {
 
     fn search_repos(&self, query: &str) -> Result<Vec<String>> {
         self.upstream.search_repos(query)
+    }
+
+    fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
+        self.upstream.get_action(action)
     }
 }
 
