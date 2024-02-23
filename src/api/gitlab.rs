@@ -124,13 +124,13 @@ impl Provider for Gitlab {
     }
 
     fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
-        let sha = match &action.target {
-            ActionTarget::Commit(sha) => sha,
-            _ => bail!("sorry, gitlab api now does not support get pipeline by branch"),
+        let target = match &action.target {
+            ActionTarget::Commit(sha) => format!("sha={sha}"),
+            ActionTarget::Branch(branch) => format!("ref={branch}"),
         };
         let id = format!("{}/{}", action.owner, action.name);
         let id_encode = urlencoding::encode(&id);
-        let path = format!("projects/{id_encode}/pipelines?sha={sha}");
+        let path = format!("projects/{id_encode}/pipelines?{target}");
         let mut pipelines = self.execute_get::<Vec<Pipeline>>(&path)?;
         if pipelines.is_empty() {
             return Ok(None);
