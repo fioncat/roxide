@@ -6,7 +6,13 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ActionOptions, ActionTarget, ApiRepo, ApiUpstream, MergeOptions, Provider};
+use crate::api::Action;
+use crate::api::ActionOptions;
+use crate::api::ActionTarget;
+use crate::api::ApiRepo;
+use crate::api::ApiUpstream;
+use crate::api::MergeOptions;
+use crate::api::Provider;
 use crate::config::RemoteConfig;
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +60,7 @@ struct ListActionResult {
 
 #[derive(Debug, Deserialize)]
 struct WorkflowRun {
+    pub name: String,
     pub html_url: String,
 }
 
@@ -198,7 +205,7 @@ impl Provider for Github {
         Ok(repos)
     }
 
-    fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
+    fn get_action(&self, action: ActionOptions) -> Result<Vec<Action>> {
         let target = match &action.target {
             ActionTarget::Commit(commit) => format!("head_sha={commit}"),
             ActionTarget::Branch(branch) => format!("branch={branch}"),
@@ -207,12 +214,15 @@ impl Provider for Github {
             "repos/{}/{}/actions/runs?{target}",
             action.owner, action.name
         );
-        let mut result = self.execute_get::<ListActionResult>(&path)?;
-        if result.workflow_runs.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(result.workflow_runs.remove(0).html_url))
+        let result = self.execute_get::<ListActionResult>(&path)?;
+        Ok(result
+            .workflow_runs
+            .into_iter()
+            .map(|run| Action {
+                name: run.name,
+                url: run.html_url,
+            })
+            .collect())
     }
 }
 

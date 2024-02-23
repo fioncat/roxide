@@ -8,8 +8,8 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::Database;
 use crate::repo::Repo;
-use crate::term::{Cmd, GitBranch};
-use crate::{api, utils};
+use crate::term::{self, Cmd, GitBranch};
+use crate::{api, info, utils};
 
 /// Open current repository in default browser
 #[derive(Args)]
@@ -69,12 +69,20 @@ impl OpenArgs {
             target,
         };
 
-        let url = provider.get_action(opts)?;
-        if url.is_none() {
+        let actions = provider.get_action(opts)?;
+        if actions.is_empty() {
             let desc = if self.branch { "branch" } else { "commit" };
             bail!("cannot find action run for current {desc}");
         }
+        if actions.len() == 1 {
+            return utils::open_url(actions.first().unwrap().url.as_str());
+        }
 
-        utils::open_url(url.unwrap())
+        info!("Please select action to open");
+        let names: Vec<_> = actions.iter().map(|action| action.name.as_str()).collect();
+        let idx = term::fzf_search(&names)?;
+        let url = actions[idx].url.as_str();
+
+        utils::open_url(url)
     }
 }

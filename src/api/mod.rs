@@ -112,6 +112,15 @@ pub enum ActionTarget {
     Branch(String),
 }
 
+/// The action run returns by api.
+pub struct Action {
+    /// The action name.
+    pub name: String,
+
+    /// The action url.
+    pub url: String,
+}
+
 /// A `Provider` is an API abstraction for a remote, providing functions for
 /// interacting with remote repository storage.
 ///
@@ -138,7 +147,7 @@ pub trait Provider {
     fn search_repos(&self, query: &str) -> Result<Vec<String>>;
 
     /// Get the action (Pipeline in Gitlab) url for a commit.
-    fn get_action(&self, action: ActionOptions) -> Result<Option<String>>;
+    fn get_action(&self, action: ActionOptions) -> Result<Vec<Action>>;
 }
 
 /// Build common http client.
@@ -286,8 +295,8 @@ pub mod api_tests {
             Ok(Vec::new())
         }
 
-        fn get_action(&self, _action: ActionOptions) -> Result<Option<String>> {
-            Ok(None)
+        fn get_action(&self, _action: ActionOptions) -> Result<Vec<Action>> {
+            Ok(Vec::new())
         }
     }
 }

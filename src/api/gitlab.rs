@@ -4,7 +4,12 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ActionOptions, ActionTarget, ApiRepo, MergeOptions, Provider};
+use crate::api::Action;
+use crate::api::ActionOptions;
+use crate::api::ActionTarget;
+use crate::api::ApiRepo;
+use crate::api::MergeOptions;
+use crate::api::Provider;
 use crate::config::{defaults, RemoteConfig};
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +49,7 @@ struct CreateMergeRequest {
 
 #[derive(Debug, Deserialize)]
 struct Pipeline {
+    name: Option<String>,
     web_url: String,
 }
 
@@ -123,7 +129,7 @@ impl Provider for Gitlab {
         Ok(repos)
     }
 
-    fn get_action(&self, action: ActionOptions) -> Result<Option<String>> {
+    fn get_action(&self, action: ActionOptions) -> Result<Vec<Action>> {
         let target = match &action.target {
             ActionTarget::Commit(sha) => format!("sha={sha}"),
             ActionTarget::Branch(branch) => format!("ref={branch}"),
@@ -133,10 +139,13 @@ impl Provider for Gitlab {
         let path = format!("projects/{id_encode}/pipelines?{target}");
         let mut pipelines = self.execute_get::<Vec<Pipeline>>(&path)?;
         if pipelines.is_empty() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
-
-        Ok(Some(pipelines.remove(0).web_url))
+        let pipline = pipelines.remove(0);
+        Ok(vec![Action {
+            name: pipline.name.unwrap_or_default(),
+            url: pipline.web_url,
+        }])
     }
 }
 
