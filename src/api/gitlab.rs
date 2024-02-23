@@ -141,10 +141,10 @@ impl Provider for Gitlab {
         if pipelines.is_empty() {
             return Ok(Vec::new());
         }
-        let pipline = pipelines.remove(0);
+        let pipeline = pipelines.remove(0);
         Ok(vec![Action {
-            name: pipline.name.unwrap_or_default(),
-            url: pipline.web_url,
+            name: pipeline.name.unwrap_or_default(),
+            url: pipeline.web_url,
         }])
     }
 }
