@@ -57,7 +57,7 @@ impl Run for MergeArgs {
             },
         };
 
-        let source = GitBranch::current()?;
+        let source = GitBranch::current(false)?;
 
         if !self.upstream && target == source {
             bail!("could not merge myself");

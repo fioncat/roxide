@@ -8,7 +8,7 @@ use bincode::Options;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::api::*;
 use crate::config::{Config, RemoteConfig};
 use crate::utils::{self, FileLock};
 
@@ -69,6 +69,10 @@ impl Provider for Cache {
         let repos = self.upstream.search_repos(query)?;
         self.write(&repos, &path)?;
         Ok(repos)
+    }
+
+    fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>> {
+        self.upstream.get_action(opts)
     }
 }
 

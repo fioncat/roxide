@@ -1,3 +1,4 @@
+mod action;
 mod attach;
 mod branch;
 mod check;
@@ -50,6 +51,7 @@ pub struct App {
 #[derive(Subcommand, VariantNames)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Commands {
+    Action(action::ActionArgs),
     Attach(attach::AttachArgs),
     Branch(branch::BranchArgs),
     Check(check::CheckArgs),
@@ -110,6 +112,7 @@ impl Commands {
 impl Run for App {
     fn run(&self, cfg: &Config) -> Result<()> {
         match &self.command {
+            Commands::Action(args) => args.run(cfg),
             Commands::Attach(args) => args.run(cfg),
             Commands::Branch(args) => args.run(cfg),
             Commands::Check(args) => args.run(cfg),

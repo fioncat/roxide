@@ -6,7 +6,7 @@ use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiRepo, ApiUpstream, MergeOptions, Provider};
+use crate::api::*;
 use crate::config::RemoteConfig;
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +127,110 @@ struct PullRequest {
     html_url: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ListWorkflowRunResult {
+    workflow_runs: Vec<WorkflowRun>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowRun {
+    id: u64,
+    name: String,
+    html_url: String,
+
+    head_commit: Option<WorkflowCommit>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowCommit {
+    id: String,
+    message: String,
+    author: WorkflowCommitAuthor,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowCommitAuthor {
+    name: String,
+    email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ListJobResult {
+    jobs: Vec<Job>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Job {
+    id: u64,
+    name: String,
+
+    status: JobStatus,
+    conclusion: Option<JobConclusion>,
+
+    html_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+enum JobStatus {
+    #[serde(rename = "queued")]
+    Queued,
+
+    #[serde(rename = "in_progress")]
+    InProgress,
+
+    #[serde(rename = "completed")]
+    Completed,
+
+    #[serde(rename = "waiting")]
+    Waiting,
+}
+
+#[derive(Debug, Deserialize)]
+enum JobConclusion {
+    #[serde(rename = "success")]
+    Success,
+
+    #[serde(rename = "failure")]
+    Failure,
+
+    #[serde(rename = "neutral")]
+    Neutral,
+
+    #[serde(rename = "cancelled")]
+    Cancelled,
+
+    #[serde(rename = "skipped")]
+    Skipped,
+
+    #[serde(rename = "timed_out")]
+    TimedOut,
+
+    #[serde(rename = "action_required")]
+    ActionRequired,
+}
+
+impl Job {
+    fn convert_status(&self) -> ActionJobStatus {
+        match &self.status {
+            JobStatus::Queued | JobStatus::Waiting => return ActionJobStatus::Pending,
+            JobStatus::InProgress => return ActionJobStatus::Running,
+            JobStatus::Completed => {}
+        }
+
+        if self.conclusion.is_none() {
+            return ActionJobStatus::Failed;
+        }
+
+        match self.conclusion.as_ref().unwrap() {
+            JobConclusion::Success => ActionJobStatus::Success,
+            JobConclusion::Skipped => ActionJobStatus::Skipped,
+            JobConclusion::ActionRequired => ActionJobStatus::WaitingForConfirm,
+            JobConclusion::Cancelled => ActionJobStatus::Canceled,
+            _ => ActionJobStatus::Failed,
+        }
+    }
+}
+
 pub struct Github {
     token: Option<String>,
 
@@ -186,6 +290,84 @@ impl Provider for Github {
             .collect();
 
         Ok(repos)
+    }
+
+    fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>> {
+        let target = match &opts.target {
+            ActionTarget::Commit(commit) => format!("head_sha={commit}"),
+            ActionTarget::Branch(branch) => format!("branch={branch}"),
+        };
+        let path = format!(
+            "repos/{}/{}/actions/runs?{target}&per_page=100",
+            opts.owner, opts.name
+        );
+
+        let result = self.execute_get::<ListWorkflowRunResult>(&path)?;
+        if result.workflow_runs.is_empty() {
+            return Ok(None);
+        }
+
+        let mut commit: Option<ActionCommit> = None;
+
+        let mut runs: Vec<ActionRun> = Vec::with_capacity(result.workflow_runs.len());
+
+        for mut workflow_run in result.workflow_runs {
+            if workflow_run.head_commit.is_none() {
+                continue;
+            }
+
+            let head_commit = workflow_run.head_commit.take().unwrap();
+            match commit.as_ref() {
+                Some(commit) if commit.id != head_commit.id.as_str() => continue,
+                None => {
+                    commit = Some(ActionCommit {
+                        id: head_commit.id,
+                        message: head_commit.message,
+                        author_name: head_commit.author.name,
+                        author_email: head_commit.author.email,
+                    });
+                }
+                _ => {}
+            }
+
+            let path = format!(
+                "repos/{}/{}/actions/runs/{}/jobs",
+                opts.owner, opts.name, workflow_run.id
+            );
+            let result = self
+                .execute_get::<ListJobResult>(&path)
+                .with_context(|| format!("list jobs for workflow run {}", workflow_run.id))?;
+            if result.jobs.is_empty() {
+                continue;
+            }
+
+            let mut jobs: Vec<ActionJob> = Vec::with_capacity(result.jobs.len());
+            for workflow_job in result.jobs {
+                let status = workflow_job.convert_status();
+                jobs.push(ActionJob {
+                    id: workflow_job.id,
+                    name: workflow_job.name,
+                    status,
+                    url: workflow_job.html_url,
+                });
+            }
+
+            runs.push(ActionRun {
+                name: workflow_run.name,
+                url: Some(workflow_run.html_url),
+                jobs,
+            });
+        }
+
+        if commit.is_none() {
+            bail!("commit info from github workflow runs is empty");
+        }
+
+        Ok(Some(Action {
+            url: None,
+            commit: commit.unwrap(),
+            runs,
+        }))
     }
 }
 

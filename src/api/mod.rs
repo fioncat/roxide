@@ -95,6 +95,102 @@ impl MergeOptions {
     }
 }
 
+#[derive(Debug)]
+pub struct ActionOptions {
+    pub owner: String,
+    pub name: String,
+
+    pub target: ActionTarget,
+}
+
+#[derive(Debug)]
+pub enum ActionTarget {
+    Commit(String),
+    Branch(String),
+}
+
+#[derive(Debug)]
+pub struct Action {
+    pub url: Option<String>,
+
+    pub commit: ActionCommit,
+
+    pub runs: Vec<ActionRun>,
+}
+
+#[derive(Debug)]
+pub struct ActionCommit {
+    pub id: String,
+    pub message: String,
+
+    pub author_name: String,
+    pub author_email: String,
+}
+
+#[derive(Debug)]
+pub struct ActionRun {
+    pub name: String,
+    pub url: Option<String>,
+
+    pub jobs: Vec<ActionJob>,
+}
+
+#[derive(Debug)]
+pub struct ActionJob {
+    pub id: u64,
+    pub name: String,
+
+    pub status: ActionJobStatus,
+
+    pub url: String,
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum ActionJobStatus {
+    Pending,
+    Running,
+
+    Success,
+    Failed,
+
+    Canceled,
+    Skipped,
+
+    WaitingForConfirm,
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let id = if self.commit.id.len() > 8 {
+            &self.commit.id[..8]
+        } else {
+            self.commit.id.as_str()
+        };
+        let message = self.commit.message.trim();
+        writeln!(f, "Commit [{id}] {}", style(message).yellow(),)?;
+
+        let author = format!("{} <{}>", self.commit.author_name, self.commit.author_email);
+        write!(f, "Author {}", style(author).blue())?;
+
+        Ok(())
+    }
+}
+
+impl Display for ActionJobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            Self::Pending => style("pending").yellow(),
+            Self::Running => style("running").cyan(),
+            Self::Success => style("success").green(),
+            Self::Failed => style("failed").red(),
+            Self::Canceled => style("canceled").yellow(),
+            Self::Skipped => style("skipped").yellow(),
+            Self::WaitingForConfirm => style("waiting_for_confirm").magenta(),
+        };
+        write!(f, "{msg}")
+    }
+}
+
 /// A `Provider` is an API abstraction for a remote, providing functions for
 /// interacting with remote repository storage.
 ///
@@ -119,6 +215,8 @@ pub trait Provider {
 
     /// Search repositories using the specified `query`.
     fn search_repos(&self, query: &str) -> Result<Vec<String>>;
+
+    fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>>;
 }
 
 /// Build common http client.
@@ -156,10 +254,7 @@ pub fn build_provider(
         );
     }
 
-    let mut provider = match remote_cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::build(remote_cfg),
-        ProviderType::Gitlab => Gitlab::build(remote_cfg),
-    };
+    let mut provider = build_raw_provider(remote_cfg);
 
     if remote_cfg.cache_hours > 0 {
         let cache = Cache::new(cfg, remote_cfg, provider, force)?;
@@ -172,6 +267,13 @@ pub fn build_provider(
     }
 
     Ok(provider)
+}
+
+pub fn build_raw_provider(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+    match remote_cfg.provider.as_ref().unwrap() {
+        ProviderType::Github => Github::build(remote_cfg),
+        ProviderType::Gitlab => Gitlab::build(remote_cfg),
+    }
 }
 
 #[cfg(test)]
@@ -264,6 +366,10 @@ pub mod api_tests {
 
         fn search_repos(&self, _query: &str) -> Result<Vec<String>> {
             Ok(Vec::new())
+        }
+
+        fn get_action(&self, _opts: &ActionOptions) -> Result<Option<Action>> {
+            Ok(None)
         }
     }
 }

@@ -1025,10 +1025,12 @@ impl GitBranch {
         bail!("no default branch returned by git remote show, please check your git command");
     }
 
-    pub fn current() -> Result<String> {
-        Cmd::git(&["branch", "--show-current"])
-            .with_display("Get current branch info")
-            .read()
+    pub fn current(mute: bool) -> Result<String> {
+        let mut cmd = Cmd::git(&["branch", "--show-current"]);
+        if !mute {
+            cmd = cmd.with_display("Get current branch info");
+        }
+        cmd.read()
     }
 
     pub fn parse(re: &Regex, line: impl AsRef<str>) -> Result<GitBranch> {
