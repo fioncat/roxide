@@ -257,10 +257,7 @@ pub fn build_provider(
         );
     }
 
-    let mut provider = match remote_cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::build(remote_cfg),
-        ProviderType::Gitlab => Gitlab::build(remote_cfg),
-    };
+    let mut provider = build_raw_provider(remote_cfg);
 
     if remote_cfg.cache_hours > 0 {
         let cache = Cache::new(cfg, remote_cfg, provider, force)?;
@@ -273,6 +270,13 @@ pub fn build_provider(
     }
 
     Ok(provider)
+}
+
+pub fn build_raw_provider(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
+    match remote_cfg.provider.as_ref().unwrap() {
+        ProviderType::Github => Github::build(remote_cfg),
+        ProviderType::Gitlab => Gitlab::build(remote_cfg),
+    }
 }
 
 #[cfg(test)]

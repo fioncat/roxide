@@ -38,7 +38,7 @@ impl Run for ActionArgs {
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;
 
-        let provider = api::build_provider(cfg, &repo.remote_cfg, true)?;
+        let provider = api::build_raw_provider(&repo.remote_cfg);
         let opts = self.get_opts(repo)?;
         drop(db);
 
