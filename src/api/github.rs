@@ -138,13 +138,7 @@ struct WorkflowRun {
     name: String,
     html_url: String,
 
-    triggering_actor: Option<WorkflowRunActor>,
     head_commit: Option<WorkflowCommit>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowRunActor {
-    login: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -314,7 +308,6 @@ impl Provider for Github {
         }
 
         let mut commit: Option<ActionCommit> = None;
-        let mut author: Option<String> = None;
 
         let mut runs: Vec<ActionRun> = Vec::with_capacity(result.workflow_runs.len());
 
@@ -322,13 +315,8 @@ impl Provider for Github {
             if workflow_run.head_commit.is_none() {
                 continue;
             }
-            if workflow_run.triggering_actor.is_none() {
-                continue;
-            }
 
             let head_commit = workflow_run.head_commit.take().unwrap();
-            let actor = workflow_run.triggering_actor.take().unwrap();
-
             match commit.as_ref() {
                 Some(commit) if commit.id != head_commit.id.as_str() => continue,
                 None => {
@@ -339,12 +327,6 @@ impl Provider for Github {
                         author_email: head_commit.author.email,
                     });
                 }
-                _ => {}
-            }
-
-            match author.as_ref() {
-                Some(author) if author != actor.login.as_str() => continue,
-                None => author = Some(actor.login),
                 _ => {}
             }
 
@@ -380,14 +362,10 @@ impl Provider for Github {
         if commit.is_none() {
             bail!("commit info from github workflow runs is empty");
         }
-        if author.is_none() {
-            bail!("author info from github workflow runs is empty");
-        }
 
         Ok(Some(Action {
             url: None,
             commit: commit.unwrap(),
-            author: author.unwrap(),
             runs,
         }))
     }

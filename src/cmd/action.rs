@@ -21,16 +21,24 @@ use crate::repo::Repo;
 use crate::term::{Cmd, GitBranch};
 use crate::{term, utils};
 
+/// The remote action (CICD) operations.
 #[derive(Args)]
 pub struct ActionArgs {
+    /// Use the branch to get action rather than commit.
     #[clap(short)]
     pub branch: bool,
 
+    /// Open the action (or job) in default browser.
     #[clap(short)]
     pub open: bool,
 
+    /// Open job rather than action (only affect `-o` option).
     #[clap(short)]
     pub job: bool,
+
+    /// Select failed job for opening or logging.
+    #[clap(short)]
+    pub fail: bool,
 }
 
 impl Run for ActionArgs {
@@ -169,7 +177,7 @@ impl ActionArgs {
     }
 
     fn open(&self, action: Action) -> Result<()> {
-        if self.job {
+        if self.job || self.fail {
             let job = self.select_job(action)?;
             return utils::open_url(job.url);
         }
@@ -190,6 +198,18 @@ impl ActionArgs {
     }
 
     fn select_job(&self, action: Action) -> Result<ActionJob> {
+        if self.fail {
+            for run in action.runs {
+                for job in run.jobs {
+                    if let ActionJobStatus::Failed = job.status {
+                        return Ok(job);
+                    }
+                }
+            }
+
+            bail!("no failed job for current action");
+        }
+
         let mut jobs: Vec<ActionJob> = Vec::with_capacity(action.runs.len());
         let mut items: Vec<String> = Vec::with_capacity(action.runs.len());
         for run in action.runs {

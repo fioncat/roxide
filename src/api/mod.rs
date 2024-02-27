@@ -116,8 +116,6 @@ pub struct Action {
     pub commit: ActionCommit,
 
     pub runs: Vec<ActionRun>,
-
-    pub author: String,
 }
 
 #[derive(Debug)]
@@ -169,11 +167,10 @@ impl Display for Action {
             self.commit.id.as_str()
         };
         let message = self.commit.message.trim();
-        writeln!(f, "Action Commit: [{id}] {}", style(message).yellow(),)?;
+        writeln!(f, "Commit [{id}] {}", style(message).yellow(),)?;
 
         let author = format!("{} <{}>", self.commit.author_name, self.commit.author_email);
-        writeln!(f, "Commit Author: {}", style(author).blue())?;
-        write!(f, "Action Author: {}", style(&self.author).blue())?;
+        write!(f, "Author {}", style(author).blue())?;
 
         Ok(())
     }

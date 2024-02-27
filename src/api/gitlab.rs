@@ -60,7 +60,6 @@ struct Job {
     web_url: String,
 
     commit: Option<JobCommit>,
-    user: Option<JobUser>,
 
     stage: Option<String>,
 }
@@ -112,15 +111,10 @@ impl Job {
 #[derive(Debug, Deserialize)]
 struct JobCommit {
     id: String,
-    message: String,
+    title: String,
 
     author_name: String,
     author_email: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct JobUser {
-    name: String,
 }
 
 pub struct Gitlab {
@@ -226,7 +220,6 @@ impl Provider for Gitlab {
         jobs.reverse();
 
         let mut commit: Option<ActionCommit> = None;
-        let mut author: Option<String> = None;
 
         let mut stages_index = HashMap::<String, usize>::with_capacity(jobs.len());
         let mut runs: Vec<ActionRun> = Vec::with_capacity(jobs.len());
@@ -235,29 +228,18 @@ impl Provider for Gitlab {
             if job.commit.is_none() {
                 continue;
             }
-            if job.user.is_none() {
-                continue;
-            }
 
             let job_commit = job.commit.take().unwrap();
-            let job_user = job.user.take().unwrap();
-
             match commit.as_ref() {
                 Some(commit) if commit.id != job_commit.id.as_str() => continue,
                 None => {
                     commit = Some(ActionCommit {
                         id: job_commit.id,
-                        message: job_commit.message,
+                        message: job_commit.title,
                         author_name: job_commit.author_name,
                         author_email: job_commit.author_email,
                     })
                 }
-                _ => {}
-            }
-
-            match author.as_ref() {
-                Some(author) if author != job_user.name.as_str() => continue,
-                None => author = Some(job_user.name),
                 _ => {}
             }
 
@@ -291,15 +273,11 @@ impl Provider for Gitlab {
         if commit.is_none() {
             bail!("commit info from gitlab jobs is empty");
         }
-        if author.is_none() {
-            bail!("author info from gitlab jobs is empty");
-        }
 
         Ok(Some(Action {
             url: Some(pipeline.web_url),
             commit: commit.unwrap(),
             runs,
-            author: author.unwrap(),
         }))
     }
 }
