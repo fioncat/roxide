@@ -187,8 +187,8 @@ enum JobStatus {
     #[serde(rename = "completed")]
     Completed,
 
-    #[serde(rename = "waitting")]
-    Waitting,
+    #[serde(rename = "waiting")]
+    Waiting,
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,7 +218,7 @@ enum JobConclusion {
 impl Job {
     fn convert_status(&self) -> ActionJobStatus {
         match &self.status {
-            JobStatus::Queued | JobStatus::Waitting => return ActionJobStatus::Pending,
+            JobStatus::Queued | JobStatus::Waiting => return ActionJobStatus::Pending,
             JobStatus::InProgress => return ActionJobStatus::Running,
             JobStatus::Completed => {}
         }
