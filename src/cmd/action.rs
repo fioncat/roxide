@@ -40,6 +40,7 @@ impl Run for ActionArgs {
 
         let provider = api::build_provider(cfg, &repo.remote_cfg, true)?;
         let opts = self.get_opts(repo)?;
+        drop(db);
 
         let action = provider.get_action(&opts)?;
         if self.open {
