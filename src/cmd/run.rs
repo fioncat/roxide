@@ -20,11 +20,11 @@ pub struct RunArgs {
     pub query: Option<String>,
 
     /// Use editor to filter items before running.
-    #[clap(short)]
+    #[clap(short, long)]
     pub edit: bool,
 
     /// Run workflow for current repository.
-    #[clap(short)]
+    #[clap(short, long)]
     pub current: bool,
 
     /// The workflow name to execute.
@@ -32,7 +32,7 @@ pub struct RunArgs {
     pub name: String,
 
     /// Use the labels to filter repository.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

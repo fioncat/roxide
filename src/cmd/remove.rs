@@ -17,28 +17,28 @@ pub struct RemoveArgs {
     pub query: Option<String>,
 
     /// Remove multiple.
-    #[clap(short)]
+    #[clap(short, long)]
     pub recursive: bool,
 
     /// Remove repositories whose last access interval is greater than or equal to
     /// this value.
-    #[clap(short)]
+    #[clap(short, long)]
     pub duration: Option<String>,
 
     /// Remove repositories whose access times are less than this value.
-    #[clap(short)]
+    #[clap(short, long)]
     pub access: Option<u64>,
 
     /// Use editor to filter items before removing.
-    #[clap(short)]
+    #[clap(short, long)]
     pub edit: bool,
 
     /// Force remove, ignore "pin" label.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Use the labels to filter repository.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

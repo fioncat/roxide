@@ -17,11 +17,11 @@ pub struct AttachArgs {
     pub query: Option<String>,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Append these labels to the database.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

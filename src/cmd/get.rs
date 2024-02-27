@@ -23,11 +23,11 @@ pub struct GetArgs {
 
     /// Show size in list info. If your workspace is large, this can cause
     /// command to take too long to execute.
-    #[clap(short)]
+    #[clap(short, long)]
     pub size: bool,
 
     /// Show current repo info.
-    #[clap(short)]
+    #[clap(short, long)]
     pub current: bool,
 
     /// Show result as json format.
@@ -35,7 +35,7 @@ pub struct GetArgs {
     pub json: bool,
 
     /// Use the labels to filter repo.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

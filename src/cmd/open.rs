@@ -13,11 +13,11 @@ use crate::{api, utils};
 #[derive(Args)]
 pub struct OpenArgs {
     /// Open current branch
-    #[clap(short)]
+    #[clap(short, long)]
     pub branch: bool,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 }
 

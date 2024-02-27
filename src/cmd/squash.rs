@@ -17,15 +17,15 @@ pub struct SquashArgs {
     pub target: Option<String>,
 
     /// Upstream mode, only used for forked repo
-    #[clap(short)]
+    #[clap(short, long)]
     pub upstream: bool,
 
     /// Commit message
-    #[clap(short)]
+    #[clap(short, long)]
     pub message: Option<String>,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 }
 

@@ -12,7 +12,7 @@ pub struct SecretArgs {
     pub file: String,
 
     /// Write content to path
-    #[clap(short = 'f')]
+    #[clap(short = 'f', long)]
     pub write_path: Option<String>,
 }
 

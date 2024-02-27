@@ -13,19 +13,19 @@ pub struct TagArgs {
     pub tag: Option<String>,
 
     /// Create a new tag
-    #[clap(short)]
+    #[clap(short, long)]
     pub create: bool,
 
     /// Delete tag
-    #[clap(short)]
+    #[clap(short, long)]
     pub delete: bool,
 
     /// Push change (create or delete) to the remote
-    #[clap(short)]
+    #[clap(short, long)]
     pub push: bool,
 
     /// Apply release rule to tag. Enable this will create a new tag and ignore `-c`
-    #[clap(short)]
+    #[clap(short, long)]
     pub rule: Option<String>,
 }
 

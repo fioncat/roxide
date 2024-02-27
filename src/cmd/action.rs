@@ -25,19 +25,19 @@ use crate::{term, utils};
 #[derive(Args)]
 pub struct ActionArgs {
     /// Use the branch to get action rather than commit.
-    #[clap(short)]
+    #[clap(short, long)]
     pub branch: bool,
 
     /// Open the action (or job) in default browser.
-    #[clap(short)]
+    #[clap(short, long)]
     pub open: bool,
 
     /// Open job rather than action (only affect `-o` option).
-    #[clap(short)]
+    #[clap(short, long)]
     pub job: bool,
 
     /// Select failed job for opening or logging.
-    #[clap(short)]
+    #[clap(short, long)]
     pub fail: bool,
 }
 

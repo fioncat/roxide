@@ -14,31 +14,31 @@ pub struct BranchArgs {
     pub name: Option<String>,
 
     /// Including remote branches for switching and listing
-    #[clap(short)]
+    #[clap(short, long)]
     pub all: bool,
 
     /// Only remote branches for switching and listing
-    #[clap(short)]
+    #[clap(short, long)]
     pub remote: bool,
 
     /// Sync branch with remote
-    #[clap(short)]
+    #[clap(short, long)]
     pub sync: bool,
 
     /// Create a new branch
-    #[clap(short)]
+    #[clap(short, long)]
     pub create: bool,
 
     /// Delete branch
-    #[clap(short)]
+    #[clap(short, long)]
     pub delete: bool,
 
     /// Push change (create or delete) to remote
-    #[clap(short)]
+    #[clap(short, long)]
     pub push: bool,
 
     /// List branch
-    #[clap(short)]
+    #[clap(short, long)]
     pub list: bool,
 }
 

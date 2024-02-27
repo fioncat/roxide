@@ -17,15 +17,15 @@ pub struct SnapshotArgs {
     pub name: Option<String>,
 
     /// Recover database with snapshot.
-    #[clap(short)]
+    #[clap(short, long)]
     pub restore: bool,
 
     /// Use database to create a snapshot.
-    #[clap(short)]
+    #[clap(short, long)]
     pub create: bool,
 
     /// Use the labels to filter repo.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 
     /// Display snapshot with json format.
@@ -33,7 +33,7 @@ pub struct SnapshotArgs {
     pub json: bool,
 
     /// Save snapshot with pretty json.
-    #[clap(short)]
+    #[clap(short, long)]
     pub pretty: bool,
 }
 

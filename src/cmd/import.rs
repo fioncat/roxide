@@ -23,15 +23,15 @@ pub struct ImportArgs {
     pub owner: String,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Use editor to filter items before importing.
-    #[clap(short)]
+    #[clap(short, long)]
     pub edit: bool,
 
     /// Append these labels to the database.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

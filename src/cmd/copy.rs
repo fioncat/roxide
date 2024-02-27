@@ -23,7 +23,7 @@ pub struct CopyArgs {
     pub name: Option<String>,
 
     /// Append these labels to the database for the new repository.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 
