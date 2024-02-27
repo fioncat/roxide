@@ -363,6 +363,8 @@ impl Provider for Github {
             bail!("commit info from github workflow runs is empty");
         }
 
+        runs.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+
         Ok(Some(Action {
             url: None,
             commit: commit.unwrap(),
