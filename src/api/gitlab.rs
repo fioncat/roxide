@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use anyhow::{bail, Context, Result};
 use reqwest::blocking::{Client, Request};
 use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiRepo, MergeOptions, Provider};
+use crate::api::*;
 use crate::config::{defaults, RemoteConfig};
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +42,85 @@ struct CreateMergeRequest {
     target_branch: String,
     title: String,
     description: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Pipeline {
+    id: u64,
+    web_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Job {
+    id: u64,
+    name: String,
+
+    status: JobStatus,
+
+    web_url: String,
+
+    commit: Option<JobCommit>,
+    user: Option<JobUser>,
+
+    stage: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+enum JobStatus {
+    #[serde(rename = "created")]
+    Created,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "waiting_for_resource")]
+    WaitingForResource,
+
+    #[serde(rename = "running")]
+    Running,
+
+    #[serde(rename = "failed")]
+    Failed,
+
+    #[serde(rename = "success")]
+    Success,
+
+    #[serde(rename = "canceled")]
+    Canceled,
+
+    #[serde(rename = "skipped")]
+    Skipped,
+
+    #[serde(rename = "manual")]
+    Manual,
+}
+
+impl Job {
+    fn convert_status(&self) -> ActionJobStatus {
+        match &self.status {
+            JobStatus::Created | JobStatus::Pending | JobStatus::WaitingForResource => {
+                ActionJobStatus::Pending
+            }
+            JobStatus::Running => ActionJobStatus::Running,
+            JobStatus::Failed => ActionJobStatus::Failed,
+            JobStatus::Success => ActionJobStatus::Success,
+            JobStatus::Canceled => ActionJobStatus::Canceled,
+            JobStatus::Skipped => ActionJobStatus::Skipped,
+            JobStatus::Manual => ActionJobStatus::WaitingForConfirm,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct JobCommit {
+    id: String,
+    message: String,
+
+    author_name: String,
+    author_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct JobUser {
+    name: String,
 }
 
 pub struct Gitlab {
@@ -116,6 +197,110 @@ impl Provider for Gitlab {
             .map(|repo| repo.path_with_namespace)
             .collect();
         Ok(repos)
+    }
+
+    fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>> {
+        let target = match &opts.target {
+            ActionTarget::Commit(sha) => format!("sha={sha}"),
+            ActionTarget::Branch(branch) => format!("ref={branch}"),
+        };
+        let id = format!("{}/{}", opts.owner, opts.name);
+        let id_encode = urlencoding::encode(&id);
+
+        let path = format!("projects/{id_encode}/pipelines?{target}&per_page=100");
+        let mut pipelines = self.execute_get::<Vec<Pipeline>>(&path)?;
+        if pipelines.is_empty() {
+            return Ok(None);
+        }
+
+        let pipeline = pipelines.remove(0);
+
+        let path = format!(
+            "projects/{id_encode}/pipelines/{}/jobs?per_page=100",
+            pipeline.id
+        );
+        let mut jobs = self.execute_get::<Vec<Job>>(&path)?;
+        if jobs.is_empty() {
+            return Ok(None);
+        }
+        jobs.reverse();
+
+        let mut commit: Option<ActionCommit> = None;
+        let mut author: Option<String> = None;
+
+        let mut stages_index = HashMap::<String, usize>::with_capacity(jobs.len());
+        let mut runs: Vec<ActionRun> = Vec::with_capacity(jobs.len());
+
+        for mut job in jobs {
+            if job.commit.is_none() {
+                continue;
+            }
+            if job.user.is_none() {
+                continue;
+            }
+
+            let job_commit = job.commit.take().unwrap();
+            let job_user = job.user.take().unwrap();
+
+            match commit.as_ref() {
+                Some(commit) if commit.id != job_commit.id.as_str() => continue,
+                None => {
+                    commit = Some(ActionCommit {
+                        id: job_commit.id,
+                        message: job_commit.message,
+                        author_name: job_commit.author_name,
+                        author_email: job_commit.author_email,
+                    })
+                }
+                _ => {}
+            }
+
+            match author.as_ref() {
+                Some(author) if author != job_user.name.as_str() => continue,
+                None => author = Some(job_user.name),
+                _ => {}
+            }
+
+            let stage = job.stage.take().unwrap_or_default();
+            let status = job.convert_status();
+
+            let action_job = ActionJob {
+                id: job.id,
+                name: job.name,
+                status,
+                url: job.web_url,
+            };
+
+            let (stage, idx) = stages_index
+                .remove_entry(stage.as_str())
+                .unwrap_or_else(|| {
+                    let action_run = ActionRun {
+                        name: stage.clone(),
+                        url: None,
+                        jobs: Vec::with_capacity(1),
+                    };
+                    let idx = runs.len();
+                    runs.push(action_run);
+                    (stage, idx)
+                });
+
+            runs.get_mut(idx).unwrap().jobs.push(action_job);
+            stages_index.insert(stage, idx);
+        }
+
+        if commit.is_none() {
+            bail!("commit info from gitlab jobs is empty");
+        }
+        if author.is_none() {
+            bail!("author info from gitlab jobs is empty");
+        }
+
+        Ok(Some(Action {
+            url: Some(pipeline.web_url),
+            commit: commit.unwrap(),
+            runs,
+            author: author.unwrap(),
+        }))
     }
 }
 

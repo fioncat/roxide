@@ -32,7 +32,7 @@ impl Run for OpenArgs {
         let mut url = api_repo.web_url;
 
         if self.branch {
-            let branch = GitBranch::current()?;
+            let branch = GitBranch::current(false)?;
             let path = PathBuf::from(url).join("tree").join(branch);
             url = format!("{}", path.display());
         }
