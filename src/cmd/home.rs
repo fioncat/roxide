@@ -25,19 +25,19 @@ pub struct HomeArgs {
     pub query: Option<String>,
 
     /// Use search instead of fuzzy matching.
-    #[clap(short)]
+    #[clap(short, long)]
     pub search: bool,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Open repo in default browser rather than clone it.
-    #[clap(short)]
+    #[clap(short, long)]
     pub open: bool,
 
     /// Append these labels to the database.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 

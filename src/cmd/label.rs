@@ -18,11 +18,11 @@ pub struct LabelArgs {
     pub query: Option<String>,
 
     /// Use search instead of fuzzy matching.
-    #[clap(short)]
+    #[clap(short, long)]
     pub search: bool,
 
     /// When calling the remote API, ignore caches that are not expired.
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Set labels with given values.
@@ -30,15 +30,15 @@ pub struct LabelArgs {
     pub set: Option<String>,
 
     /// Append labels with given values.
-    #[clap(short)]
+    #[clap(short, long)]
     pub append: Option<String>,
 
     /// Delete given labels.
-    #[clap(short)]
+    #[clap(short, long)]
     pub delete: Option<String>,
 
     /// Clean all labels.
-    #[clap(short)]
+    #[clap(short, long)]
     pub clean: bool,
 }
 

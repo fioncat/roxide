@@ -25,27 +25,27 @@ pub struct SyncArgs {
     pub query: Option<String>,
 
     /// Commit message if have uncommitted changes in current branch.
-    #[clap(short)]
+    #[clap(short, long)]
     pub message: Option<String>,
 
     /// Use editor to filter items before sync.
-    #[clap(short)]
+    #[clap(short, long)]
     pub edit: bool,
 
     /// Only show effects, skip running.
-    #[clap(short)]
+    #[clap(short, long)]
     pub dry_run: bool,
 
     /// The operations to perform. Available: [push, pull, add, delete, force].
-    #[clap(short, default_value = "push,pull,add,delete")]
+    #[clap(short, long, default_value = "push,pull,add,delete")]
     pub ops: String,
 
     /// Force sync, ignore label "sync".
-    #[clap(short)]
+    #[clap(short, long)]
     pub force: bool,
 
     /// Use the labels to filter repository.
-    #[clap(short)]
+    #[clap(short, long)]
     pub labels: Option<String>,
 }
 
