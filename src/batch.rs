@@ -1,12 +1,12 @@
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{bail, Result};
 use console::style;
 
-use crate::term;
+use crate::{term, utils};
 
 /// `Task` is used to represent a concurrent task that needs to be executed.
 ///
@@ -136,7 +136,7 @@ impl<R> Tracker<R> {
             result,
             self.ok_count,
             self.fail_count,
-            Self::format_elapsed(elapsed_time),
+            utils::format_elapsed(elapsed_time),
         );
         if let Some(fail_message) = self.fail_message.as_ref() {
             eprintln!();
@@ -300,24 +300,6 @@ impl<R> Tracker<R> {
     /// See: [`console::measure_text_width`].
     fn get_size(s: impl AsRef<str>) -> usize {
         console::measure_text_width(s.as_ref())
-    }
-
-    /// Show elapsed time.
-    fn format_elapsed(d: Duration) -> String {
-        let elapsed_time = d.as_secs_f64();
-
-        if elapsed_time >= 3600.0 {
-            let hours = elapsed_time / 3600.0;
-            format!("{:.2}h", hours)
-        } else if elapsed_time >= 60.0 {
-            let minutes = elapsed_time / 60.0;
-            format!("{:.2}min", minutes)
-        } else if elapsed_time >= 1.0 {
-            format!("{:.2}s", elapsed_time)
-        } else {
-            let milliseconds = elapsed_time * 1000.0;
-            format!("{:.2}ms", milliseconds)
-        }
     }
 }
 

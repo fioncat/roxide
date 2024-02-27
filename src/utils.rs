@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use std::{env, fs, process};
 
 use anyhow::{bail, Context, Error, Result};
@@ -262,6 +263,24 @@ pub fn format_time(time: u64) -> Result<String> {
         LocalResult::None => bail!("invalid timestamp {time}"),
         LocalResult::Ambiguous(_, _) => bail!("ambiguous parse timestamp {time}"),
         LocalResult::Single(time) => Ok(time.format("%Y-%m-%d %H:%M:%S").to_string()),
+    }
+}
+
+/// Show elapsed time.
+pub fn format_elapsed(d: Duration) -> String {
+    let elapsed_time = d.as_secs_f64();
+
+    if elapsed_time >= 3600.0 {
+        let hours = elapsed_time / 3600.0;
+        format!("{:.2}h", hours)
+    } else if elapsed_time >= 60.0 {
+        let minutes = elapsed_time / 60.0;
+        format!("{:.2}min", minutes)
+    } else if elapsed_time >= 1.0 {
+        format!("{:.2}s", elapsed_time)
+    } else {
+        let milliseconds = elapsed_time * 1000.0;
+        format!("{:.2}ms", milliseconds)
     }
 }
 

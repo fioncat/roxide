@@ -58,7 +58,7 @@ impl Run for ActionArgs {
             return self.open(action.unwrap());
         }
 
-        self.watch(action, provider.as_ref(), &opts)
+        self.watch(action, provider, opts)
     }
 }
 
@@ -82,8 +82,8 @@ impl ActionArgs {
     fn watch(
         &self,
         mut action: Option<Action>,
-        provider: &dyn Provider,
-        opts: &ActionOptions,
+        provider: Box<dyn Provider>,
+        opts: ActionOptions,
     ) -> Result<()> {
         let retry_sleep = || {
             thread::sleep(Duration::from_millis(500));
@@ -93,7 +93,7 @@ impl ActionArgs {
             eprintln!("Waiting for action to be created...");
         }
         while action.is_none() {
-            let current_action = provider.get_action(opts)?;
+            let current_action = provider.get_action(&opts)?;
             if current_action.is_none() {
                 retry_sleep();
                 continue;
@@ -102,78 +102,11 @@ impl ActionArgs {
             action = current_action;
             term::cursor_up();
         }
-        let mut action = action.unwrap();
-
+        let action = action.unwrap();
         eprintln!("{action}");
 
-        let mut status_map: HashMap<u64, ActionJobStatus> = HashMap::new();
-        let mut last_lines: usize = 0;
-        let mut completed = false;
-        while !completed {
-            let mut completed_count = 0;
-            let mut jobs_count = 0;
-            let mut need_display = false;
-            for run in action.runs.iter() {
-                for job in run.jobs.iter() {
-                    match job.status {
-                        ActionJobStatus::Pending
-                        | ActionJobStatus::Running
-                        | ActionJobStatus::WaitingForConfirm => {}
-                        _ => completed_count += 1,
-                    }
-                    jobs_count += 1;
-                    let update_status = match status_map.get(&job.id) {
-                        Some(status) if &job.status != status => true,
-                        None => true,
-                        _ => false,
-                    };
-                    if update_status {
-                        need_display = true;
-                        status_map.insert(job.id, job.status);
-                    }
-                }
-            }
-            if need_display {
-                for _ in 0..last_lines {
-                    term::cursor_up();
-                }
-
-                last_lines = 0;
-                for run in action.runs.iter() {
-                    eprintln!();
-                    eprintln!("{}", style(&run.name).bold().underlined());
-                    last_lines += 2;
-
-                    let mut pad = 0;
-                    for job in run.jobs.iter() {
-                        if job.name.len() > pad {
-                            pad = job.name.len();
-                        }
-                    }
-                    pad += 1;
-
-                    for job in run.jobs.iter() {
-                        let name = job
-                            .name
-                            .pad_to_width_with_alignment(pad, pad::Alignment::Left);
-                        eprintln!("{name} {}", job.status);
-                        last_lines += 1;
-                    }
-                }
-            }
-
-            completed = completed_count == jobs_count;
-            if !completed {
-                retry_sleep();
-                let current_action = provider.get_action(opts)?;
-                if current_action.is_none() {
-                    bail!("action was removed during watching");
-                }
-                action = current_action.unwrap();
-            }
-        }
-
-        Ok(())
+        let mut watcher = ActionWatcher::new(action, provider, opts);
+        watcher.wait()
     }
 
     fn open(&self, action: Action) -> Result<()> {
@@ -223,5 +156,117 @@ impl ActionArgs {
         let idx = term::fzf_search(&items)?;
         let job = jobs.remove(idx);
         Ok(job)
+    }
+}
+
+struct ActionWatcher {
+    status_map: HashMap<u64, ActionJobStatus>,
+    last_lines: usize,
+
+    completed: bool,
+
+    action: Action,
+
+    provider: Box<dyn Provider>,
+
+    opts: ActionOptions,
+}
+
+impl ActionWatcher {
+    fn new(action: Action, provider: Box<dyn Provider>, opts: ActionOptions) -> Self {
+        ActionWatcher {
+            status_map: HashMap::new(),
+            last_lines: 0,
+            completed: false,
+            action,
+            provider,
+            opts,
+        }
+    }
+
+    fn wait(&mut self) -> Result<()> {
+        while !self.completed {
+            let updated = self.update_status();
+            if updated {
+                self.display();
+            }
+
+            if !self.completed {
+                self.next()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn update_status(&mut self) -> bool {
+        let mut completed_count = 0;
+        let mut jobs_count = 0;
+        let mut updated = false;
+
+        for run in self.action.runs.iter() {
+            for job in run.jobs.iter() {
+                if job.status.is_completed() {
+                    completed_count += 1;
+                }
+                jobs_count += 1;
+                let update_status = match self.status_map.get(&job.id) {
+                    Some(status) if &job.status != status => true,
+                    None => true,
+                    _ => false,
+                };
+                if update_status {
+                    updated = true;
+                    self.status_map.insert(job.id, job.status);
+                }
+            }
+        }
+
+        self.completed = completed_count == jobs_count;
+        updated
+    }
+
+    fn display(&mut self) {
+        for _ in 0..self.last_lines {
+            term::cursor_up();
+        }
+
+        self.last_lines = 0;
+        for run in self.action.runs.iter() {
+            eprintln!();
+            eprintln!("{}", style(&run.name).bold().underlined());
+            self.last_lines += 2;
+
+            let mut pad = 0;
+            for job in run.jobs.iter() {
+                if job.name.len() > pad {
+                    pad = job.name.len();
+                }
+            }
+            pad += 1;
+
+            for job in run.jobs.iter() {
+                let name = job
+                    .name
+                    .pad_to_width_with_alignment(pad, pad::Alignment::Left);
+                eprint!("{name} {}", job.status);
+                eprintln!();
+                self.last_lines += 1;
+            }
+        }
+    }
+
+    fn next(&mut self) -> Result<()> {
+        Self::retry_sleep();
+        let current_action = self.provider.get_action(&self.opts)?;
+        if current_action.is_none() {
+            bail!("action was removed during watching");
+        }
+        self.action = current_action.unwrap();
+        Ok(())
+    }
+
+    fn retry_sleep() {
+        thread::sleep(Duration::from_millis(100));
     }
 }
