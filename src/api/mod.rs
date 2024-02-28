@@ -191,6 +191,15 @@ impl Display for ActionJobStatus {
     }
 }
 
+impl ActionJobStatus {
+    pub fn is_completed(&self) -> bool {
+        !matches!(
+            self,
+            Self::Pending | Self::Running | Self::WaitingForConfirm
+        )
+    }
+}
+
 /// A `Provider` is an API abstraction for a remote, providing functions for
 /// interacting with remote repository storage.
 ///
