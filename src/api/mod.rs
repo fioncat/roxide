@@ -18,6 +18,7 @@ use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
 use crate::config::{Config, ProviderType, RemoteConfig};
 
+#[derive(Debug, Serialize)]
 pub struct ProviderInfo {
     pub name: String,
     pub auth: bool,
@@ -226,6 +227,8 @@ impl ActionJobStatus {
 /// cache layer. External components do not need to be concerned with the internal
 /// implementation of the provider.
 pub trait Provider {
+    fn info(&self) -> Result<ProviderInfo>;
+
     /// Retrieve all repositories under a given owner.
     fn list_repos(&self, owner: &str) -> Result<Vec<String>>;
 
@@ -354,6 +357,10 @@ pub mod api_tests {
     }
 
     impl Provider for StaticProvider {
+        fn info(&self) -> Result<ProviderInfo> {
+            todo!()
+        }
+
         fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
             match self.repos.get(owner) {
                 Some(repos) => Ok(repos.clone()),

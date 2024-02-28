@@ -27,6 +27,10 @@ pub struct Cache {
 }
 
 impl Provider for Cache {
+    fn info(&self) -> Result<ProviderInfo> {
+        self.upstream.info()
+    }
+
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = self.list_repos_path(owner);
         if !self.force {

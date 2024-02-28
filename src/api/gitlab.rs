@@ -133,6 +133,17 @@ struct GitlabError {
 }
 
 impl Provider for Gitlab {
+    fn info(&self) -> Result<ProviderInfo> {
+        let auth = self.token.is_some();
+        let ping = self.execute_get_resp("").is_ok();
+
+        Ok(ProviderInfo {
+            name: format!("GitLab v{}", Gitlab::API_VERSION),
+            auth,
+            ping,
+        })
+    }
+
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let owner_encode = urlencoding::encode(owner);
         let path = format!("groups/{owner_encode}/projects?per_page={}", self.per_page);

@@ -14,6 +14,10 @@ pub struct Alias {
 }
 
 impl Provider for Alias {
+    fn info(&self) -> Result<ProviderInfo> {
+        self.upstream.info()
+    }
+
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let owner = self.alias_owner(owner);
         let names = self.upstream.list_repos(owner)?;
