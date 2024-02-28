@@ -249,8 +249,7 @@ impl ActionWatcher {
                 let name = job
                     .name
                     .pad_to_width_with_alignment(pad, pad::Alignment::Left);
-                eprint!("{name} {}", job.status);
-                eprintln!();
+                eprintln!("{name} {}", job.status);
                 self.last_lines += 1;
             }
         }
