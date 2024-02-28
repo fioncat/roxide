@@ -229,6 +229,8 @@ pub trait Provider {
     fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>>;
 
     fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()>;
+
+    fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob>;
 }
 
 /// Build common http client.
@@ -392,6 +394,10 @@ pub mod api_tests {
             _dst: &mut dyn Write,
         ) -> Result<()> {
             Ok(())
+        }
+
+        fn get_job(&self, _owner: &str, _name: &str, _id: u64) -> Result<ActionJob> {
+            todo!()
         }
     }
 }

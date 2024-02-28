@@ -19,8 +19,8 @@ use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::Database;
 use crate::repo::Repo;
-use crate::term::{Cmd, GitBranch};
-use crate::{term, utils};
+use crate::term::{self, Cmd, GitBranch};
+use crate::utils;
 
 /// The remote action (CICD) operations.
 #[derive(Args)]
@@ -41,11 +41,17 @@ pub struct ActionArgs {
     #[clap(short, long)]
     pub fail: bool,
 
+    /// Select running job for opening or logging.
+    #[clap(short = 'R', long)]
+    pub running: bool,
+
     /// Show logs of a job.
     #[clap(short, long)]
     pub logs: bool,
 
-    /// Keep rolling logs (only affect `-l` option).
+    /// Keep rolling logs until the job is completed (only affect `-l` option).
+    /// WARNING: Because of the limitation of remote api, if your logs are huge, this
+    /// will take a lot of your cpu and memory.
     #[clap(short, long)]
     pub rolling: bool,
 }
@@ -146,7 +152,7 @@ impl ActionArgs {
     fn logs(&self, action: Action, provider: Box<dyn Provider>, opts: ActionOptions) -> Result<()> {
         let job = self.select_job(action)?;
 
-        if !self.rolling {
+        if !self.rolling || job.status.is_completed() {
             let mut stderr: Box<dyn Write> = Box::new(io::stderr());
 
             return provider.logs_job(&opts.owner, &opts.name, job.id, stderr.as_mut());
@@ -160,33 +166,45 @@ impl ActionArgs {
             if let Some(append) = data.strip_prefix(&full_data[..]) {
                 eprint!("{}", String::from_utf8_lossy(append));
             }
-            full_data = data;
 
+            let updated_job = provider.get_job(&opts.owner, &opts.name, job.id)?;
+            if updated_job.status.is_completed() {
+                return Ok(());
+            }
+
+            full_data = data;
             thread::sleep(Duration::from_millis(500));
         }
     }
 
     fn select_job(&self, action: Action) -> Result<ActionJob> {
-        if self.fail {
-            for run in action.runs {
-                for job in run.jobs {
-                    if let ActionJobStatus::Failed = job.status {
-                        return Ok(job);
-                    }
-                }
-            }
-
-            bail!("no failed job for current action");
-        }
-
         let mut jobs: Vec<ActionJob> = Vec::with_capacity(action.runs.len());
         let mut items: Vec<String> = Vec::with_capacity(action.runs.len());
         for run in action.runs {
             for job in run.jobs {
+                if self.fail && !matches!(job.status, ActionJobStatus::Failed) {
+                    continue;
+                }
+                if self.running && !matches!(job.status, ActionJobStatus::Running) {
+                    continue;
+                }
+
                 let item = format!("{}/{}", run.name, job.name);
                 items.push(item);
                 jobs.push(job);
             }
+        }
+        if jobs.is_empty() {
+            if self.running {
+                bail!("no running job for current action");
+            }
+            if self.fail {
+                bail!("no failed job for current action");
+            }
+            bail!("no job for current action");
+        }
+        if jobs.len() == 1 {
+            return Ok(jobs.remove(0));
         }
 
         let idx = term::fzf_search(&items)?;

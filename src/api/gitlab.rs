@@ -292,6 +292,23 @@ impl Provider for Gitlab {
 
         Ok(())
     }
+
+    fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob> {
+        let project_id = format!("{owner}/{name}");
+        let id_encode = urlencoding::encode(&project_id);
+
+        let path = format!("projects/{id_encode}/jobs/{id}");
+
+        let job = self.execute_get::<Job>(&path)?;
+        let status = job.convert_status();
+
+        Ok(ActionJob {
+            id,
+            name: job.name,
+            status,
+            url: job.web_url,
+        })
+    }
 }
 
 impl Gitlab {
