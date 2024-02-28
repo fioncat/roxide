@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Context, Result};
-use reqwest::blocking::{Client, Request};
+use reqwest::blocking::{Client, Request, Response};
 use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -280,6 +280,18 @@ impl Provider for Gitlab {
             runs,
         }))
     }
+
+    fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()> {
+        let project_id = format!("{owner}/{name}");
+        let id_encode = urlencoding::encode(&project_id);
+
+        let path = format!("projects/{id_encode}/jobs/{id}/trace");
+        let mut resp = self.execute_get_resp(&path)?;
+        resp.copy_to(dst)
+            .context("read gitlab job logs response body")?;
+
+        Ok(())
+    }
 }
 
 impl Gitlab {
@@ -320,17 +332,28 @@ impl Gitlab {
         self.execute(req)
     }
 
+    fn execute_get_resp(&self, path: &str) -> Result<Response> {
+        let req = self.build_request(path, Method::GET, None)?;
+        self.execute_resp(req)
+    }
+
     fn execute<T>(&self, req: Request) -> Result<T>
     where
         T: DeserializeOwned + ?Sized,
     {
+        let resp = self.execute_resp(req)?;
+        let data = resp.bytes().context("read GitLab response body")?;
+        serde_json::from_slice(&data).context("decode GitLab response data")
+    }
+
+    fn execute_resp(&self, req: Request) -> Result<Response> {
         let resp = self.client.execute(req).context("GitLab http request")?;
         let ok = resp.status().is_success();
-        let data = resp.bytes().context("read GitLab response body")?;
         if ok {
-            return serde_json::from_slice(&data).context("decode GitLab response data");
+            return Ok(resp);
         }
 
+        let data = resp.bytes().context("read GitLab response body")?;
         match serde_json::from_slice::<GitlabError>(&data) {
             Ok(err) => bail!("GitLab api error: {}", err.error),
             Err(_err) => bail!(

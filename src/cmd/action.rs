@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{self, Write};
 use std::thread;
 use std::time::Duration;
 
@@ -39,6 +40,10 @@ pub struct ActionArgs {
     /// Select failed job for opening or logging.
     #[clap(short, long)]
     pub fail: bool,
+
+    /// Show logs of a job.
+    #[clap(short, long)]
+    pub logs: bool,
 }
 
 impl Run for ActionArgs {
@@ -51,11 +56,15 @@ impl Run for ActionArgs {
         drop(db);
 
         let action = provider.get_action(&opts)?;
-        if self.open {
+        if self.open || self.logs {
             if action.is_none() {
                 bail!("no action found");
             }
-            return self.open(action.unwrap());
+            let action = action.unwrap();
+            if self.logs {
+                return self.logs(action, provider, opts);
+            }
+            return self.open(action);
         }
 
         self.watch(action, provider, opts)
@@ -128,6 +137,13 @@ impl ActionArgs {
         }
 
         utils::open_url(run.url.as_ref().unwrap())
+    }
+
+    fn logs(&self, action: Action, provider: Box<dyn Provider>, opts: ActionOptions) -> Result<()> {
+        let job = self.select_job(action)?;
+        let mut stderr: Box<dyn Write> = Box::new(io::stderr());
+
+        provider.logs_job(&opts.owner, &opts.name, job.id, stderr.as_mut())
     }
 
     fn select_job(&self, action: Action) -> Result<ActionJob> {
