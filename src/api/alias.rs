@@ -62,6 +62,14 @@ impl Provider for Alias {
     fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>> {
         self.upstream.get_action(opts)
     }
+
+    fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()> {
+        self.upstream.logs_job(owner, name, id, dst)
+    }
+
+    fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob> {
+        self.upstream.get_job(owner, name, id)
+    }
 }
 
 impl Alias {

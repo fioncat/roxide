@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use reqwest::blocking::{Client, Request};
+use reqwest::blocking::{Client, Request, Response};
 use reqwest::{Method, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -371,6 +371,27 @@ impl Provider for Github {
             runs,
         }))
     }
+
+    fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()> {
+        let path = format!("repos/{owner}/{name}/actions/jobs/{id}/logs");
+        let mut resp = self.execute_get_resp(&path)?;
+        resp.copy_to(dst)
+            .context("read github job logs response body")?;
+
+        Ok(())
+    }
+
+    fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob> {
+        let path = format!("repos/{owner}/{name}/actions/jobs/{id}");
+        let job = self.execute_get::<Job>(&path)?;
+        let status = job.convert_status();
+        Ok(ActionJob {
+            id,
+            name: job.name,
+            status,
+            url: job.html_url,
+        })
+    }
 }
 
 impl Github {
@@ -417,17 +438,28 @@ impl Github {
         self.execute(req)
     }
 
+    fn execute_get_resp(&self, path: &str) -> Result<Response> {
+        let req = self.build_request(path, Method::GET, None)?;
+        self.execute_resp(req)
+    }
+
     fn execute<T>(&self, req: Request) -> Result<T>
     where
         T: DeserializeOwned + ?Sized,
     {
+        let resp = self.execute_resp(req)?;
+        let data = resp.bytes().context("read Github response body")?;
+        serde_json::from_slice(&data).context("decode Github response data")
+    }
+
+    fn execute_resp(&self, req: Request) -> Result<Response> {
         let resp = self.client.execute(req).context("Github http request")?;
         let ok = resp.status().is_success();
-        let data = resp.bytes().context("read Github response body")?;
         if ok {
-            return serde_json::from_slice(&data).context("decode Github response data");
+            return Ok(resp);
         }
 
+        let data = resp.bytes().context("read Github response body")?;
         match serde_json::from_slice::<Error>(&data) {
             Ok(err) => bail!("Github api error: {}", err.message),
             Err(_err) => bail!(

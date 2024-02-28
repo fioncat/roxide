@@ -4,6 +4,7 @@ pub mod github;
 mod gitlab;
 
 use std::fmt::Display;
+use std::io::Write;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
@@ -226,6 +227,10 @@ pub trait Provider {
     fn search_repos(&self, query: &str) -> Result<Vec<String>>;
 
     fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>>;
+
+    fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()>;
+
+    fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob>;
 }
 
 /// Build common http client.
@@ -379,6 +384,20 @@ pub mod api_tests {
 
         fn get_action(&self, _opts: &ActionOptions) -> Result<Option<Action>> {
             Ok(None)
+        }
+
+        fn logs_job(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _id: u64,
+            _dst: &mut dyn Write,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn get_job(&self, _owner: &str, _name: &str, _id: u64) -> Result<ActionJob> {
+            todo!()
         }
     }
 }
