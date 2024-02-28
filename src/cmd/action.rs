@@ -44,6 +44,10 @@ pub struct ActionArgs {
     /// Show logs of a job.
     #[clap(short, long)]
     pub logs: bool,
+
+    /// Keep rolling logs (only affect `-l` option).
+    #[clap(short, long)]
+    pub rolling: bool,
 }
 
 impl Run for ActionArgs {
@@ -141,9 +145,25 @@ impl ActionArgs {
 
     fn logs(&self, action: Action, provider: Box<dyn Provider>, opts: ActionOptions) -> Result<()> {
         let job = self.select_job(action)?;
-        let mut stderr: Box<dyn Write> = Box::new(io::stderr());
 
-        provider.logs_job(&opts.owner, &opts.name, job.id, stderr.as_mut())
+        if !self.rolling {
+            let mut stderr: Box<dyn Write> = Box::new(io::stderr());
+
+            return provider.logs_job(&opts.owner, &opts.name, job.id, stderr.as_mut());
+        }
+
+        let mut full_data: Box<Vec<u8>> = Box::default();
+        loop {
+            let mut data: Box<Vec<u8>> = Box::new(Vec::with_capacity(512));
+            provider.logs_job(&opts.owner, &opts.name, job.id, data.as_mut())?;
+
+            if let Some(append) = data.strip_prefix(&full_data[..]) {
+                eprint!("{}", String::from_utf8_lossy(append));
+            }
+            full_data = data;
+
+            thread::sleep(Duration::from_millis(500));
+        }
     }
 
     fn select_job(&self, action: Action) -> Result<ActionJob> {
