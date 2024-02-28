@@ -18,6 +18,24 @@ use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
 use crate::config::{Config, ProviderType, RemoteConfig};
 
+pub struct ProviderInfo {
+    pub name: String,
+    pub auth: bool,
+    pub ping: bool,
+}
+
+impl Display for ProviderInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let auth = if self.auth { "with auth" } else { "no auth" };
+        let ping = if self.ping {
+            format!("ping {}", style("ok").green())
+        } else {
+            format!("ping {}", style("failed").red())
+        };
+        write!(f, "{}, {auth}, {ping}", self.name)
+    }
+}
+
 /// Represents repository information obtained from a [`Provider`].
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct ApiRepo {

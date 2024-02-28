@@ -103,7 +103,7 @@ pub fn show_info(msg: impl AsRef<str>) {
 
 /// Output the object in pretty JSON format in the terminal.
 pub fn show_json<T: Serialize>(value: T) -> Result<()> {
-    let formatter = PrettyFormatter::with_indent(b"  ");
+    let formatter = PrettyFormatter::with_indent(b"\t");
     let mut buf = Vec::new();
     let mut ser = Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser).context("serialize object")?;

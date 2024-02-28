@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::fs;
 use std::path::PathBuf;
 
@@ -6,6 +8,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 use serde::Serialize;
 
+use crate::api::ProviderInfo;
 use crate::cmd::Run;
 use crate::config::Config;
 use crate::repo::database::Database;
@@ -18,232 +21,153 @@ pub struct InfoArgs {}
 
 impl Run for InfoArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        let db = Database::load(cfg)?;
-
-        let git = Self::convert_component(Self::git_info());
-        let fzf = Self::convert_component(Self::fzf_info());
-
-        let config = Self::config(cfg)?;
-
-        let repos = db.list_all(&None);
-
-        let mut total_size: u64 = 0;
-        let mut workspace_count: u32 = 0;
-        let mut workspace_size: u64 = 0;
-        let mut standalone_count: u32 = 0;
-        let mut standalone_size: u64 = 0;
-        let mut remotes: BTreeMap<String, RemoteInfo> = BTreeMap::new();
-
-        let mut scan_file: u64 = 0;
-
-        for repo in repos {
-            let path = repo.get_path(cfg);
-            let mut size: u64 = 0;
-            utils::walk_dir(path, |_file, meta| {
-                if meta.is_file() {
-                    scan_file += 1;
-                    size += meta.len();
-                }
-                Ok(true)
-            })?;
-
-            total_size += size;
-            match repo.path.as_ref() {
-                Some(_) => {
-                    standalone_count += 1;
-                    standalone_size += size;
-                }
-                None => {
-                    workspace_count += 1;
-                    workspace_size += size;
-                }
-            };
-
-            let (remote, mut remote_info) = remotes
-                .remove_entry(repo.remote.as_ref())
-                .unwrap_or_else(|| {
-                    let clone = repo.remote_cfg.clone.is_some();
-                    (
-                        repo.remote.to_string(),
-                        RemoteInfo {
-                            clone,
-                            size: None,
-                            repo_count: 0,
-                            owner_count: 0,
-                            owners: BTreeMap::new(),
-                            size_u64: 0,
-                        },
-                    )
-                });
-
-            remote_info.size_u64 += size;
-            remote_info.repo_count += 1;
-
-            let (owner, mut owner_info) = remote_info
-                .owners
-                .remove_entry(repo.owner.as_ref())
-                .unwrap_or_else(|| {
-                    (
-                        repo.owner.to_string(),
-                        OwnerInfo {
-                            repo_count: 0,
-                            size: None,
-                            size_u64: 0,
-                        },
-                    )
-                });
-
-            owner_info.repo_count += 1;
-            owner_info.size_u64 += size;
-
-            remote_info.owners.insert(owner, owner_info);
-            remotes.insert(remote, remote_info);
-        }
-
-        for (_, remote) in remotes.iter_mut() {
-            remote.size = Some(utils::human_bytes(remote.size_u64));
-            remote.owner_count = remote.owners.len() as u32;
-            for (_, owner) in remote.owners.iter_mut() {
-                owner.size = Some(utils::human_bytes(owner.size_u64));
-            }
-        }
-
-        let info = Info {
-            git,
-            fzf,
-            total_repo_size: utils::human_bytes(total_size),
-            files_count: scan_file,
-            workspace: RepoInfo {
-                count: workspace_count,
-                size: utils::human_bytes(workspace_size),
-            },
-            standalone: RepoInfo {
-                count: standalone_count,
-                size: utils::human_bytes(standalone_size),
-            },
-            config,
-            remote_count: remotes.len() as u32,
-            remotes,
-        };
-
-        term::show_json(info)
+        todo!()
     }
 }
 
-impl InfoArgs {
-    fn git_info() -> Result<ComponentInfo> {
-        let path = Self::get_component_path("git")?;
-        let version = Cmd::git(&["version"]).read()?;
-        let version = match version.trim().strip_prefix("git version") {
-            Some(v) => v.trim(),
-            None => version.as_str(),
-        };
-        Ok(ComponentInfo {
-            enable: true,
-            path,
-            version: String::from(version),
-        })
-    }
+impl InfoArgs {}
 
-    fn fzf_info() -> Result<ComponentInfo> {
-        let path = Self::get_component_path("fzf")?;
-        let version = Cmd::with_args("fzf", &["--version"]).read()?;
-        Ok(ComponentInfo {
-            enable: true,
-            path,
-            version,
-        })
-    }
-
-    fn get_component_path(cmd: &str) -> Result<String> {
-        let path = Cmd::with_args("which", &[cmd]).read()?;
-        let path = path.trim();
-        if path.is_empty() {
-            bail!("'{cmd}' path is empty");
-        }
-        Ok(String::from(path))
-    }
-
-    fn convert_component(r: Result<ComponentInfo>) -> ComponentInfo {
-        r.unwrap_or_else(|_| ComponentInfo {
-            enable: false,
-            path: String::new(),
-            version: String::new(),
-        })
-    }
-
-    fn config(cfg: &Config) -> Result<ConfigInfo> {
-        let path = match Config::get_path()? {
-            Some(path) => format!("{}", path.display()),
-            None => "N/A".to_string(),
-        };
-        let meta_dir = format!("{}", cfg.get_meta_dir().display());
-        let meta_size = utils::dir_size(PathBuf::from(&meta_dir))?;
-
-        let db_path = cfg.get_meta_dir().join("database");
-        let db_meta = fs::metadata(db_path)?;
-        let db_size = utils::human_bytes(db_meta.len());
-
-        Ok(ConfigInfo {
-            path,
-            meta_path: meta_dir,
-            meta_size: utils::human_bytes(meta_size),
-            database_size: db_size,
-        })
-    }
-}
-
-#[derive(Debug, Serialize)]
 struct Info {
-    pub git: ComponentInfo,
-    pub fzf: ComponentInfo,
-    pub total_repo_size: String,
-    pub files_count: u64,
-    pub workspace: RepoInfo,
-    pub standalone: RepoInfo,
-    pub config: ConfigInfo,
-    pub remote_count: u32,
-    pub remotes: BTreeMap<String, RemoteInfo>,
+    config: ConfigInfo,
+    commands: Vec<CommandInfo>,
+    standalone: Vec<StandaloneInfo>,
+
+    meta_disk_usage: MetaDiskUsage,
+    repo_disk_usage: Vec<RemoteDiskUsage>,
+
+    remote_api: Vec<RemoteApiInfo>,
 }
 
-#[derive(Debug, Serialize)]
-struct ComponentInfo {
-    pub enable: bool,
-    pub path: String,
-    pub version: String,
+impl Display for Info {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Config:")?;
+        writeln!(f, "\tpath: {}", self.config.path)?;
+        writeln!(f, "\tmeta: {}", self.config.meta_path)?;
+        writeln!(f)?;
+
+        if !self.commands.is_empty() {
+            writeln!(f, "Commands:")?;
+            for cmd in self.commands.iter() {
+                writeln!(f, "\t{cmd}")?;
+            }
+            writeln!(f)?;
+        }
+
+        if !self.standalone.is_empty() {
+            writeln!(f, "Standalone:")?;
+            for standalone in self.standalone.iter() {
+                writeln!(f, "\t{standalone}")?;
+            }
+            writeln!(f)?;
+        }
+
+        writeln!(f, "Meta Disk Usage:")?;
+        let meta_database = utils::human_bytes(self.meta_disk_usage.database);
+        writeln!(f, "\tTotal:    {}", self.meta_disk_usage.total)?;
+        writeln!(f, "\tDatabase: {meta_database}")?;
+        writeln!(f)?;
+
+        if !self.repo_disk_usage.is_empty() {
+            writeln!(f, "Repository Disk Usage:")?;
+            for remote_usage in self.repo_disk_usage.iter() {
+                writeln!(f, "\t{}: {}", remote_usage.name, remote_usage.usage)?;
+                for owner_usage in remote_usage.owners.iter() {
+                    writeln!(f, "\t\t{}: {}", owner_usage.name, owner_usage.usage)?;
+                    for repo_usage in owner_usage.repos.iter() {
+                        writeln!(f, "\t\t\t{}: {}", repo_usage.name, repo_usage.usage)?;
+                    }
+                }
+            }
+            writeln!(f)?;
+        }
+
+        if !self.remote_api.is_empty() {
+            writeln!(f, "Remote API:")?;
+            for api in self.remote_api.iter() {
+                let provider = api
+                    .provider
+                    .as_ref()
+                    .map(|p| Cow::Owned(format!("{p}")))
+                    .unwrap_or(Cow::Borrowed("<none>"));
+                writeln!(f, "\t{}: {provider}", api.name)?;
+            }
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
 }
 
-#[derive(Debug, Serialize)]
-struct RepoInfo {
-    pub count: u32,
-    pub size: String,
-}
-
-#[derive(Debug, Serialize)]
 struct ConfigInfo {
-    pub path: String,
-    pub meta_path: String,
-    pub meta_size: String,
-    pub database_size: String,
+    path: String,
+    meta_path: String,
 }
 
-#[derive(Debug, Serialize)]
-struct RemoteInfo {
-    pub clone: bool,
-    pub size: Option<String>,
-    pub repo_count: u32,
-    pub owner_count: u32,
-    pub owners: BTreeMap<String, OwnerInfo>,
-
-    #[serde(skip)]
-    size_u64: u64,
+struct CommandInfo {
+    name: String,
+    path: String,
+    version: String,
 }
 
-#[derive(Debug, Serialize)]
-struct OwnerInfo {
-    pub repo_count: u32,
-    pub size: Option<String>,
+impl Display for CommandInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}, {}", self.name, self.path, self.version)
+    }
+}
 
-    #[serde(skip)]
-    size_u64: u64,
+struct StandaloneInfo {
+    name: String,
+    path: String,
+}
+
+impl Display for StandaloneInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} -> {}", self.name, self.path)
+    }
+}
+
+struct DirectoryUsage {
+    files: u64,
+    dirs: u64,
+    size: u64,
+}
+
+impl Display for DirectoryUsage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let files_word = if self.files > 1 { "files" } else { "file" };
+        let dirs_word = if self.dirs > 1 { "dirs" } else { "dir" };
+        let size = utils::human_bytes(self.size);
+        write!(
+            f,
+            "{} {files_word}, {} {dirs_word}, {size}",
+            self.files, self.dirs
+        )
+    }
+}
+
+struct MetaDiskUsage {
+    total: DirectoryUsage,
+    database: u64,
+}
+
+struct RemoteDiskUsage {
+    name: String,
+    usage: DirectoryUsage,
+    owners: Vec<OwnerDiskUsage>,
+}
+
+struct OwnerDiskUsage {
+    name: String,
+    usage: DirectoryUsage,
+    repos: Vec<RepoDiskUsage>,
+}
+
+struct RepoDiskUsage {
+    name: String,
+    usage: DirectoryUsage,
+}
+
+struct RemoteApiInfo {
+    name: String,
+    provider: Option<ProviderInfo>,
 }
