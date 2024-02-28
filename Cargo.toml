@@ -1,6 +1,6 @@
 [package]
 name = "roxide"
-version = "0.12.1"
+version = "0.13.0"
 edition = "2021"
 build = "build.rs"
 license = "MIT"
@@ -18,28 +18,13 @@ description = "🎁 A simple and fast tool to manage your git repositories"
 # See: https://docs.rs/openssl/latest/openssl/#vendored
 openssl-vendored = ["reqwest/native-tls-vendored"]
 
-[dependencies.clap]
-version = "4.5.1"
-features = ["derive"]
-
-[dependencies.reqwest]
-version = "0.11.24"
-features = ["blocking", "json"]
-
-[dependencies.serde]
-version = "1.0.197"
-features = ["derive"]
-
-[dependencies.strum]
-version = "0.26.1"
-features = ["derive"]
-
 [dependencies]
 aes-gcm = "0.10.3"
 anyhow = "1.0.80"
 base64 = "0.21.7"
 bincode = "1.3.3"
 chrono = "0.4.34"
+clap = { version = "4.5.1", features = ["derive"] }
 console = "0.15.8"
 dialoguer = "0.11.0"
 file-lock = "2.1.11"
@@ -48,22 +33,22 @@ open = "5.0.1"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
 regex = "1.10.3"
+reqwest = { version = "0.11.24", features = ["blocking", "json"] }
 rpassword = "7.3.1"
 scanf = "1.2.1"
 semver = "1.0.22"
+serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 sha2 = "0.10.8"
 shellexpand = "3.1.0"
+strum = { version = "0.26.1", features = ["derive"] }
 termion = "3.0.0"
 toml = "0.8.10"
 urlencoding = "2.1.3"
 
-[build-dependencies.vergen]
-version = "8.3.1"
-features = ["build", "rustc"]
-
 [build-dependencies]
 simple-error = "0.3.0"
+vergen = { version = "8.3.1", features = ["build", "rustc"] }
 
 [profile.release]
 lto = true
