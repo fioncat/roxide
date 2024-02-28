@@ -22,7 +22,7 @@ use crate::repo::Repo;
 use crate::term::{self, Cmd, GitBranch};
 use crate::utils;
 
-/// The remote action (CICD) operations.
+/// The remote action (CI/CD) operations.
 #[derive(Args)]
 pub struct ActionArgs {
     /// Use the branch to get action rather than commit.
