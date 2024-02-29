@@ -18,6 +18,25 @@ use crate::api::github::Github;
 use crate::api::gitlab::Gitlab;
 use crate::config::{Config, ProviderType, RemoteConfig};
 
+#[derive(Debug, Serialize)]
+pub struct ProviderInfo {
+    pub name: String,
+    pub auth: bool,
+    pub ping: bool,
+}
+
+impl Display for ProviderInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let auth = if self.auth { "with auth" } else { "no auth" };
+        let ping = if self.ping {
+            format!("ping {}", style("ok").green())
+        } else {
+            format!("ping {}", style("failed").red())
+        };
+        write!(f, "{}, {auth}, {ping}", self.name)
+    }
+}
+
 /// Represents repository information obtained from a [`Provider`].
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct ApiRepo {
@@ -208,6 +227,8 @@ impl ActionJobStatus {
 /// cache layer. External components do not need to be concerned with the internal
 /// implementation of the provider.
 pub trait Provider {
+    fn info(&self) -> Result<ProviderInfo>;
+
     /// Retrieve all repositories under a given owner.
     fn list_repos(&self, owner: &str) -> Result<Vec<String>>;
 
@@ -336,6 +357,10 @@ pub mod api_tests {
     }
 
     impl Provider for StaticProvider {
+        fn info(&self) -> Result<ProviderInfo> {
+            todo!()
+        }
+
         fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
             match self.repos.get(owner) {
                 Some(repos) => Ok(repos.clone()),

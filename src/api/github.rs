@@ -240,6 +240,17 @@ pub struct Github {
 }
 
 impl Provider for Github {
+    fn info(&self) -> Result<ProviderInfo> {
+        let auth = self.token.is_some();
+        let ping = self.execute_get_resp("").is_ok();
+
+        Ok(ProviderInfo {
+            name: format!("GitHub {}", Self::API_VERSION),
+            auth,
+            ping,
+        })
+    }
+
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let path = format!("users/{owner}/repos?per_page={}", self.per_page);
         let github_repos = self.execute_get::<Vec<Repo>>(&path)?;
