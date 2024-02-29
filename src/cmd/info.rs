@@ -18,6 +18,7 @@ use crate::utils;
 /// Show some global info
 #[derive(Args)]
 pub struct InfoArgs {
+    /// Show the output in json format.
     #[clap(short, long)]
     pub json: bool,
 }

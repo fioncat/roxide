@@ -135,7 +135,7 @@ struct GitlabError {
 impl Provider for Gitlab {
     fn info(&self) -> Result<ProviderInfo> {
         let auth = self.token.is_some();
-        let ping = self.execute_get_resp("").is_ok();
+        let ping = self.execute_get_resp("projects").is_ok();
 
         Ok(ProviderInfo {
             name: format!("GitLab v{}", Gitlab::API_VERSION),
