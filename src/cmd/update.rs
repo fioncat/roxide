@@ -3,7 +3,7 @@ use std::{env, fs};
 use anyhow::{bail, Context, Result};
 use clap::Args;
 
-use crate::api::github::Github;
+use crate::api::github::GitHub;
 use crate::cmd::Run;
 use crate::config::Config;
 use crate::term::Cmd;
@@ -22,7 +22,7 @@ impl Run for UpdateArgs {
         };
 
         info!("Checking new version for roxide");
-        let api = Github::new_empty();
+        let api = GitHub::new_empty();
         let latest = api.get_latest_tag("fioncat", "roxide")?;
         let current = format!("v{}", env!("ROXIDE_VERSION"));
         if latest.as_str() == current {

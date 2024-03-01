@@ -45,7 +45,7 @@ impl Keywords {
         };
 
         if cfg.keyword_expire == 0 {
-            // The user disable keyword, delete record file if it is exists
+            // The user disable keyword, delete record file if it is existing
             if !not_found {
                 fs::remove_file(&path)
                     .with_context(|| format!("delete keywords file '{}'", path.display()))?;

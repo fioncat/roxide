@@ -1,4 +1,3 @@
-use std::env;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -27,13 +26,7 @@ impl ConfigArgs {
             return Ok(path);
         }
 
-        let path = match env::var_os("ROXIDE_CONFIG") {
-            Some(path) => PathBuf::from(path),
-            None => {
-                let home = utils::get_home_dir()?;
-                home.join(".config").join("roxide.toml")
-            }
-        };
+        let path = Config::get_raw_path()?;
 
         let data = include_bytes!("../../config/config.toml");
         utils::write_file(&path, data)?;

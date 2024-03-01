@@ -342,7 +342,7 @@ where
     }
 
     // Set the number of workers to the number of cpu cores to maximize the use of
-    // multi-core cpu.
+    // multicore cpu.
     // Here num_cpus can guarantee that the number of cores returned is greater
     // than 0.
     let worker_len = num_cpus::get();

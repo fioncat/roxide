@@ -32,7 +32,7 @@ pub struct Config {
     #[serde(default = "defaults::keyword_expire")]
     pub keyword_expire: u64,
 
-    /// The remotes config.
+    /// The remotes' config.
     #[serde(default = "defaults::empty_map")]
     pub remotes: HashMap<String, RemoteConfig>,
 
@@ -182,10 +182,10 @@ pub struct WorkflowCondition {
     pub exists: bool,
 }
 
-/// RemoteConfig is a Git remote repository. Typical examples are Github and Gitlab.
+/// RemoteConfig is a Git remote repository. Typical examples are GitHub and Gitlab.
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct RemoteConfig {
-    /// The clone domain, for Github, is "github.com". If your remote Git repository
+    /// The clone domain, for GitHub, is "github.com". If your remote Git repository
     /// is self-built, this is a private domain, such as "git.my.domain.com".
     ///
     /// If clone is not empty, all repo will be added to the workspace in the
@@ -198,7 +198,7 @@ pub struct RemoteConfig {
     /// - ssh: `git@{clone_domain}:{repo_owner}/{repo_name}.git`
     pub clone: Option<String>,
 
-    /// User name, optional, if not empty, will execute the following command for
+    /// Username, optional, if not empty, will execute the following command for
     /// each repo: `git config user.name {name}`
     pub user: Option<String>,
 
@@ -216,14 +216,14 @@ pub struct RemoteConfig {
     /// The remote provider, If not empty, roxide will use remote api to enhance
     /// some capabilities, such as searching repos from remote.
     ///
-    /// Currently only `github` and `gitlab` are supported. If your remote is of
+    /// Currently only `GitHub` and `GitLab` are supported. If your remote is of
     /// these two types, it is strongly recommended to enable it, and it is
     /// recommended to use it with `token` to complete the authentication.
     pub provider: Option<ProviderType>,
 
     /// Uses with `provider` to authenticate when calling api.
     ///
-    /// For Github, see: https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#authenticating-with-a-personal-access-token
+    /// For GitHub, see: https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#authenticating-with-a-personal-access-token
     ///
     /// For Gitlab, see: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
     ///
@@ -395,14 +395,18 @@ impl RemoteConfig {
 }
 
 impl Config {
-    pub fn get_path() -> Result<Option<PathBuf>> {
-        let path = match env::var_os("ROXIDE_CONFIG") {
-            Some(path) => PathBuf::from(path),
+    pub fn get_raw_path() -> Result<PathBuf> {
+        match env::var_os("ROXIDE_CONFIG") {
+            Some(path) => Ok(PathBuf::from(path)),
             None => {
                 let home = utils::get_home_dir()?;
-                home.join(".config").join("roxide.toml")
+                Ok(home.join(".config").join("roxide.toml"))
             }
-        };
+        }
+    }
+
+    pub fn get_path() -> Result<Option<PathBuf>> {
+        let path = Self::get_raw_path()?;
 
         match fs::metadata(&path) {
             Ok(meta) => {
@@ -624,8 +628,8 @@ impl Config {
                 ),
             };
 
-            // Note that the order here must not be confused; dependencies of the
-            // include must be included first before including the include itself.
+            // Note that the order here must not be confused; dependencies of to
+            // include must be included first before including to include itself.
             if !include_workflow.include.is_empty() {
                 Self::insert_workflow_includes(
                     workflows,

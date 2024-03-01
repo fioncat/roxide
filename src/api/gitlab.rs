@@ -10,7 +10,7 @@ use crate::api::*;
 use crate::config::{defaults, RemoteConfig};
 
 #[derive(Debug, Deserialize)]
-struct GitlabRepo {
+struct GitLabRepo {
     pub path: String,
     pub path_with_namespace: String,
 
@@ -20,7 +20,7 @@ struct GitlabRepo {
     pub web_url: String,
 }
 
-impl GitlabRepo {
+impl GitLabRepo {
     fn api(self) -> ApiRepo {
         ApiRepo {
             default_branch: self.default_branch,
@@ -117,7 +117,7 @@ struct JobCommit {
     author_email: String,
 }
 
-pub struct Gitlab {
+pub struct GitLab {
     token: Option<String>,
 
     client: Client,
@@ -128,26 +128,31 @@ pub struct Gitlab {
 }
 
 #[derive(Debug, Deserialize)]
-struct GitlabError {
+struct GitLabError {
     pub error: String,
 }
 
-impl Provider for Gitlab {
+impl Provider for GitLab {
     fn info(&self) -> Result<ProviderInfo> {
         let auth = self.token.is_some();
         let ping = self.execute_get_resp("projects").is_ok();
 
-        Ok(ProviderInfo {
-            name: format!("GitLab v{}", Gitlab::API_VERSION),
-            auth,
-            ping,
-        })
+        let is_official = Url::parse(&self.url)
+            .map(|url| url.domain().unwrap_or_default() == "gitlab.com")
+            .unwrap_or_default();
+
+        let mut name = format!("GitLab API v{}", GitLab::API_VERSION);
+        if !is_official {
+            name = format!("{name} (private)");
+        }
+
+        Ok(ProviderInfo { name, auth, ping })
     }
 
     fn list_repos(&self, owner: &str) -> Result<Vec<String>> {
         let owner_encode = urlencoding::encode(owner);
         let path = format!("groups/{owner_encode}/projects?per_page={}", self.per_page);
-        let gitlab_repos = self.execute_get::<Vec<GitlabRepo>>(&path)?;
+        let gitlab_repos = self.execute_get::<Vec<GitLabRepo>>(&path)?;
         let repos: Vec<String> = gitlab_repos.into_iter().map(|repo| repo.path).collect();
         Ok(repos)
     }
@@ -156,7 +161,7 @@ impl Provider for Gitlab {
         let id = format!("{owner}/{name}");
         let id_encode = urlencoding::encode(&id);
         let path = format!("projects/{id_encode}");
-        Ok(self.execute_get::<GitlabRepo>(&path)?.api())
+        Ok(self.execute_get::<GitLabRepo>(&path)?.api())
     }
 
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>> {
@@ -196,7 +201,7 @@ impl Provider for Gitlab {
 
     fn search_repos(&self, query: &str) -> Result<Vec<String>> {
         let path = format!("search?scope=projects&search={}", query);
-        let gitlab_repos = self.execute_get::<Vec<GitlabRepo>>(&path)?;
+        let gitlab_repos = self.execute_get::<Vec<GitLabRepo>>(&path)?;
         let repos: Vec<String> = gitlab_repos
             .into_iter()
             .map(|repo| repo.path_with_namespace)
@@ -282,7 +287,7 @@ impl Provider for Gitlab {
         }
 
         if commit.is_none() {
-            bail!("commit info from gitlab jobs is empty");
+            bail!("commit info from GitLab jobs is empty");
         }
 
         Ok(Some(Action {
@@ -299,7 +304,7 @@ impl Provider for Gitlab {
         let path = format!("projects/{id_encode}/jobs/{id}/trace");
         let mut resp = self.execute_get_resp(&path)?;
         resp.copy_to(dst)
-            .context("read gitlab job logs response body")?;
+            .context("read GitLab job logs response body")?;
 
         Ok(())
     }
@@ -322,11 +327,11 @@ impl Provider for Gitlab {
     }
 }
 
-impl Gitlab {
+impl GitLab {
     const API_VERSION: u8 = 4;
 
     pub fn build(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
-        let client = super::build_common_client(remote_cfg);
+        let client = build_common_client(remote_cfg);
         let domain = match &remote_cfg.api_domain {
             Some(domain) => domain.clone(),
             None => String::from("gitlab.com"),
@@ -334,7 +339,7 @@ impl Gitlab {
 
         let url = format!("https://{domain}/api/v{}", Self::API_VERSION);
 
-        Box::new(Gitlab {
+        Box::new(GitLab {
             token: remote_cfg.token.clone(),
             client,
             url,
@@ -382,7 +387,7 @@ impl Gitlab {
         }
 
         let data = resp.bytes().context("read GitLab response body")?;
-        match serde_json::from_slice::<GitlabError>(&data) {
+        match serde_json::from_slice::<GitLabError>(&data) {
             Ok(err) => bail!("GitLab api error: {}", err.error),
             Err(_err) => bail!(
                 "unknown GitLab api error: {}",

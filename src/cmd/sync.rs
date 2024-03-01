@@ -24,7 +24,7 @@ pub struct SyncArgs {
     /// Repository selection query.
     pub query: Option<String>,
 
-    /// Commit message if have uncommitted changes in current branch.
+    /// The commit message if it has uncommitted changes in current branch.
     #[clap(short, long)]
     pub message: Option<String>,
 

@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::alias::Alias;
 use crate::api::cache::Cache;
-use crate::api::github::Github;
-use crate::api::gitlab::Gitlab;
+use crate::api::github::GitHub;
+use crate::api::gitlab::GitLab;
 use crate::config::{Config, ProviderType, RemoteConfig};
 
 #[derive(Debug, Serialize)]
@@ -115,6 +115,7 @@ impl MergeOptions {
     }
 }
 
+/// The options to fetch [`Action`] from remote.
 #[derive(Debug)]
 pub struct ActionOptions {
     pub owner: String,
@@ -123,48 +124,86 @@ pub struct ActionOptions {
     pub target: ActionTarget,
 }
 
+/// ActionTarget defines how to locate the [`Action`]. By commit or branch.
 #[derive(Debug)]
 pub enum ActionTarget {
+    /// Use commit SHA256 ID to locate the [`Action`].
     Commit(String),
+
+    /// Use branch name to locate the [`Action`].
     Branch(String),
 }
 
+/// Action represents an abstraction of CI/CD. It represents all CI/CD tasks for a
+/// particular commit.
+///
+/// In GitHub, it represents multiple `Action Runs`; In GitLab, it represents a single
+/// `Pipeline`.
 #[derive(Debug)]
 pub struct Action {
+    /// The action url. For GitHub, this is [`None`]; for GitLab, this is the url
+    /// of `Pipeline`.
     pub url: Option<String>,
 
+    /// The commit info for this action.
     pub commit: ActionCommit,
 
+    /// All the action runs.
     pub runs: Vec<ActionRun>,
 }
 
+/// The commit info for an [`Action`].
 #[derive(Debug)]
 pub struct ActionCommit {
+    /// The commit SHA256 ID.
     pub id: String,
+
+    /// The commit title.
     pub message: String,
 
+    /// The commit author username.
     pub author_name: String,
+
+    /// The commit author email.
     pub author_email: String,
 }
 
+/// ActionRun represents a group of [`ActionJob`]. [`ActionJob`] is the entity that
+/// actually performs the work, while ActionRun is responsible for categorizing them
+/// for display purposes.
+///
+/// In GitHub, ActionRun is the `Action Run` resource; while in GitLab, ActionRun is
+/// a `Stage` within a `Pipeline`.
 #[derive(Debug)]
 pub struct ActionRun {
+    /// The name of the action run.
     pub name: String,
+
+    /// For GitHub, this is the url of the action run; For GitLab, this is [`None`]
+    /// (GitLab stage has no independent url).
     pub url: Option<String>,
 
+    /// The set of jobs for this action run.
     pub jobs: Vec<ActionJob>,
 }
 
+/// The real CI/CD worker.
 #[derive(Debug)]
 pub struct ActionJob {
+    /// The unique ID.
     pub id: u64,
+
+    /// The job name.
     pub name: String,
 
+    /// The job status.
     pub status: ActionJobStatus,
 
+    /// The job url.
     pub url: String,
 }
 
+/// The CI/CD job status.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ActionJobStatus {
     Pending,
@@ -241,16 +280,19 @@ pub trait Provider {
     /// If the Merge Request does not exist, return `Ok(None)`.
     fn get_merge(&self, merge: MergeOptions) -> Result<Option<String>>;
 
-    /// Create MergeRequest (PullRequest in Github), and return its URL.
+    /// Create MergeRequest (PullRequest in GitHub), and return its URL.
     fn create_merge(&mut self, merge: MergeOptions, title: String, body: String) -> Result<String>;
 
     /// Search repositories using the specified `query`.
     fn search_repos(&self, query: &str) -> Result<Vec<String>>;
 
+    /// Return the CI/CD action.
     fn get_action(&self, opts: &ActionOptions) -> Result<Option<Action>>;
 
+    /// Get the logs of CI/CD a specific job.
     fn logs_job(&self, owner: &str, name: &str, id: u64, dst: &mut dyn Write) -> Result<()>;
 
+    /// Get the info of a specific CI/CD job based on its ID.
     fn get_job(&self, owner: &str, name: &str, id: u64) -> Result<ActionJob>;
 }
 
@@ -306,8 +348,8 @@ pub fn build_provider(
 
 pub fn build_raw_provider(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
     match remote_cfg.provider.as_ref().unwrap() {
-        ProviderType::Github => Github::build(remote_cfg),
-        ProviderType::Gitlab => Gitlab::build(remote_cfg),
+        ProviderType::Github => GitHub::build(remote_cfg),
+        ProviderType::Gitlab => GitLab::build(remote_cfg),
     }
 }
 
