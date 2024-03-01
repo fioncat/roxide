@@ -924,7 +924,7 @@ enum SelectOneType<'a> {
 /// * `head`: Can have multiple meanings:
 ///   * If no `query` is provided, it can be the remote name or a keyword for fuzzy
 ///     searching.
-///   * If no `query` is provided and it starts with `http` or `git@`, it represents
+///   * If no `query` is provided, and it starts with `http` or `git@`, it represents
 ///     the clone or access URL of the repository.
 ///   * If `query` is provided, it forcibly represents the remote name.
 /// * `query`: The query statement. It can take different formats:
@@ -1066,7 +1066,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         self.one_from_owner(db)
     }
 
-    /// Select one repository from a url.
+    /// Select one repository from an url.
     fn one_from_url<'b>(&self, db: &'b Database, url: Url) -> Result<(Repo<'b>, bool)> {
         let domain = match url.domain() {
             Some(domain) => domain,
@@ -1171,7 +1171,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
     }
 
-    /// Select one repository from a ssh url.
+    /// Select one repository from an ssh url.
     fn one_from_ssh<'b>(&self, db: &'b Database, ssh: &str) -> Result<(Repo<'b>, bool)> {
         // Parsing SSH is done in a clever way by reusing the code for parsing
         // URLs. The approach involves converting the SSH statement to a URL and

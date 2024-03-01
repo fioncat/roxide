@@ -231,7 +231,7 @@ impl Job {
     }
 }
 
-pub struct Github {
+pub struct GitHub {
     token: Option<String>,
 
     client: Client,
@@ -239,13 +239,13 @@ pub struct Github {
     per_page: u32,
 }
 
-impl Provider for Github {
+impl Provider for GitHub {
     fn info(&self) -> Result<ProviderInfo> {
         let auth = self.token.is_some();
         let ping = self.execute_get_resp("").is_ok();
 
         Ok(ProviderInfo {
-            name: format!("GitHub {}", Self::API_VERSION),
+            name: format!("GitHub API {}", Self::API_VERSION),
             auth,
             ping,
         })
@@ -371,7 +371,7 @@ impl Provider for Github {
         }
 
         if commit.is_none() {
-            bail!("commit info from github workflow runs is empty");
+            bail!("commit info from GitHub workflow runs is empty");
         }
 
         runs.sort_unstable_by(|a, b| a.name.cmp(&b.name));
@@ -387,7 +387,7 @@ impl Provider for Github {
         let path = format!("repos/{owner}/{name}/actions/jobs/{id}/logs");
         let mut resp = self.execute_get_resp(&path)?;
         resp.copy_to(dst)
-            .context("read github job logs response body")?;
+            .context("read GitHub job logs response body")?;
 
         Ok(())
     }
@@ -405,24 +405,24 @@ impl Provider for Github {
     }
 }
 
-impl Github {
+impl GitHub {
     const API_VERSION: &'static str = "2022-11-28";
 
     pub fn build(remote_cfg: &RemoteConfig) -> Box<dyn Provider> {
-        let client = super::build_common_client(remote_cfg);
-        Box::new(Github {
+        let client = build_common_client(remote_cfg);
+        Box::new(GitHub {
             token: remote_cfg.token.clone(),
             per_page: remote_cfg.list_limit,
             client,
         })
     }
 
-    pub fn new_empty() -> Github {
+    pub fn new_empty() -> GitHub {
         let client = Client::builder()
             .timeout(Duration::from_secs_f32(20.0))
             .build()
             .unwrap();
-        Github {
+        GitHub {
             token: None,
             per_page: 30,
             client,
@@ -435,7 +435,7 @@ impl Github {
     {
         let req = self
             .build_request(path, Method::GET, None)
-            .context("build Github request")?;
+            .context("build GitHub request")?;
         self.execute(req)
     }
 
@@ -444,7 +444,7 @@ impl Github {
         B: Serialize,
         R: DeserializeOwned + ?Sized,
     {
-        let body = serde_json::to_vec(&body).context("encode Github request body")?;
+        let body = serde_json::to_vec(&body).context("encode GitHub request body")?;
         let req = self.build_request(path, Method::POST, Some(body))?;
         self.execute(req)
     }
@@ -459,24 +459,24 @@ impl Github {
         T: DeserializeOwned + ?Sized,
     {
         let resp = self.execute_resp(req)?;
-        let data = resp.bytes().context("read Github response body")?;
-        serde_json::from_slice(&data).context("decode Github response data")
+        let data = resp.bytes().context("read GitHub response body")?;
+        serde_json::from_slice(&data).context("decode GitHub response data")
     }
 
     fn execute_resp(&self, req: Request) -> Result<Response> {
-        let resp = self.client.execute(req).context("Github http request")?;
+        let resp = self.client.execute(req).context("GitHub http request")?;
         let ok = resp.status().is_success();
         if ok {
             return Ok(resp);
         }
 
-        let data = resp.bytes().context("read Github response body")?;
+        let data = resp.bytes().context("read GitHub response body")?;
         match serde_json::from_slice::<Error>(&data) {
-            Ok(err) => bail!("Github api error: {}", err.message),
+            Ok(err) => bail!("GitHub api error: {}", err.message),
             Err(_err) => bail!(
                 "unknown GitHub api error: {}",
                 String::from_utf8(data.to_vec())
-                    .context("decode Github response to UTF-8 string")?
+                    .context("decode GitHub response to UTF-8 string")?
             ),
         }
     }
