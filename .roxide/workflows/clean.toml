@@ -1,0 +1,3 @@
+[[steps]]
+name = "Remove old build"
+run = "rm -rf ./target"
