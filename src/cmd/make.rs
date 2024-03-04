@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::fs;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 
 use crate::batch::Task;
@@ -11,11 +10,11 @@ use crate::repo::database::Database;
 use crate::repo::Repo;
 use crate::workflow::Workflow;
 
-/// Run make workflow for current repository (.roxmake.toml)
+/// Run workflow for current repository (.roxide/workflows)
 #[derive(Args)]
 pub struct MakeArgs {
-    /// The workflow name, define in '.roxmake.toml'
-    #[clap(default_value = "default")]
+    /// The workflow name, defines in '.roxide/workflows/*.toml'
+    #[clap(default_value = "all")]
     name: String,
 }
 
@@ -32,14 +31,9 @@ impl Run for MakeArgs {
 }
 
 impl MakeArgs {
-    const WORKFLOW_FILE_NAME: &'static str = ".roxmake.toml";
-
     fn load_workflow_cfg(cfg: &Config, repo: &Repo) -> Result<HashMap<String, WorkflowConfig>> {
-        let path = repo.get_path(cfg).join(Self::WORKFLOW_FILE_NAME);
-        let data = fs::read(path)
-            .with_context(|| format!("read roxmake file '{}'", Self::WORKFLOW_FILE_NAME))?;
-        let toml_str = String::from_utf8_lossy(&data);
-        toml::from_str(&toml_str).context("parse roxmake toml")
+        let path = repo.get_path(cfg).join(".roxide").join("workflows");
+        Config::load_workflows(&path)
     }
 
     pub fn completion() -> Completion {

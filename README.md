@@ -24,9 +24,11 @@ make install
 
 ## Config
 
-Please save config file to `$HOME/.config/roxide.toml`, or you can use command `roxide config` to create and edit config file directly.
+All the config files is stored in `~/.config/roxide` directory.
 
-See: [config.toml](config/config.toml).
+- The basic config file is: `~/.config/roxide/config.toml`. Example: [config.toml](config/config.toml).
+- The remotes config directory is: `~/.config/roxide/remotes`. Example: [remotes/github.toml](config/remotes/github.toml).
+- The workflows config directory is: `~/.config/roxide/workflows`. Example: [workflows/go-module.toml](config/workflows/go-module.toml).
 
 ## Shell Support
 

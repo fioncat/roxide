@@ -23,15 +23,12 @@ impl Run for VersionArgs {
         eprintln!("Commit SHA:   {}", env!("ROXIDE_SHA"));
         eprintln!("Build time:   {}", env!("VERGEN_BUILD_TIMESTAMP"));
 
-        let cfg_path = match Config::get_path()? {
-            Some(path) => format!("{}", path.display()),
-            None => "N/A".to_string(),
-        };
+        let cfg_path = Config::get_path()?;
         let meta_dir = format!("{}", cfg.get_meta_dir().display());
         let workspace_dir = format!("{}", cfg.get_workspace_dir().display());
 
         println!();
-        println!("Config path: {cfg_path}");
+        println!("Config path: {}", cfg_path.display());
         println!("Meta path:   {meta_dir}");
         println!("Workspace:   {workspace_dir}");
 
