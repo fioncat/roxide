@@ -1,0 +1,11 @@
+include = ["build"]
+
+[[steps]]
+name = "Install for linux"
+os = "linux"
+run = "cp -f ./target/x86_64-unknown-linux-gnu/release/roxide ~/.cargo/bin"
+
+[[steps]]
+name = "Install for mac"
+os = "macos"
+run = "cp -f ./target/release/roxide ~/.cargo/bin"

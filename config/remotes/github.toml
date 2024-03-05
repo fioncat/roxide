@@ -1,0 +1,81 @@
+# The clone domain, for Github, is "github.com". If your remote Git repository
+# is self-built, this is a private domain, such as "git.my.domain.com".
+#
+# If clone is not empty, all repo will be added to the workspace in the
+# way of `git clone`. You need to create repo in the remote.
+# If clone is empty, it means the remote is local. Repo is created locally
+# via `mkdir`.
+#
+# The format of the clone url is:
+# - https: `https://{clone_domain}/{repo_owner}/{repo_name}.git`
+# - ssh: `git@{clone_domain}:{repo_owner}/{repo_name}.git`
+clone = "github.com"
+
+
+# User name, optional, if not empty, will execute the following command for
+# each repo: `git config user.name {name}`
+user = ""
+# User email, optional, if not empty, will execute the following command for
+# each repo: `git config user.email {name}`
+email = ""
+
+# If true, will use ssh protocol to clone repo, else, use https.
+ssh = false
+
+# For new or cloned repositories, add the following labels.
+labels = []
+
+# The remote provider, If not empty, roxide will use remote api to enhance
+# some capabilities, such as searching repos from remote.
+#
+# Currently only `github` and `gitlab` are supported. If your remote is of
+# these two types, it is strongly recommended to enable it, and it is
+# recommended to use it with `token` to complete the authentication.
+provider = "github"
+
+# Uses with `provider` to authenticate when calling api.
+#
+# For Github, see: https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#authenticating-with-a-personal-access-token
+# For Gitlab, see: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
+#
+# You can fill in environment variables here, and they will be expanded when
+# used.
+token = ""
+
+# In order to speed up the response, after accessing the remote api, the
+# data will be cached, which indicates the cache expiration time, in hours.
+# Cache data will be stored under `{metadir}/cache`.
+#
+# If you wish to disable caching, set this value to 0.
+#
+# You can also add the `-f` parameter when executing the command to force
+# roxide not to use the cache. This is useful if you know for sure that the
+# remote information has been updated.
+cache_hours = 24
+
+# The list limit when perform searching.
+list_limit = 200
+
+# The timeout seconds when requesting remote api.
+api_timeout = 10
+
+# API domain, only useful for Gitlab. If your Git remote is self-built, it
+# should be set to your self-built domain host.
+api_domain = ""
+
+# Owner configuration. Some configurations will override remote's.
+[owners.fioncat]
+# Alias the remote owner to another name.
+alias = ""
+
+# For new or cloned repositories, add the following labels.
+labels = []
+
+# Alias the remote repository to other names.
+repo_alias = {}
+
+# If not empty, override remote's ssh.
+ssh = true
+
+# After cloning or creating a repo, perform some additional workflows.
+on_create = []

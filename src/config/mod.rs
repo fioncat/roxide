@@ -2,17 +2,18 @@ pub mod defaults;
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{env, fs, io};
 
 use anyhow::{bail, Context, Result};
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use crate::utils;
 
 /// The basic configuration, defining some global behaviors of roxide.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     /// The working directory, where all repo will be stored.
     #[serde(default = "defaults::workspace")]
@@ -32,16 +33,16 @@ pub struct Config {
     #[serde(default = "defaults::keyword_expire")]
     pub keyword_expire: u64,
 
-    /// The remotes' config.
-    #[serde(default = "defaults::empty_map")]
-    pub remotes: HashMap<String, RemoteConfig>,
-
     /// The tag release rule.
     #[serde(default = "defaults::release")]
     pub release: HashMap<String, String>,
 
+    /// The remotes' config.
+    #[serde(skip)]
+    pub remotes: HashMap<String, RemoteConfig>,
+
     /// Workflow can execute some pre-defined scripts on the repo.
-    #[serde(default = "defaults::empty_map")]
+    #[serde(skip)]
     pub workflows: HashMap<String, WorkflowConfig>,
 
     #[serde(skip)]
@@ -55,9 +56,12 @@ pub struct Config {
 
     #[serde(skip)]
     meta_path: Option<PathBuf>,
+
+    #[serde(skip)]
+    pub is_default: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct Docker {
     #[serde(default = "defaults::docker_name")]
     pub name: String,
@@ -69,7 +73,7 @@ pub struct Docker {
     pub shell: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowConfig {
     #[serde(default = "defaults::empty_vec")]
     pub env: Vec<WorkflowEnv>,
@@ -81,7 +85,7 @@ pub struct WorkflowConfig {
     pub include: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowEnv {
     pub name: String,
 
@@ -90,7 +94,7 @@ pub struct WorkflowEnv {
     pub from_repo: Option<WorkflowFromRepo>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub enum WorkflowFromRepo {
     #[serde(rename = "name")]
     Name,
@@ -106,7 +110,7 @@ pub enum WorkflowFromRepo {
 
 /// Indicates an execution step in Workflow, which can be writing a file or
 /// executing a shell command.
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowStep {
     /// If the Step is to write to a file, then name is the file name. If Step
     /// is an execution command, name is the name of the step. (required)
@@ -148,13 +152,13 @@ pub struct WorkflowStep {
     pub capture_output: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowSetEnv {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowDockerBuild {
     pub image: String,
 
@@ -162,7 +166,7 @@ pub struct WorkflowDockerBuild {
     pub file: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub enum WorkflowOS {
     #[serde(rename = "linux")]
     Linux,
@@ -170,7 +174,7 @@ pub enum WorkflowOS {
     Macos,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WorkflowCondition {
     pub env: Option<String>,
 
@@ -183,7 +187,7 @@ pub struct WorkflowCondition {
 }
 
 /// RemoteConfig is a Git remote repository. Typical examples are GitHub and Gitlab.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct RemoteConfig {
     /// The clone domain, for GitHub, is "github.com". If your remote Git repository
     /// is self-built, this is a private domain, such as "git.my.domain.com".
@@ -270,7 +274,7 @@ pub struct RemoteConfig {
 }
 
 /// Owner configuration. Some configurations will override remote's.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct OwnerConfig {
     /// Alias the remote owner to another name.
     pub alias: Option<String>,
@@ -290,7 +294,7 @@ pub struct OwnerConfig {
 }
 
 /// The remote api provider type.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub enum ProviderType {
     #[serde(rename = "github")]
     Github,
@@ -395,53 +399,100 @@ impl RemoteConfig {
 }
 
 impl Config {
-    pub fn get_raw_path() -> Result<PathBuf> {
+    pub fn get_path() -> Result<PathBuf> {
         match env::var_os("ROXIDE_CONFIG") {
             Some(path) => Ok(PathBuf::from(path)),
             None => {
                 let home = utils::get_home_dir()?;
-                Ok(home.join(".config").join("roxide.toml"))
+                Ok(home.join(".config").join("roxide"))
             }
-        }
-    }
-
-    pub fn get_path() -> Result<Option<PathBuf>> {
-        let path = Self::get_raw_path()?;
-
-        match fs::metadata(&path) {
-            Ok(meta) => {
-                if meta.is_dir() {
-                    bail!(
-                        "config file '{}' from env is a directory, require file",
-                        path.display()
-                    );
-                }
-                Ok(Some(path))
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err).with_context(|| format!("read config file '{}'", path.display())),
         }
     }
 
     pub fn load() -> Result<Config> {
-        let path = Self::get_path()?;
-        let cfg = match path.as_ref() {
-            Some(path) => Self::read(path)?,
-            None => Self::default()?,
+        let root = Self::get_path()?;
+
+        let path = root.join("config.toml");
+        let mut cfg: Config = match fs::read(path) {
+            Ok(data) => {
+                let toml_str = String::from_utf8_lossy(&data);
+                toml::from_str(&toml_str).context("parse config file toml")?
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default(),
+            Err(err) => return Err(err).context("read config file"),
         };
-        Ok(cfg)
-    }
 
-    pub fn read(path: &PathBuf) -> Result<Config> {
-        let data = fs::read(path).context("read config file")?;
-        let toml_str = String::from_utf8_lossy(&data);
-        let mut cfg: Config = toml::from_str(&toml_str).context("parse config file toml")?;
+        let remotes_dir = root.join("remotes");
+        let remotes = Self::load_remotes(&remotes_dir)?;
+
+        let workflows_dir = root.join("workflows");
+        let workflows = Self::load_workflows(&workflows_dir)?;
+
+        cfg.remotes = remotes;
+        cfg.workflows = workflows;
+
         cfg.validate().context("validate config content")?;
+
         Ok(cfg)
     }
 
-    pub fn default() -> Result<Config> {
-        let mut cfg = Config {
+    pub fn load_remotes(dir: &Path) -> Result<HashMap<String, RemoteConfig>> {
+        Self::load_config_items(dir)
+    }
+
+    pub fn load_workflows(dir: &Path) -> Result<HashMap<String, WorkflowConfig>> {
+        Self::load_config_items(dir)
+    }
+
+    fn load_config_items<T: DeserializeOwned>(dir: &Path) -> Result<HashMap<String, T>> {
+        let dir_read = match fs::read_dir(dir) {
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(HashMap::new()),
+            Err(err) => {
+                return Err(err).with_context(|| format!("read config dir '{}'", dir.display()))
+            }
+        };
+
+        let mut items: HashMap<String, T> = HashMap::new();
+        for entry in dir_read {
+            let entry = entry.context("read entry from config dir")?;
+
+            let name = entry.file_name();
+            let name = name.to_str().unwrap_or_default();
+            if !name.ends_with(".toml") {
+                continue;
+            }
+
+            let path = PathBuf::from(dir).join(name);
+
+            let meta = entry
+                .metadata()
+                .with_context(|| format!("get metadata for config item '{}'", path.display()))?;
+            if meta.is_dir() {
+                continue;
+            }
+
+            let data = fs::read(&path)
+                .with_context(|| format!("read config item '{}'", path.display()))?;
+            let data = String::from_utf8(data).with_context(|| {
+                format!(
+                    "config file '{}' contains invalid utf-8 content",
+                    path.display()
+                )
+            })?;
+            let item: T = toml::from_str(&data)
+                .with_context(|| format!("parse config file '{}' toml", path.display()))?;
+
+            let name = name.strip_suffix(".toml").unwrap();
+
+            items.insert(name.to_string(), item);
+        }
+
+        Ok(items)
+    }
+
+    pub fn default() -> Config {
+        Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
             docker: defaults::docker(),
@@ -454,16 +505,8 @@ impl Config {
             now: None,
             workspace_path: None,
             meta_path: None,
-        };
-        cfg.validate().context("validate config content")?;
-        Ok(cfg)
-    }
-
-    #[cfg(test)]
-    pub fn read_data(str: &str) -> Result<Config> {
-        let mut cfg: Config = toml::from_str(str).context("parse config toml")?;
-        cfg.validate().context("validate config content")?;
-        Ok(cfg)
+            is_default: true,
+        }
     }
 
     pub fn validate(&mut self) -> Result<()> {
@@ -660,25 +703,30 @@ metadir = "${PWD}/_test/{NAME}/meta"
 
 cmd = "rox"
 
-[remotes]
+"#;
 
-[remotes.github]
+    const TEST_REMOTE_GITHUB_TOML: &str = r#"
 clone = "github.com"
 user = "fioncat"
 email = "lazycat7706@gmail.com"
 ssh = false
 labels = ["sync"]
 provider = "github"
-[remotes.github.owners.fioncat]
+
+[owners.fioncat]
 labels = ["pin"]
 ssh = true
-repo_alias = { spacenvim = "vim", roxide = "rox" }
-[remotes.github.owners.kubernetes]
+repo_alias.spacenvim = "vim"
+repo_alias.roxide = "rox"
+
+[owners.kubernetes]
 alias = "k8s"
 labels = ["huge"]
-repo_alias = { kubernetes = "k8s" }
+repo_alias.kubernetes = "k8s"
 
-[remotes.gitlab]
+"#;
+
+    const TEST_REMOTE_GITLAB_TOML: &str = r#"
 clone = "gitlab.com"
 user = "test"
 email = "test-email@test.com"
@@ -689,24 +737,28 @@ cache_hours = 100
 list_limit = 500
 api_timeout = 30
 api_domain = "gitlab.com"
-[remotes.gitlab.owners.test]
+
+[owners.test]
 labels = ["sync", "pin"]
 
-[remotes.test]
-[remotes.test.owners.golang]
+"#;
+
+    const TEST_REMOTE_TEST_TOML: &str = r#"
+[owners.golang]
 on_create = ["golang"]
-[remotes.test.owners.rust]
+
+[owners.rust]
 on_create = ["rust"]
+"#;
 
-[workflows]
-
-[workflows.golang]
+    const TEST_WORKFLOW_GOLANG_TOML: &str = r#"
 env = [
     {name = "MODULE_DOMAIN", from_repo = "clone"},
     {name = "MODULE_OWNER", from_repo = "owner"},
     {name = "MODULE_NAME", from_repo = "name"}
 ]
-[[workflows.golang.steps]]
+
+[[steps]]
 name = "main.go"
 file = '''
 package main
@@ -717,17 +769,22 @@ func main() {
 \tfmt.Println("hello, world!")
 }
 '''
-[[workflows.golang.steps]]
+
+[[steps]]
 name = "Init go module"
 run = "go mod init ${MODULE_DOMAIN}/${MODULE_OWNER}/${MODULE_NAME}"
 
-[workflows.rust]
-[[workflows.rust.steps]]
+"#;
+
+    const TEST_WORKFLOW_RUST_TOML: &str = r#"
+[[steps]]
 name = "Init cargo"
 run = "cargo init"
 
-[workflows.build-go]
-[[workflows.build-go.steps]]
+"#;
+
+    const TEST_WORKFLOW_BUILD_GO_TOML: &str = r#"
+[[steps]]
 name = "Build go"
 image = "golang:latest"
 run = "go build ./..."
@@ -739,8 +796,34 @@ env = [
 
     pub fn load_test_config(name: &str) -> Config {
         let toml_str = TEST_CONFIG_TOML.replace("{NAME}", name);
-        let cfg = Config::read_data(toml_str.as_str()).unwrap();
+        let mut cfg: Config = parse_toml(&toml_str);
+
+        let mut remotes: HashMap<String, RemoteConfig> = HashMap::new();
+        remotes.insert(String::from("github"), parse_toml(TEST_REMOTE_GITHUB_TOML));
+        remotes.insert(String::from("gitlab"), parse_toml(TEST_REMOTE_GITLAB_TOML));
+        remotes.insert(String::from("test"), parse_toml(TEST_REMOTE_TEST_TOML));
+
+        let mut workflows: HashMap<String, WorkflowConfig> = HashMap::new();
+        workflows.insert(
+            String::from("golang"),
+            parse_toml(TEST_WORKFLOW_GOLANG_TOML),
+        );
+        workflows.insert(String::from("rust"), parse_toml(TEST_WORKFLOW_RUST_TOML));
+        workflows.insert(
+            String::from("build-go"),
+            parse_toml(TEST_WORKFLOW_BUILD_GO_TOML),
+        );
+
+        cfg.remotes = remotes;
+        cfg.workflows = workflows;
+
+        cfg.validate().unwrap();
+
         cfg
+    }
+
+    fn parse_toml<T: DeserializeOwned>(str: &str) -> T {
+        toml::from_str(str).unwrap()
     }
 
     #[test]

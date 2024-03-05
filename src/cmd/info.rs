@@ -90,6 +90,9 @@ impl Display for Info {
         writeln!(f, "{}", style("[Config]").blue().bold())?;
         writeln!(f, "\tpath: {}", self.config.path)?;
         writeln!(f, "\tmeta: {}", self.config.meta_path)?;
+        writeln!(f, "\tis_default: {}", self.config.is_default)?;
+        writeln!(f, "\tremotes: {}", self.config.remotes)?;
+        writeln!(f, "\tworkflows: {}", self.config.workflows)?;
         writeln!(f)?;
 
         if !self.commands.is_empty() {
@@ -153,15 +156,25 @@ impl Display for Info {
 struct ConfigInfo {
     path: String,
     meta_path: String,
+
+    is_default: bool,
+
+    remotes: usize,
+    workflows: usize,
 }
 
 impl ConfigInfo {
     fn build(cfg: &Config) -> Result<Self> {
-        let path = Config::get_path()?
-            .map(|path| format!("{}", path.display()))
-            .unwrap_or(String::from("N/A"));
+        let path = Config::get_path()?;
+        let path = format!("{}", path.display());
         let meta_path = format!("{}", cfg.get_meta_dir().display());
-        Ok(ConfigInfo { path, meta_path })
+        Ok(ConfigInfo {
+            path,
+            meta_path,
+            is_default: cfg.is_default,
+            remotes: cfg.remotes.len(),
+            workflows: cfg.workflows.len(),
+        })
     }
 }
 
