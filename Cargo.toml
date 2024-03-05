@@ -1,6 +1,6 @@
 [package]
 name = "roxide"
-version = "0.13.1"
+version = "0.14.0"
 edition = "2021"
 build = "build.rs"
 license = "MIT"
@@ -21,7 +21,7 @@ openssl-vendored = ["reqwest/native-tls-vendored"]
 [dependencies]
 aes-gcm = "0.10.3"
 anyhow = "1.0.80"
-base64 = "0.21.7"
+base64 = "0.22.0"
 bincode = "1.3.3"
 chrono = "0.4.34"
 clap = { version = "4.5.1", features = ["derive"] }
