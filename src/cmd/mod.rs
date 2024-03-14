@@ -5,6 +5,7 @@ mod check;
 mod complete;
 mod config;
 mod copy;
+mod current;
 mod detach;
 mod gc;
 mod get;
@@ -58,6 +59,7 @@ pub enum Commands {
     Complete(complete::CompleteArgs),
     Config(config::ConfigArgs),
     Copy(copy::CopyArgs),
+    Current(current::CurrentArgs),
     Detach(detach::DetachArgs),
     Gc(gc::GcArgs),
     Get(get::GetArgs),
@@ -121,6 +123,7 @@ impl Run for App {
             Commands::Label(args) => args.run(cfg),
             Commands::Config(args) => args.run(cfg),
             Commands::Copy(args) => args.run(cfg),
+            Commands::Current(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
             Commands::Gc(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),

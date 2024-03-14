@@ -323,9 +323,10 @@ impl Database<'_> {
 
     /// Return the repository currently being accessed.
     pub fn get_current(&self) -> Option<Repo> {
+        let current_dir = self.cfg.get_current_dir();
         let repos = self.scan("", "", |remote, owner, name, bucket| {
             let repo_path = get_path(self.cfg, &bucket.path, remote, owner, name);
-            if repo_path.eq(self.cfg.get_current_dir()) {
+            if current_dir.starts_with(repo_path) {
                 return None;
             }
             Some(false)
