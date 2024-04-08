@@ -186,7 +186,10 @@ mod keywords_tests {
         }
         keywords.save().unwrap();
 
-        let expects = vec![("", vec!["vim", "rox"]), ("test", vec!["rust"])];
+        let expects = vec![
+            ("", vec!["vim", "rox", "go"]),
+            ("test", vec!["rust", "hello"]),
+        ];
         for (remote, expect) in expects {
             let keywords = Keywords::load(&cfg).unwrap();
             let keywords = keywords.complete(remote);
