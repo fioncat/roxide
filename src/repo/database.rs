@@ -244,6 +244,10 @@ impl Database<'_> {
         K: AsRef<str>,
     {
         let repos = self.scan(remote, "", |_remote, _owner, name, _bucket| {
+            if name == keyword.as_ref() {
+                // Full match has the highest priority, no matter what the score is.
+                return None;
+            }
             Some(name.contains(keyword.as_ref()))
         })?;
         self.get_max_score(repos)
@@ -1659,6 +1663,8 @@ pub mod database_tests {
             ),
             new_test_repo(cfg, "gitlab", "my-owner-01", "my-repo-03", None),
             new_test_repo(cfg, "gitlab", "my-owner-02", "my-repo-01", None),
+            new_test_repo(cfg, "github", "jason", "ufo-build", None),
+            new_test_repo(cfg, "github", "jason", "ufo", None),
         ]
     }
 
@@ -2093,6 +2099,13 @@ mod select_tests {
                 "gitlab".to_string(),
                 "03".to_string(),
                 "gitlab:my-owner-01/my-repo-03".to_string(),
+            ),
+            (
+                // full match has higher priority, so ufo should be returned instead of
+                // ufo-build.
+                "github".to_string(),
+                "ufo".to_string(),
+                "github:jason/ufo".to_string(),
             ),
         ];
 
