@@ -27,7 +27,7 @@ struct Record {
 }
 
 impl Keywords {
-    const COMPLETE_ACCESSED: u64 = 3;
+    const COMPLETE_ACCESSED: u64 = 1;
 
     pub fn load(cfg: &Config) -> Result<Keywords> {
         let path = cfg.get_meta_dir().join("keywords");
