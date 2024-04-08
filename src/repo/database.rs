@@ -1039,7 +1039,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         }
 
         if self.query.is_empty() {
-            if self.head.starts_with('@') {
+            if Self::is_query_latest(self.head) {
                 return self.one_from_latest(db, "", "", self.head);
             }
 
@@ -1244,7 +1244,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         let remote = self.head;
         let remote_cfg = db.cfg.must_get_remote(remote)?;
 
-        if self.query.starts_with('@') {
+        if Self::is_query_latest(self.query) {
             return self.one_from_latest(db, remote, "", self.query);
         }
 
@@ -1299,7 +1299,7 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
             };
         }
 
-        if name.starts_with('@') {
+        if Self::is_query_latest(&name) {
             return self.one_from_latest(db, remote, &owner, &name);
         }
 
@@ -1334,9 +1334,9 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         self.get_or_create_repo(db, remote_cfg.get_name(), &owner, &name)
     }
 
-    /// Select one from the recently accessed repositories. The syntax is "@n," where `n`
-    /// indicates the number of repositories to choose from, with a default value of
-    /// [`Selector::DEFAULT_SELECT_LATEST_COUNT`].
+    /// Select one from the recently accessed repositories. The syntax is "-" or "@[n]"
+    /// where `n` indicates the number of repositories to choose from, with a default
+    /// value of [`Selector::DEFAULT_SELECT_LATEST_COUNT`].
     fn one_from_latest<'b>(
         &self,
         db: &'b Database,
@@ -1344,16 +1344,20 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
         owner: &str,
         query: &str,
     ) -> Result<(Repo<'b>, bool)> {
-        let n = query.strip_prefix('@').unwrap();
-        let n: u32 = if n.is_empty() {
-            Self::DEFAULT_SELECT_LATEST_COUNT
-        } else {
-            n.parse().with_context(|| {
-                format!(
-                    "invalid select latest '{}', expect '@[n]' which n is a number",
-                    query
-                )
-            })?
+        let n = match query.strip_prefix('@') {
+            Some(n) => {
+                if n.is_empty() {
+                    Self::DEFAULT_SELECT_LATEST_COUNT
+                } else {
+                    n.parse().with_context(|| {
+                        format!(
+                            "invalid select latest '{}', expect '@[n]' which n is a number",
+                            query
+                        )
+                    })?
+                }
+            }
+            None => Self::DEFAULT_SELECT_LATEST_COUNT,
         };
 
         let (mut repos, level) = if remote.is_empty() {
@@ -1394,6 +1398,11 @@ impl<'a, T: TerminalHelper, P: ProviderBuilder> Selector<'_, T, P> {
 
         let repo = repos.remove(idx);
         Ok((repo, true))
+    }
+
+    #[inline]
+    fn is_query_latest(query: impl AsRef<str>) -> bool {
+        query.as_ref() == "-" || query.as_ref().starts_with('@')
     }
 
     /// Creating or retrieving a repository, the second return value indicates
