@@ -1680,6 +1680,7 @@ pub mod database_tests {
             ),
             new_test_repo(cfg, "gitlab", "my-owner-01", "my-repo-03", None),
             new_test_repo(cfg, "gitlab", "my-owner-02", "my-repo-01", None),
+            new_test_repo(cfg, "github", "jason111", "ufo-build", None),
             new_test_repo(cfg, "github", "jason222", "ufo", None),
         ]
     }
