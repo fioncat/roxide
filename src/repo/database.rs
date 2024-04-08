@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -243,13 +244,29 @@ impl Database<'_> {
         R: AsRef<str>,
         K: AsRef<str>,
     {
+        let full_match = RefCell::new(false);
+
         let repos = self.scan(remote, "", |_remote, _owner, name, _bucket| {
+            if *full_match.borrow() {
+                return Some(name == keyword.as_ref());
+            }
             if name == keyword.as_ref() {
-                // Full match has the highest priority, no matter what the score is.
-                return None;
+                *full_match.borrow_mut() = true;
+                return Some(true);
             }
             Some(name.contains(keyword.as_ref()))
         })?;
+
+        if *full_match.borrow() {
+            // The full match has the highest priority
+            let repos = repos
+                .into_iter()
+                .filter(|repo| repo.name == keyword.as_ref())
+                .collect();
+
+            return self.get_max_score(repos);
+        }
+
         self.get_max_score(repos)
     }
 
@@ -1663,8 +1680,7 @@ pub mod database_tests {
             ),
             new_test_repo(cfg, "gitlab", "my-owner-01", "my-repo-03", None),
             new_test_repo(cfg, "gitlab", "my-owner-02", "my-repo-01", None),
-            new_test_repo(cfg, "github", "jason", "ufo-build", None),
-            new_test_repo(cfg, "github", "jason", "ufo", None),
+            new_test_repo(cfg, "github", "jason222", "ufo", None),
         ]
     }
 
@@ -2105,7 +2121,7 @@ mod select_tests {
                 // ufo-build.
                 "github".to_string(),
                 "ufo".to_string(),
-                "github:jason/ufo".to_string(),
+                "github:jason222/ufo".to_string(),
             ),
         ];
 
