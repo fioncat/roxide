@@ -100,17 +100,14 @@ impl From<MergeOptions> for PullRequestOptions {
             source,
             target,
         } = merge;
+        let head_search = format!("{owner}/{name}:{source}");
 
-        let (head, head_search, owner, name) = match upstream {
+        let (head, owner, name) = match upstream {
             Some(upstream) => {
                 let head = format!("{owner}:{source}");
-                let head_search = format!("{owner}/{name}:{source}");
-                (head, head_search, upstream.owner, upstream.name)
+                (head, upstream.owner, upstream.name)
             }
-            None => {
-                let head_search = source.clone();
-                (source, head_search, owner, name)
-            }
+            None => (source, owner, name),
         };
         PullRequestOptions {
             owner,
