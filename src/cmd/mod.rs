@@ -2,12 +2,12 @@ mod action;
 mod attach;
 mod branch;
 mod check;
+mod clean;
 mod complete;
 mod config;
 mod copy;
 mod current;
 mod detach;
-mod gc;
 mod get;
 mod home;
 mod import;
@@ -56,17 +56,18 @@ pub enum Commands {
     Attach(attach::AttachArgs),
     Branch(branch::BranchArgs),
     Check(check::CheckArgs),
+    Clean(clean::CleanArgs),
     Complete(complete::CompleteArgs),
     Config(config::ConfigArgs),
     Copy(copy::CopyArgs),
     Current(current::CurrentArgs),
     Detach(detach::DetachArgs),
-    Gc(gc::GcArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
     Import(import::ImportArgs),
     Info(info::InfoArgs),
     Init(init::InitArgs),
+    Label(label::LabelArgs),
     Make(make::MakeArgs),
     Merge(merge::MergeArgs),
     Open(open::OpenArgs),
@@ -74,7 +75,6 @@ pub enum Commands {
     Recover(recover::RecoverArgs),
     Remove(remove::RemoveArgs),
     Reset(reset::ResetArgs),
-    Label(label::LabelArgs),
     Run(run::RunArgs),
     Secret(secret::SecretArgs),
     Snapshot(snapshot::SnapshotArgs),
@@ -119,18 +119,18 @@ impl Run for App {
             Commands::Attach(args) => args.run(cfg),
             Commands::Branch(args) => args.run(cfg),
             Commands::Check(args) => args.run(cfg),
+            Commands::Clean(args) => args.run(cfg),
             Commands::Complete(args) => args.run(cfg),
-            Commands::Label(args) => args.run(cfg),
             Commands::Config(args) => args.run(cfg),
             Commands::Copy(args) => args.run(cfg),
             Commands::Current(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
-            Commands::Gc(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),
             Commands::Import(args) => args.run(cfg),
             Commands::Info(args) => args.run(cfg),
             Commands::Init(args) => args.run(cfg),
+            Commands::Label(args) => args.run(cfg),
             Commands::Make(args) => args.run(cfg),
             Commands::Merge(args) => args.run(cfg),
             Commands::Open(args) => args.run(cfg),
