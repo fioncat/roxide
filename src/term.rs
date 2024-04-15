@@ -702,7 +702,6 @@ impl Cmd {
         let mut stdout = child.stdout.take();
         let mut stderr = child.stderr.take();
 
-        let status = child.wait().context("Wait command done")?;
         let stdout = match stdout.as_mut() {
             Some(stdout) => {
                 let mut out = String::new();
@@ -724,6 +723,7 @@ impl Cmd {
             None => String::new(),
         };
 
+        let status = child.wait().context("Wait command done")?;
         Ok(CmdResult {
             code: status.code(),
             display: result_display,

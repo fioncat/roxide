@@ -1,4 +1,5 @@
 pub mod database;
+pub mod detect;
 pub mod keywords;
 pub mod snapshot;
 

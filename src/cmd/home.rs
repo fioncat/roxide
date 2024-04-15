@@ -10,6 +10,7 @@ use crate::batch::Task;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
+use crate::repo::detect::Detect;
 use crate::repo::Repo;
 use crate::term::Cmd;
 use crate::workflow::Workflow;
@@ -73,6 +74,13 @@ impl Run for HomeArgs {
             Err(err) => {
                 return Err(err).with_context(|| format!("read repo directory {}", path.display()));
             }
+        }
+
+        if cfg.auto_detect {
+            let detect = Detect::new();
+            detect
+                .update_labels(cfg, &mut repo)
+                .context("auto detect labels for repo")?;
         }
 
         println!("{}", path.display());
