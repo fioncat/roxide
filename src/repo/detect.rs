@@ -188,6 +188,40 @@ impl Detect {
         Ok(())
     }
 
+    pub fn sort_labels(&self, repo: &Repo) -> Option<Vec<String>> {
+        let raw_labels = repo.labels.as_ref()?;
+
+        let mut user_labels = Vec::with_capacity(raw_labels.len());
+        let mut ext_labels = Vec::with_capacity(raw_labels.len());
+        let mut module_labels = Vec::with_capacity(raw_labels.len());
+        for label in raw_labels.iter() {
+            if self.label_extensions.contains_key(label.as_ref()) {
+                ext_labels.push(label.to_string());
+                continue;
+            }
+            if self.modules.contains_key(label.as_ref()) {
+                module_labels.push(label.to_string());
+                continue;
+            }
+            user_labels.push(label.to_string());
+        }
+
+        user_labels.sort_unstable();
+        ext_labels.sort_unstable();
+        module_labels.sort_unstable();
+
+        user_labels.extend(ext_labels);
+        user_labels.extend(module_labels);
+
+        Some(user_labels)
+    }
+
+    #[inline]
+    pub fn format_labels(&self, repo: &Repo) -> Option<String> {
+        let labels = self.sort_labels(repo)?;
+        Some(labels.join(","))
+    }
+
     fn scan_git_extensions(&self, path: &Path) -> Result<HashSet<String>> {
         let path = format!("{}", path.display());
         let items = Cmd::git(&["-C", path.as_str(), "ls-files"])

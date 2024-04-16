@@ -121,7 +121,7 @@ impl HomeArgs {
         let url = repo.clone_url();
         let path = format!("{}", path.display());
         Cmd::git(&["clone", url.as_str(), path.as_str()])
-            .with_display(format!("Clone {}", repo.name_with_labels()))
+            .with_display(format!("Clone {}", repo.name_with_remote()))
             .execute()?;
 
         if let Some(user) = &repo.remote_cfg.user {
