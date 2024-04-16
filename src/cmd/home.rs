@@ -10,6 +10,7 @@ use crate::batch::Task;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
+use crate::repo::detect::Detect;
 use crate::repo::Repo;
 use crate::term::Cmd;
 use crate::workflow::Workflow;
@@ -75,6 +76,13 @@ impl Run for HomeArgs {
             }
         }
 
+        if cfg.auto_detect {
+            let detect = Detect::new();
+            detect
+                .update_labels(cfg, &mut repo)
+                .context("auto detect labels for repo")?;
+        }
+
         println!("{}", path.display());
 
         repo.append_labels(append_labels);
@@ -113,7 +121,7 @@ impl HomeArgs {
         let url = repo.clone_url();
         let path = format!("{}", path.display());
         Cmd::git(&["clone", url.as_str(), path.as_str()])
-            .with_display(format!("Clone {}", repo.name_with_labels()))
+            .with_display(format!("Clone {}", repo.name_with_remote()))
             .execute()?;
 
         if let Some(user) = &repo.remote_cfg.user {

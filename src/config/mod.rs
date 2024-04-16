@@ -27,6 +27,10 @@ pub struct Config {
     #[serde(default = "defaults::cmd")]
     pub cmd: String,
 
+    /// Auto detect repository labels when accessing it.
+    #[serde(default = "defaults::disable")]
+    pub auto_detect: bool,
+
     #[serde(default = "defaults::docker")]
     pub docker: Docker,
 
@@ -498,6 +502,7 @@ impl Config {
             docker: defaults::docker(),
             keyword_expire: defaults::keyword_expire(),
             cmd: defaults::cmd(),
+            auto_detect: false,
             remotes: HashMap::new(),
             release: defaults::release(),
             workflows: defaults::empty_map(),

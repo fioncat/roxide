@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
 
 use anyhow::Result;
 use clap::Args;
@@ -8,6 +7,7 @@ use serde::Serialize;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
+use crate::repo::detect::Detect;
 use crate::repo::{NameLevel, Repo};
 use crate::term::Table;
 use crate::{term, utils};
@@ -56,21 +56,33 @@ struct RepoInfo<'a> {
     size: u64,
     size_str: String,
 
-    labels: Option<HashSet<Cow<'a, str>>>,
+    labels: Option<Vec<String>>,
 }
 
 impl RepoInfo<'_> {
-    fn from_repo<'a>(cfg: &Config, repo: Repo<'a>) -> Result<RepoInfo<'a>> {
+    fn from_repo<'a>(
+        cfg: &Config,
+        repo: Repo<'a>,
+        detect: &Option<Detect>,
+    ) -> Result<RepoInfo<'a>> {
         let workspace = repo.path.is_none();
         let path = repo.get_path(cfg);
         let path = format!("{}", path.display());
         let size = utils::dir_size(repo.get_path(cfg))?;
-        let mut labels: Vec<String> = match repo.labels.as_ref() {
-            Some(labels) => labels.iter().map(|label| label.to_string()).collect(),
-            None => Vec::new(),
+        let labels = match detect {
+            Some(detect) => detect.sort_labels(&repo),
+            None => {
+                let mut labels: Option<Vec<String>> = repo
+                    .labels
+                    .as_ref()
+                    .map(|labels| labels.iter().map(|label| label.to_string()).collect());
+                if let Some(labels) = labels.as_mut() {
+                    labels.sort_unstable();
+                }
+                labels
+            }
         };
         let score = repo.score(cfg);
-        labels.sort();
         Ok(RepoInfo {
             remote: repo.remote,
             owner: repo.owner,
@@ -83,7 +95,7 @@ impl RepoInfo<'_> {
             workspace,
             size,
             size_str: utils::human_bytes(size),
-            labels: repo.labels,
+            labels,
         })
     }
 }
@@ -103,6 +115,12 @@ impl Run for GetArgs {
             selector.many_local(&db)?
         };
 
+        let detect = if cfg.auto_detect {
+            Some(Detect::new())
+        } else {
+            None
+        };
+
         if repos.is_empty() {
             if self.json {
                 println!("{{}}");
@@ -115,7 +133,7 @@ impl Run for GetArgs {
         if self.json {
             let mut infos = Vec::with_capacity(repos.len());
             for repo in repos {
-                infos.push(RepoInfo::from_repo(cfg, repo)?);
+                infos.push(RepoInfo::from_repo(cfg, repo, &detect)?);
             }
             return term::show_json(infos);
         }
@@ -146,9 +164,11 @@ impl Run for GetArgs {
 
         for (idx, repo) in repos.iter().enumerate() {
             let name = repo.to_string(&level);
-            let labels = repo
-                .labels_string()
-                .unwrap_or_else(|| String::from("<none>"));
+            let labels = match detect.as_ref() {
+                Some(detect) => detect.format_labels(repo),
+                None => repo.labels_string(),
+            }
+            .unwrap_or_else(|| String::from("<none>"));
             let access = format!("{}", repo.accessed);
             let last_access = utils::format_since(cfg, repo.last_accessed);
             let score = format!("{}", repo.score(cfg));

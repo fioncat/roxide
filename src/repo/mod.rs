@@ -1,4 +1,5 @@
 pub mod database;
+pub mod detect;
 pub mod keywords;
 pub mod snapshot;
 
@@ -225,6 +226,7 @@ impl Repo<'_> {
     }
 
     /// Show repository with labels, See: [`NameLevel::Labels`].
+    #[cfg(test)]
     pub fn name_with_labels(&self) -> String {
         match self.labels_string() {
             Some(labels) => {

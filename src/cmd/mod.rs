@@ -8,6 +8,7 @@ mod config;
 mod copy;
 mod current;
 mod detach;
+mod detect;
 mod get;
 mod home;
 mod import;
@@ -62,6 +63,7 @@ pub enum Commands {
     Copy(copy::CopyArgs),
     Current(current::CurrentArgs),
     Detach(detach::DetachArgs),
+    Detect(detect::DetectArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
     Import(import::ImportArgs),
@@ -92,6 +94,7 @@ impl Commands {
             "branch" => branch::BranchArgs::completion(),
             "config" => config::ConfigArgs::completion(),
             "copy" => copy::CopyArgs::completion(),
+            "detect" => detect::DetectArgs::completion(),
             "get" => get::GetArgs::completion(),
             "home" => home::HomeArgs::completion(),
             "import" => import::ImportArgs::completion(),
@@ -125,6 +128,7 @@ impl Run for App {
             Commands::Copy(args) => args.run(cfg),
             Commands::Current(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
+            Commands::Detect(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),
             Commands::Import(args) => args.run(cfg),
