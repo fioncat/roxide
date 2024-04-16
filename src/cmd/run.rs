@@ -1,11 +1,12 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Args;
 
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, CompletionResult, Run};
-use crate::config::Config;
+use crate::config::{Config, WorkflowConfig, WorkflowStep};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::workflow::Workflow;
 use crate::{term, utils};
@@ -20,7 +21,7 @@ pub struct RunArgs {
     pub query: Option<String>,
 
     /// Use editor to filter items before running.
-    #[clap(short, long)]
+    #[clap(short = 'E', long)]
     pub edit: bool,
 
     /// Run workflow for current repository.
@@ -28,21 +29,32 @@ pub struct RunArgs {
     pub current: bool,
 
     /// The workflow name to execute.
-    #[clap(short, default_value = "default")]
-    pub name: String,
+    #[clap(short, long)]
+    pub name: Option<String>,
 
     /// Use the labels to filter repository.
     #[clap(short, long)]
     pub labels: Option<String>,
+
+    /// Ignore workflow, execute this command.
+    #[clap(short, long)]
+    pub exec: Option<String>,
 }
 
 impl Run for RunArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
         let db = Database::load(cfg)?;
 
+        if self.name.is_none() && self.exec.is_none() {
+            bail!("name or exec should be provided");
+        }
+
         if self.current {
+            if self.exec.is_some() {
+                bail!("not allowed to use exec in current mode");
+            }
             let repo = db.must_get_current()?;
-            let workflow = Workflow::load(&self.name, cfg, &repo)?;
+            let workflow = Workflow::load(self.name.as_ref().unwrap(), cfg, &repo)?;
             return workflow.run();
         }
 
@@ -63,7 +75,7 @@ impl Run for RunArgs {
 
         let level = Arc::new(level);
         let mut tasks = Vec::with_capacity(repos.len());
-        let workflow_cfg = Arc::new(cfg.get_workflow(&self.name)?.into_owned());
+        let workflow_cfg = Arc::new(self.get_workflow_cfg(cfg)?.into_owned());
 
         for repo in repos {
             let show_name = repo.to_string(&level);
@@ -77,6 +89,33 @@ impl Run for RunArgs {
 }
 
 impl RunArgs {
+    fn get_workflow_cfg<'a>(&self, cfg: &'a Config) -> Result<Cow<'a, WorkflowConfig>> {
+        match self.exec.as_ref() {
+            Some(exec) => Ok(Cow::Owned(WorkflowConfig {
+                env: Vec::new(),
+                include: Vec::new(),
+                steps: vec![WorkflowStep {
+                    name: exec.clone(),
+                    os: None,
+                    condition: Vec::new(),
+                    allow_failure: false,
+                    if_condition: None,
+                    image: None,
+                    ssh: None,
+                    set_env: None,
+                    docker_build: None,
+                    docker_push: None,
+                    work_dir: String::new(),
+                    env: Vec::new(),
+                    file: None,
+                    run: Some(exec.clone()),
+                    capture_output: None,
+                }],
+            })),
+            None => cfg.get_workflow(self.name.as_ref().unwrap()),
+        }
+    }
+
     pub fn completion() -> Completion {
         Completion {
             args: Completion::repo_args,
