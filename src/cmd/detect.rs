@@ -40,7 +40,7 @@ impl Run for DetectArgs {
 
         let detect = Detect::new();
 
-        let mut update_repos = Vec::with_capacity(repos.len());
+        let repos: Vec<_> = repos.into_iter().map(|repo| repo.update()).collect();
         for mut repo in repos {
             detect
                 .update_labels(cfg, &mut repo)
@@ -50,9 +50,6 @@ impl Run for DetectArgs {
                 .format_labels(&repo)
                 .unwrap_or(String::from("<none>"));
             info!("Detect for repo {}: {labels}", repo.to_string(&level));
-            update_repos.push(repo.update());
-        }
-        for repo in update_repos {
             db.upsert(repo);
         }
 
