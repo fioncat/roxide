@@ -55,6 +55,11 @@ fn build_modules() -> HashMap<&'static str, Module> {
             files: Some(vec!["composer.json"]),
             dirs: None,
         },
+        "cmake" => Module{
+            require: vec!["c", "cpp"],
+            files: Some(vec!["CMakeLists.txt"]),
+            dirs: None,
+        },
         "gomod" => Module {
             require: vec!["golang"],
             files: Some(vec!["go.mod", "go.work"]),
@@ -68,6 +73,11 @@ fn build_modules() -> HashMap<&'static str, Module> {
         "maven" => Module {
             require: vec!["java"],
             files: Some(vec!["pom.xml"]),
+            dirs: None,
+        },
+        "gradle" => Module {
+            require: vec!["java", "kotlin"],
+            files: Some(vec!["settings.gradle", "build.gradle"]),
             dirs: None,
         },
         "nodejs" => Module {
