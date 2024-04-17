@@ -137,7 +137,7 @@ impl FileLock {
     /// * `name` - File lock name, you can use this to create locks at different
     /// granularity to lock different processes.
     pub fn acquire(cfg: &Config, name: impl AsRef<str>) -> Result<FileLock> {
-        let path = cfg.get_meta_dir().join(format!("lock_{}", name.as_ref()));
+        let path = cfg.get_meta_dir().join("lock").join(name.as_ref());
         ensure_dir(&path)?;
 
         let lock_opts = file_lock::FileOptions::new()
