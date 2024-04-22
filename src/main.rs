@@ -56,7 +56,7 @@ fn main() {
     if unistd::getuid().is_root() {
         match args.iter().position(|arg| arg == "--allow-root-privieges") {
             Some(pos) => {
-                warn!("Launching roxide with root privileges can destory your system, it is strongly not recommanded to do this");
+                warn!("Launching roxide with root privileges can destroy your system, it is strongly not recommanded to do this");
                 args.remove(pos);
             }
             None => {
