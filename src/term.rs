@@ -1371,6 +1371,7 @@ impl GitTag {
 pub struct Table {
     ncol: usize,
     rows: Vec<Vec<String>>,
+    foot_index: usize,
 }
 
 impl Table {
@@ -1378,7 +1379,13 @@ impl Table {
         Table {
             ncol: 0,
             rows: Vec::with_capacity(size),
+            foot_index: 0,
         }
+    }
+
+    #[inline]
+    pub fn foot(&mut self) {
+        self.foot_index = self.rows.len();
     }
 
     pub fn add(&mut self, row: Vec<String>) {
@@ -1395,25 +1402,43 @@ impl Table {
 
     pub fn show(self) {
         let mut pads = Vec::with_capacity(self.ncol);
-        for i in 0..self.ncol {
-            let mut max_len: usize = 0;
+        for coli in 0..self.ncol {
+            let mut max_size: usize = 0;
             for row in self.rows.iter() {
-                let cell = row.get(i).unwrap();
-                if cell.len() > max_len {
-                    max_len = cell.len()
+                let cell = row.get(coli).unwrap();
+                let raw_size = console::measure_text_width(cell);
+                let size = if coli == self.ncol - 1 {
+                    raw_size
+                } else {
+                    raw_size + 2
+                };
+                if size > max_size {
+                    max_size = size
                 }
             }
-            pads.push(max_len + 2);
+            pads.push(max_size);
         }
 
-        for row in self.rows.into_iter() {
-            for (i, cell) in row.into_iter().enumerate() {
-                let pad = pads[i];
+        let total_pad: usize = pads.iter().sum();
+        let split = "-".repeat(total_pad);
+
+        for (rowi, row) in self.rows.into_iter().enumerate() {
+            if rowi == 0 || (self.foot_index > 0 && rowi >= self.foot_index) {
+                println!("{split}");
+            }
+            for (coli, cell) in row.into_iter().enumerate() {
+                let pad = pads[coli];
                 let cell = cell.pad_to_width_with_alignment(pad, pad::Alignment::Left);
                 print!("{}", cell);
             }
-            println!()
+            println!();
+
+            if rowi == 0 {
+                println!("{split}");
+            }
         }
+
+        println!("{split}");
     }
 }
 

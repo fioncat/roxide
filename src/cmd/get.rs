@@ -140,16 +140,16 @@ impl Run for GetArgs {
 
         let mut table = Table::with_capacity(1 + repos.len());
         let mut titles = vec![
-            String::from("NAME"),
-            String::from("LABELS"),
-            String::from("ACCESS"),
-            String::from("LAST_ACCESS"),
-            String::from("SCORE"),
+            String::from("Name"),
+            String::from("Labels"),
+            String::from("Access"),
+            String::from("Time"),
+            String::from("Score"),
         ];
 
         let mut size_vec: Option<Vec<u64>> = None;
         if self.size {
-            titles.push(String::from("SIZE"));
+            titles.push(String::from("Size"));
             let mut repos_with_size = Vec::with_capacity(repos.len());
             for repo in repos {
                 let path = repo.get_path(cfg);
@@ -162,6 +162,8 @@ impl Run for GetArgs {
         }
         table.add(titles);
 
+        let mut total_access: u64 = 0;
+        let mut total_score: u64 = 0;
         for (idx, repo) in repos.iter().enumerate() {
             let name = repo.to_string(&level);
             let labels = match detect.as_ref() {
@@ -170,8 +172,11 @@ impl Run for GetArgs {
             }
             .unwrap_or_else(|| String::from("<none>"));
             let access = format!("{}", repo.accessed);
+            total_access += repo.accessed;
             let last_access = utils::format_since(cfg, repo.last_accessed);
-            let score = format!("{}", repo.score(cfg));
+            let score = repo.score(cfg);
+            total_score += score;
+            let score = format!("{score}");
 
             let mut row = vec![name, labels, access, last_access, score];
             if let Some(size_vec) = size_vec.as_ref() {
@@ -182,14 +187,22 @@ impl Run for GetArgs {
             table.add(row);
         }
 
-        table.show();
-
-        if let Some(size_vec) = size_vec {
-            let total: u64 = size_vec.into_iter().sum();
-            println!();
-            println!("Total size: {}", utils::human_bytes(total));
+        table.foot();
+        let mut foot = vec![
+            format!("SUM: {}", repos.len()),
+            String::from(""),
+            format!("{total_access}"),
+            String::from(""),
+            format!("{total_score}"),
+        ];
+        if self.size {
+            let total_size: u64 = size_vec.as_ref().unwrap().iter().sum();
+            let total_size = utils::human_bytes(total_size);
+            foot.push(total_size);
         }
+        table.add(foot);
 
+        table.show();
         Ok(())
     }
 }
