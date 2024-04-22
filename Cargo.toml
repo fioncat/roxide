@@ -28,11 +28,12 @@ clap = { version = "4.5.4", features = ["derive"] }
 console = "0.15.8"
 dialoguer = "0.11.0"
 file-lock = "2.1.11"
+nix = { version = "0.28.0", features = ["user"] }
 num_cpus = "1.16.0"
-open = "5.0.1"
+open = "5.1.2"
 pad = "0.1.6"
 pbkdf2 = "0.12.2"
-regex = "1.10.3"
+regex = "1.10.4"
 reqwest = { version = "0.12.4", features = ["blocking", "json"] }
 rpassword = "7.3.1"
 scanf = "1.2.1"

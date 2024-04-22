@@ -91,6 +91,50 @@ macro_rules! info {
     };
 }
 
+/// The macro for [`show_error`].
+///
+/// # Examples
+///
+/// ```
+/// error!("Process failed with bad status");
+/// ```
+#[macro_export]
+macro_rules! error {
+    ($dst:expr $(,)?) => {
+        {
+            $crate::term::show_error($dst);
+        }
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        {
+            let msg = format!($fmt, $($arg)*);
+            $crate::term::show_error(msg.as_str());
+        }
+    };
+}
+
+/// The macro for [`show_warn`].
+///
+/// # Examples
+///
+/// ```
+/// warn!("Process failed with bad status");
+/// ```
+#[macro_export]
+macro_rules! warn {
+    ($dst:expr $(,)?) => {
+        {
+            $crate::term::show_warn($dst);
+        }
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        {
+            let msg = format!($fmt, $($arg)*);
+            $crate::term::show_warn(msg.as_str());
+        }
+    };
+}
+
 /// Display logs at the `exec` level.
 pub fn show_exec(msg: impl AsRef<str>) {
     eprintln!("{} {}", style("==>").cyan(), msg.as_ref());
@@ -99,6 +143,16 @@ pub fn show_exec(msg: impl AsRef<str>) {
 /// Display logs at the `info` level.
 pub fn show_info(msg: impl AsRef<str>) {
     eprintln!("{} {}", style("==>").green(), msg.as_ref());
+}
+
+/// Display logs at the `error` level.
+pub fn show_error(msg: impl AsRef<str>) {
+    eprintln!("{} {}", style("[ ERROR ]").red().bold(), msg.as_ref());
+}
+
+/// Display logs at the `error` level.
+pub fn show_warn(msg: impl AsRef<str>) {
+    eprintln!("{} {}", style("[ WARNING ]").yellow().bold(), msg.as_ref());
 }
 
 /// Output the object in pretty JSON format in the terminal.

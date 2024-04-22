@@ -4,13 +4,12 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{env, fs, process};
 
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{Local, LocalResult, TimeZone};
 use console::{self, style};
 use regex::Regex;
 
 use crate::config::Config;
-use crate::errors::SilentExit;
 use crate::info;
 
 #[cfg(test)]
@@ -182,24 +181,6 @@ pub fn expandenv(s: impl AsRef<str>) -> Result<String> {
     let s = shellexpand::full(s.as_ref())
         .with_context(|| format!("expand env for '{}'", s.as_ref()))?;
     Ok(s.to_string())
-}
-
-/// Exit the process with error.
-pub fn error_exit(err: Error) {
-    _ = writeln!(io::stderr(), "{}: {err:#}", style("error").red());
-    process::exit(2);
-}
-
-/// If there are no errors, exit zero. If there is an error, print the error and
-/// exit with none-zero.
-pub fn handle_result(result: Result<()>) {
-    match result {
-        Ok(()) => {}
-        Err(err) => match err.downcast::<SilentExit>() {
-            Ok(SilentExit { code }) => process::exit(code as _),
-            Err(err) => error_exit(err),
-        },
-    }
 }
 
 /// Open url in default web browser, see: [`open`].
