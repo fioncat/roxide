@@ -23,8 +23,8 @@ pub struct DetectArgs {
 
 impl Run for DetectArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        if !cfg.auto_detect {
-            bail!("config option `auto_detect` is disabled, cannot perform detection");
+        if !cfg.detect.enable {
+            bail!("config option `detect.enable` is disabled, cannot perform detection");
         }
         let mut db = Database::load(cfg)?;
 
@@ -38,7 +38,7 @@ impl Run for DetectArgs {
         let items: Vec<_> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         term::must_confirm_items(&items, "detect", "detection", "Repo", "Repos")?;
 
-        let detect = Detect::new();
+        let detect = Detect::new(cfg);
 
         let repos: Vec<_> = repos.into_iter().map(|repo| repo.update()).collect();
         for mut repo in repos {

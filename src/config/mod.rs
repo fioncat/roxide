@@ -7,6 +7,7 @@ use std::time::SystemTime;
 use std::{env, fs, io};
 
 use anyhow::{bail, Context, Result};
+use glob::Pattern as GlobPattern;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -28,8 +29,8 @@ pub struct Config {
     pub cmd: String,
 
     /// Auto detect repository labels when accessing it.
-    #[serde(default = "defaults::disable")]
-    pub auto_detect: bool,
+    #[serde(default = "defaults::detect")]
+    pub detect: Detect,
 
     #[serde(default = "defaults::docker")]
     pub docker: Docker,
@@ -44,6 +45,9 @@ pub struct Config {
     /// The remotes' config.
     #[serde(skip)]
     pub remotes: HashMap<String, RemoteConfig>,
+
+    #[serde(skip)]
+    pub detect_ignores: Vec<GlobPattern>,
 
     /// Workflow can execute some pre-defined scripts on the repo.
     #[serde(skip)]
@@ -75,6 +79,15 @@ pub struct Docker {
 
     #[serde(default = "defaults::docker_shell")]
     pub shell: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+pub struct Detect {
+    #[serde(default = "defaults::disable")]
+    pub enable: bool,
+
+    #[serde(default = "defaults::empty_vec")]
+    pub ignores: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
@@ -502,10 +515,11 @@ impl Config {
             docker: defaults::docker(),
             keyword_expire: defaults::keyword_expire(),
             cmd: defaults::cmd(),
-            auto_detect: false,
+            detect: defaults::detect(),
             remotes: HashMap::new(),
             release: defaults::release(),
             workflows: defaults::empty_map(),
+            detect_ignores: defaults::empty_vec(),
             current_dir: None,
             now: None,
             workspace_path: None,
@@ -527,6 +541,11 @@ impl Config {
             );
         }
         self.workspace_path = Some(workspace_path);
+
+        if !self.detect.ignores.is_empty() {
+            self.detect_ignores =
+                Self::parse_patterns(&self.detect.ignores).context("validate detect ignores")?;
+        }
 
         if self.metadir.is_empty() {
             self.metadir = defaults::metadir();
@@ -689,6 +708,16 @@ impl Config {
             includes.push(include_name.clone());
         }
         Ok(())
+    }
+
+    fn parse_patterns(raw: &[String]) -> Result<Vec<GlobPattern>> {
+        let mut patterns = Vec::with_capacity(raw.len());
+        for str in raw.iter() {
+            let pattern =
+                GlobPattern::new(str).with_context(|| format!("parse glob pattern '{str}'"))?;
+            patterns.push(pattern);
+        }
+        Ok(patterns)
     }
 
     #[cfg(test)]
