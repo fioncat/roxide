@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use chrono::Local;
 use console::{style, StyledObject, Term};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Input;
+use glob::Pattern as GlobPattern;
 use pad::PadStr;
 use regex::{Captures, Regex};
 use reqwest::blocking::Client;
@@ -926,6 +927,27 @@ where
         Some(128..=254) | None => bail!("fzf was terminated"),
         _ => bail!("fzf returned an unknown error"),
     }
+}
+
+/// List all git files in `path`, use `git ls-files`, this will respect `.gitignore` file.
+/// Also, this function will respect `ignores` arg, matched path will not be returned.
+pub fn list_git_files(path: &Path, ignores: &[GlobPattern]) -> Result<Vec<String>> {
+    let path = format!("{}", path.display());
+    let mut items = Cmd::git(&["-C", path.as_str(), "ls-files"])
+        .lines()
+        .context("list git files")?;
+    if !ignores.is_empty() {
+        items.retain(|item| {
+            for pattern in ignores.iter() {
+                if pattern.matches(item) {
+                    return false;
+                }
+            }
+            true
+        });
+    }
+
+    Ok(items)
 }
 
 /// If there are uncommitted changes in the current Git repository, return an error.

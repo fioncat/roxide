@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::config::Detect;
 use crate::config::Docker;
 use crate::config::RemoteConfig;
 use crate::utils;
@@ -21,6 +22,13 @@ pub fn docker() -> Docker {
         name: docker_name(),
         args: empty_vec(),
         shell: docker_shell(),
+    }
+}
+
+pub fn detect() -> Detect {
+    Detect {
+        enable: false,
+        ignores: empty_vec(),
     }
 }
 

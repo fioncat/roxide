@@ -115,8 +115,8 @@ impl Run for GetArgs {
             selector.many_local(&db)?
         };
 
-        let detect = if cfg.auto_detect {
-            Some(Detect::new())
+        let detect = if cfg.detect.enable {
+            Some(Detect::new(cfg))
         } else {
             None
         };

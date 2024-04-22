@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::repo::Repo;
-use crate::term::Cmd;
+use crate::term;
 
 macro_rules! map {
     ($($k:expr => $v:expr),* $(,)?) => {{
@@ -94,15 +94,17 @@ fn build_modules() -> HashMap<&'static str, Module> {
     ]
 }
 
-pub struct Detect {
+pub struct Detect<'a> {
     label_extensions: HashMap<&'static str, Vec<&'static str>>,
     modules: HashMap<&'static str, Module>,
 
     builtin_labels: HashSet<&'static str>,
+
+    cfg: &'a Config,
 }
 
-impl Detect {
-    pub fn new() -> Self {
+impl<'a> Detect<'a> {
+    pub fn new(cfg: &'a Config) -> Self {
         let label_extensions = build_extensions();
         let modules = build_modules();
 
@@ -118,6 +120,7 @@ impl Detect {
             label_extensions,
             modules,
             builtin_labels,
+            cfg,
         }
     }
 
@@ -233,10 +236,7 @@ impl Detect {
     }
 
     fn scan_git_extensions(&self, path: &Path) -> Result<HashSet<String>> {
-        let path = format!("{}", path.display());
-        let items = Cmd::git(&["-C", path.as_str(), "ls-files"])
-            .lines()
-            .context("list git files")?;
+        let items = term::list_git_files(path, &self.cfg.detect_ignores)?;
         let mut extensions = HashSet::new();
         for item in items {
             let item_path = PathBuf::from(item);
