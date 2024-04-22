@@ -113,8 +113,8 @@ impl BranchArgs {
         let mut table = Table::with_capacity(branches.len() + 1);
         table.add(vec![
             String::from(""),
-            String::from("NAME"),
-            String::from("STATUS"),
+            String::from("Name"),
+            String::from("Status"),
         ]);
         for branch in branches {
             let cur = if branch.current {
