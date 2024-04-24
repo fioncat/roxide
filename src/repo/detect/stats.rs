@@ -25,6 +25,9 @@ pub struct LanguageStats {
     pub blank: usize,
     pub comment: usize,
     pub code: usize,
+
+    pub lines: usize,
+    pub percent: f64,
 }
 
 impl DetectStats {
@@ -47,6 +50,8 @@ impl DetectStats {
                 blank: 0,
                 comment: 0,
                 code: 0,
+                lines: 0,
+                percent: 0.0,
             };
 
             for file in files {

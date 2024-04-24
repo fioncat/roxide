@@ -111,6 +111,7 @@ impl Commands {
             "secret" => secret::SecretArgs::completion(),
             "snapshot" => snapshot::SnapshotArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
+            "stats" => stats::StatsArgs::completion(),
             "sync" => sync::SyncArgs::completion(),
             "tag" => tag::TagArgs::completion()
         ]

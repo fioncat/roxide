@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 
 use crate::batch::{self, Task};
-use crate::cmd::Run;
+use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::detect::stats::{DetectStats, LanguageStats};
@@ -47,7 +47,31 @@ impl Run for StatsArgs {
             return Ok(());
         }
 
-        stats.sort_unstable_by(|a, b| b.code.cmp(&a.code));
+        let mut total_files: usize = 0;
+        let mut total_lines: usize = 0;
+        let mut total_blank: usize = 0;
+        let mut total_comment: usize = 0;
+        let mut total_code: usize = 0;
+        for lang in stats.iter_mut() {
+            total_files += lang.files;
+            lang.lines = lang.blank + lang.comment + lang.code;
+            total_lines += lang.lines;
+
+            total_blank += lang.blank;
+            total_comment += lang.comment;
+            total_code += lang.code;
+        }
+
+        let total_lines_f64 = total_lines as f64;
+        if total_lines_f64 <= 0.0 {
+            bail!("no line count");
+        }
+
+        for lang in stats.iter_mut() {
+            lang.percent = (lang.lines as f64 / total_lines_f64) * 100.0;
+        }
+        stats.sort_unstable_by(|a, b| b.lines.cmp(&a.lines));
+
         let mut table = Table::with_capacity(stats.len());
         table.add(vec![
             String::from("Language"),
@@ -55,12 +79,10 @@ impl Run for StatsArgs {
             String::from("blank"),
             String::from("comment"),
             String::from("code"),
+            String::from("lines"),
+            String::from("percent"),
         ]);
 
-        let mut files: usize = 0;
-        let mut blank: usize = 0;
-        let mut comment: usize = 0;
-        let mut code: usize = 0;
         let name_tail = " ".repeat(8);
         for lang in stats.iter() {
             let mut name = String::from(lang.name);
@@ -71,26 +93,25 @@ impl Run for StatsArgs {
                 format!("{}", lang.blank),
                 format!("{}", lang.comment),
                 format!("{}", lang.code),
+                format!("{}", lang.lines),
+                format!("{:.2}%", lang.percent),
             ]);
-
-            files += lang.files;
-            blank += lang.blank;
-            comment += lang.comment;
-            code += lang.code;
         }
 
         if stats.len() > 1 {
             table.foot();
             table.add(vec![
                 String::from("SUM"),
-                format!("{files}"),
-                format!("{blank}"),
-                format!("{comment}"),
-                format!("{code}"),
+                format!("{total_files}"),
+                format!("{total_blank}"),
+                format!("{total_comment}"),
+                format!("{total_code}"),
+                format!("{total_lines}"),
+                format!(""),
             ]);
         }
 
-        self.show_speed(start, files, blank + comment + code);
+        self.show_speed(start, total_files, total_lines);
         table.show();
 
         Ok(())
@@ -161,20 +182,30 @@ impl StatsArgs {
     }
 
     fn show_speed(&self, start: Instant, files: usize, lines: usize) {
-        let file_word = if files > 1 { "files" } else { "file" };
-        let line_word = if lines > 1 { "lines" } else { "line" };
-        eprint!("Stats: {files} {file_word}; {lines} {line_word}");
-
         let elapsed_seconds = start.elapsed().as_secs_f64();
+        eprint!("Speed: ");
+
         if elapsed_seconds > 0.0 {
-            let speed = lines as f64 / elapsed_seconds;
-            let speed = speed as u64;
-            if speed > 1 {
-                eprint!("; {speed} lines/s");
+            let files_speed = (files as f64 / elapsed_seconds) as u64;
+            let lines_speed = (lines as f64 / elapsed_seconds) as u64;
+
+            if files_speed > 1 && lines_speed > 1 {
+                eprint!("{files_speed} files/s; {lines_speed} lines/s");
+            } else {
+                eprint!("WTF??? Too low to be shown, what machine are you using???");
             }
+        } else {
+            eprint!("Wow! Too fast to be shown!");
         }
 
         eprintln!();
+    }
+
+    pub fn completion() -> Completion {
+        Completion {
+            args: Completion::repo_args,
+            flags: Some(Completion::labels),
+        }
     }
 }
 
