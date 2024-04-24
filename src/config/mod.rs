@@ -84,7 +84,7 @@ pub struct Docker {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct Detect {
     #[serde(default = "defaults::disable")]
-    pub enable: bool,
+    pub auto: bool,
 
     #[serde(default = "defaults::empty_vec")]
     pub ignores: Vec<String>,

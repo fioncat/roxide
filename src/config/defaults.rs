@@ -27,7 +27,7 @@ pub fn docker() -> Docker {
 
 pub fn detect() -> Detect {
     Detect {
-        enable: false,
+        auto: false,
         ignores: empty_vec(),
     }
 }

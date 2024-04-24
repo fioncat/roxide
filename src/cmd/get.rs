@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::Detect;
+use crate::repo::detect::labels::DetectLabels;
 use crate::repo::{NameLevel, Repo};
 use crate::term::Table;
 use crate::{term, utils};
@@ -63,14 +63,14 @@ impl RepoInfo<'_> {
     fn from_repo<'a>(
         cfg: &Config,
         repo: Repo<'a>,
-        detect: &Option<Detect>,
+        detect_labels: &Option<DetectLabels>,
     ) -> Result<RepoInfo<'a>> {
         let workspace = repo.path.is_none();
         let path = repo.get_path(cfg);
         let path = format!("{}", path.display());
         let size = utils::dir_size(repo.get_path(cfg))?;
-        let labels = match detect {
-            Some(detect) => detect.sort_labels(&repo),
+        let labels = match detect_labels {
+            Some(detect_labels) => detect_labels.sort(&repo),
             None => {
                 let mut labels: Option<Vec<String>> = repo
                     .labels
@@ -115,8 +115,8 @@ impl Run for GetArgs {
             selector.many_local(&db)?
         };
 
-        let detect = if cfg.detect.enable {
-            Some(Detect::new(cfg))
+        let detect_labels = if cfg.detect.auto {
+            Some(DetectLabels::new(cfg))
         } else {
             None
         };
@@ -133,7 +133,7 @@ impl Run for GetArgs {
         if self.json {
             let mut infos = Vec::with_capacity(repos.len());
             for repo in repos {
-                infos.push(RepoInfo::from_repo(cfg, repo, &detect)?);
+                infos.push(RepoInfo::from_repo(cfg, repo, &detect_labels)?);
             }
             return term::show_json(infos);
         }
@@ -166,8 +166,8 @@ impl Run for GetArgs {
         let mut total_score: u64 = 0;
         for (idx, repo) in repos.iter().enumerate() {
             let name = repo.to_string(&level);
-            let labels = match detect.as_ref() {
-                Some(detect) => detect.format_labels(repo),
+            let labels = match detect_labels.as_ref() {
+                Some(detect_labels) => detect_labels.format(repo),
                 None => repo.labels_string(),
             }
             .unwrap_or_else(|| String::from("<none>"));

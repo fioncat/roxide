@@ -10,7 +10,7 @@ use crate::batch::Task;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::Detect;
+use crate::repo::detect::labels::DetectLabels;
 use crate::repo::Repo;
 use crate::term::Cmd;
 use crate::workflow::Workflow;
@@ -76,10 +76,10 @@ impl Run for HomeArgs {
             }
         }
 
-        if cfg.detect.enable {
-            let detect = Detect::new(cfg);
-            detect
-                .update_labels(cfg, &mut repo)
+        if cfg.detect.auto {
+            let detect_labels = DetectLabels::new(cfg);
+            detect_labels
+                .update(&mut repo)
                 .context("auto detect labels for repo")?;
         }
 

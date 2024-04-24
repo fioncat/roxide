@@ -1,10 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::Detect;
+use crate::repo::detect::labels::DetectLabels;
 use crate::{info, term, utils};
 
 /// Detect and update labels for repositories
@@ -16,6 +16,10 @@ pub struct DetectArgs {
     /// Repository selection query.
     pub query: Option<String>,
 
+    /// Remove all detect labels.
+    #[clap(short = 'C', long)]
+    pub clear: bool,
+
     /// Use the labels to filter repo.
     #[clap(short, long)]
     pub labels: Option<String>,
@@ -23,9 +27,6 @@ pub struct DetectArgs {
 
 impl Run for DetectArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        if !cfg.detect.enable {
-            bail!("config option `detect.enable` is disabled, cannot perform detection");
-        }
         let mut db = Database::load(cfg)?;
 
         let filter_labels = utils::parse_labels(&self.labels);
@@ -38,16 +39,21 @@ impl Run for DetectArgs {
         let items: Vec<_> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         term::must_confirm_items(&items, "detect", "detection", "Repo", "Repos")?;
 
-        let detect = Detect::new(cfg);
+        let detect_labels = DetectLabels::new(cfg);
 
         let repos: Vec<_> = repos.into_iter().map(|repo| repo.update()).collect();
         for mut repo in repos {
-            detect
-                .update_labels(cfg, &mut repo)
-                .with_context(|| format!("detect labels for repo {}", repo.to_string(&level)))?;
+            if self.clear {
+                detect_labels.clear(&mut repo);
+                db.upsert(repo);
+                continue;
+            }
 
-            let labels = detect
-                .format_labels(&repo)
+            detect_labels
+                .update(&mut repo)
+                .with_context(|| format!("detect labels for repo {}", repo.to_string(&level)))?;
+            let labels = detect_labels
+                .format(&repo)
                 .unwrap_or(String::from("<none>"));
             info!("Detect for repo {}: {labels}", repo.to_string(&level));
             db.upsert(repo);

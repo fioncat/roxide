@@ -26,6 +26,7 @@ mod run;
 mod secret;
 mod snapshot;
 mod squash;
+mod stats;
 mod sync;
 mod tag;
 mod update;
@@ -81,6 +82,7 @@ pub enum Commands {
     Secret(secret::SecretArgs),
     Snapshot(snapshot::SnapshotArgs),
     Squash(squash::SquashArgs),
+    Stats(stats::StatsArgs),
     Sync(sync::SyncArgs),
     Tag(tag::TagArgs),
     Update(update::UpdateArgs),
@@ -109,6 +111,7 @@ impl Commands {
             "secret" => secret::SecretArgs::completion(),
             "snapshot" => snapshot::SnapshotArgs::completion(),
             "squash" => squash::SquashArgs::completion(),
+            "stats" => stats::StatsArgs::completion(),
             "sync" => sync::SyncArgs::completion(),
             "tag" => tag::TagArgs::completion()
         ]
@@ -146,6 +149,7 @@ impl Run for App {
             Commands::Secret(args) => args.run(cfg),
             Commands::Snapshot(args) => args.run(cfg),
             Commands::Squash(args) => args.run(cfg),
+            Commands::Stats(args) => args.run(cfg),
             Commands::Sync(args) => args.run(cfg),
             Commands::Tag(args) => args.run(cfg),
             Commands::Update(args) => args.run(cfg),
