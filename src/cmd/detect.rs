@@ -16,6 +16,10 @@ pub struct DetectArgs {
     /// Repository selection query.
     pub query: Option<String>,
 
+    /// Remove all detect labels.
+    #[clap(short = 'C', long)]
+    pub clear: bool,
+
     /// Use the labels to filter repo.
     #[clap(short, long)]
     pub labels: Option<String>,
@@ -42,10 +46,15 @@ impl Run for DetectArgs {
 
         let repos: Vec<_> = repos.into_iter().map(|repo| repo.update()).collect();
         for mut repo in repos {
-            detect
-                .update_labels(cfg, &mut repo)
-                .with_context(|| format!("detect labels for repo {}", repo.to_string(&level)))?;
+            if self.clear {
+                detect.clear_labels(&mut repo);
+                db.upsert(repo);
+                continue;
+            }
 
+            detect
+                .update_labels(&mut repo)
+                .with_context(|| format!("detect labels for repo {}", repo.to_string(&level)))?;
             let labels = detect
                 .format_labels(&repo)
                 .unwrap_or(String::from("<none>"));

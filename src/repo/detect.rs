@@ -124,16 +124,13 @@ impl<'a> Detect<'a> {
         }
     }
 
-    pub fn update_labels(&self, cfg: &Config, repo: &mut Repo) -> Result<()> {
+    pub fn update_labels(&self, repo: &mut Repo) -> Result<()> {
         let mut labels: HashSet<Cow<str>> = match repo.labels.take() {
-            Some(labels) => labels
-                .into_iter()
-                .filter(|label| !self.builtin_labels.contains(label.as_ref()))
-                .collect(),
+            Some(labels) => self._clear_labels(labels),
             None => return Ok(()),
         };
 
-        let path = repo.get_path(cfg);
+        let path = repo.get_path(self.cfg);
         let git_extensions = self.scan_git_extensions(&path)?;
 
         let root_entries = fs::read_dir(&path)?;
@@ -199,6 +196,21 @@ impl<'a> Detect<'a> {
 
         repo.labels = Some(labels);
         Ok(())
+    }
+
+    pub fn clear_labels(&self, repo: &mut Repo) {
+        if let Some(labels) = repo.labels.take() {
+            let clear_labels = self._clear_labels(labels);
+            repo.labels = Some(clear_labels);
+        }
+    }
+
+    #[inline]
+    fn _clear_labels<'b>(&self, labels: HashSet<Cow<'b, str>>) -> HashSet<Cow<'b, str>> {
+        labels
+            .into_iter()
+            .filter(|label| !self.builtin_labels.contains(label.as_ref()))
+            .collect()
     }
 
     pub fn sort_labels(&self, repo: &Repo) -> Option<Vec<String>> {

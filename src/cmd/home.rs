@@ -79,7 +79,7 @@ impl Run for HomeArgs {
         if cfg.detect.enable {
             let detect = Detect::new(cfg);
             detect
-                .update_labels(cfg, &mut repo)
+                .update_labels(&mut repo)
                 .context("auto detect labels for repo")?;
         }
 
