@@ -115,7 +115,7 @@ impl Run for GetArgs {
             selector.many_local(&db)?
         };
 
-        let detect_labels = if cfg.detect.enable {
+        let detect_labels = if cfg.detect.auto {
             Some(DetectLabels::new(cfg))
         } else {
             None

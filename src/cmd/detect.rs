@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::cmd::{Completion, Run};
@@ -27,9 +27,6 @@ pub struct DetectArgs {
 
 impl Run for DetectArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        if !cfg.detect.enable {
-            bail!("config option `detect.enable` is disabled, cannot perform detection");
-        }
         let mut db = Database::load(cfg)?;
 
         let filter_labels = utils::parse_labels(&self.labels);

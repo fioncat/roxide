@@ -68,7 +68,7 @@ impl<'a> DetectLabels<'a> {
             root_files.insert(name);
         }
 
-        let groups = super::detect_languages(self.cfg, &path, &self.languages)?;
+        let groups = super::detect_languages(&self.cfg.detect_ignores, &path, &self.languages)?;
         for group in groups {
             labels.insert(Cow::Borrowed(group.language.label));
         }

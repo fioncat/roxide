@@ -4,9 +4,9 @@ pub mod stats;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
+use glob::Pattern as GlobPattern;
 
-use crate::config::Config;
 use crate::term;
 
 #[derive(Debug, Clone)]
@@ -202,15 +202,11 @@ pub(super) struct LanguageGroup {
 }
 
 pub(super) fn detect_languages(
-    cfg: &Config,
+    ignores: &[GlobPattern],
     path: &Path,
     languages: &[Language],
 ) -> Result<Vec<LanguageGroup>> {
-    if !cfg.detect.enable {
-        bail!("detect option in config is disabled, please enable it first");
-    }
-
-    let files = term::list_git_files(path, &cfg.detect_ignores)?;
+    let files = term::list_git_files(path, ignores)?;
     let mut groups_map: HashMap<&str, LanguageGroup> = HashMap::with_capacity(languages.len());
 
     for file in files {
