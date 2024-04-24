@@ -45,10 +45,11 @@ impl<'a> DetectLabels<'a> {
     }
 
     pub fn update(&self, repo: &mut Repo) -> Result<()> {
-        let mut labels: HashSet<Cow<str>> = match repo.labels.take() {
-            Some(labels) => self._clear(labels),
-            None => return Ok(()),
-        };
+        let mut labels: HashSet<Cow<str>> = repo
+            .labels
+            .take()
+            .map(|labels| self._clear(labels))
+            .unwrap_or_default();
 
         let path = repo.get_path(self.cfg);
 
@@ -109,7 +110,12 @@ impl<'a> DetectLabels<'a> {
             labels.insert(Cow::Borrowed(*label));
         }
 
-        repo.labels = Some(labels);
+        if labels.is_empty() {
+            repo.labels = None;
+        } else {
+            repo.labels = Some(labels);
+        }
+
         Ok(())
     }
 
