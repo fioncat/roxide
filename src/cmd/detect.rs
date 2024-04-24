@@ -4,7 +4,7 @@ use clap::Args;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::Detect;
+use crate::repo::detect::labels::DetectLabels;
 use crate::{info, term, utils};
 
 /// Detect and update labels for repositories
@@ -42,21 +42,21 @@ impl Run for DetectArgs {
         let items: Vec<_> = repos.iter().map(|repo| repo.to_string(&level)).collect();
         term::must_confirm_items(&items, "detect", "detection", "Repo", "Repos")?;
 
-        let detect = Detect::new(cfg);
+        let detect_labels = DetectLabels::new(cfg);
 
         let repos: Vec<_> = repos.into_iter().map(|repo| repo.update()).collect();
         for mut repo in repos {
             if self.clear {
-                detect.clear_labels(&mut repo);
+                detect_labels.clear(&mut repo);
                 db.upsert(repo);
                 continue;
             }
 
-            detect
-                .update_labels(&mut repo)
+            detect_labels
+                .update(&mut repo)
                 .with_context(|| format!("detect labels for repo {}", repo.to_string(&level)))?;
-            let labels = detect
-                .format_labels(&repo)
+            let labels = detect_labels
+                .format(&repo)
                 .unwrap_or(String::from("<none>"));
             info!("Detect for repo {}: {labels}", repo.to_string(&level));
             db.upsert(repo);
