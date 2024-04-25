@@ -3,16 +3,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args;
+use console::style;
 
 use crate::batch::{self, Task};
-use crate::cmd::{Completion, Run};
+use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::stats::{DetectStats, LanguageStats};
-use crate::term::Table;
-use crate::utils;
+use crate::repo::detect::stats::{DetectStats, LanguageStats, LanguageStatsChange, StatsStorage};
+use crate::term::{Table, TableCell, TableCellColor};
+use crate::{confirm, utils};
 
 /// Count and display repository code stats.
 #[derive(Args)]
@@ -30,17 +31,57 @@ pub struct StatsArgs {
     /// Use the labels to filter repository.
     #[clap(short, long)]
     pub labels: Option<String>,
+
+    /// Remove stats storage.
+    #[clap(short, long)]
+    pub delete: Option<Option<String>>,
+
+    /// Show saved stats.
+    #[clap(short, long)]
+    pub name: Option<Option<String>>,
+
+    /// Compare with given saved stats.
+    #[clap(short, long)]
+    pub compare: Option<Option<String>>,
+
+    /// Save current stats.
+    #[clap(short, long)]
+    pub save: bool,
 }
 
 impl Run for StatsArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        let start = Instant::now();
-        let db = Database::load(cfg)?;
-        let mut stats = if self.recursive {
-            self.stats_many(cfg, &db)
+        let storage = StatsStorage::load(cfg)?;
+
+        if let Some(name) = self.delete.as_ref() {
+            if let Some(name) = name {
+                confirm!("Do you want to remove stats {}", name);
+            } else {
+                confirm!("Do you want to remove all saved stats");
+            }
+
+            storage.remove(name)?;
+
+            return Ok(());
+        }
+
+        let (mut stats, start) = if let Some(name) = self.name.as_ref() {
+            if self.save {
+                bail!("when using `-n` to show stats, cannot use `-s` to save it again");
+            }
+            let (stats, name) = storage.get(name)?;
+            eprintln!("Show saved stats: {name}");
+            (stats, None)
         } else {
-            self.stats_one(cfg, &db)
-        }?;
+            let start = Instant::now();
+            let db = Database::load(cfg)?;
+            let stats = if self.recursive {
+                self.stats_many(cfg, &db)
+            } else {
+                self.stats_one(cfg, &db)
+            }?;
+            (stats, Some(start))
+        };
 
         if stats.is_empty() {
             eprintln!("no stats to show");
@@ -68,9 +109,17 @@ impl Run for StatsArgs {
         }
 
         for lang in stats.iter_mut() {
+            assert!(total_lines_f64 > 0.0);
             lang.percent = (lang.lines as f64 / total_lines_f64) * 100.0;
         }
         stats.sort_unstable_by(|a, b| b.lines.cmp(&a.lines));
+
+        let save_stats = if self.save { Some(stats.clone()) } else { None };
+        let compare_stats = if self.compare.is_some() {
+            Some(stats.clone())
+        } else {
+            None
+        };
 
         let mut table = Table::with_capacity(stats.len());
         table.add(vec![
@@ -84,21 +133,33 @@ impl Run for StatsArgs {
         ]);
 
         let name_tail = " ".repeat(8);
-        for lang in stats.iter() {
-            let mut name = String::from(lang.name);
+        let need_foot = stats.len() > 1;
+        for lang in stats {
+            let LanguageStats {
+                name,
+                files,
+                blank,
+                comment,
+                code,
+                lines,
+                percent,
+            } = lang;
+
+            let mut name = name.into_owned();
             name.push_str(&name_tail);
+
             table.add(vec![
                 name,
-                format!("{}", lang.files),
-                format!("{}", lang.blank),
-                format!("{}", lang.comment),
-                format!("{}", lang.code),
-                format!("{}", lang.lines),
-                format!("{:.2}%", lang.percent),
+                format!("{files}"),
+                format!("{blank}"),
+                format!("{comment}"),
+                format!("{code}"),
+                format!("{lines}"),
+                format!("{:.2}%", percent),
             ]);
         }
 
-        if stats.len() > 1 {
+        if need_foot {
             table.foot();
             table.add(vec![
                 String::from("SUM"),
@@ -107,12 +168,31 @@ impl Run for StatsArgs {
                 format!("{total_comment}"),
                 format!("{total_code}"),
                 format!("{total_lines}"),
-                format!(""),
+                String::new(),
             ]);
         }
 
-        self.show_speed(start, total_files, total_lines);
+        if let Some(start) = start {
+            self.show_speed(start, total_files, total_lines);
+        }
         table.show();
+
+        if let Some(stats) = compare_stats {
+            let (target, name) = storage
+                .get(self.compare.as_ref().unwrap())
+                .context("get compare target")?;
+
+            eprintln!();
+            eprintln!("Compare with: {}", style(name).magenta().bold());
+
+            self.show_compare(target, stats);
+        }
+
+        if let Some(stats) = save_stats {
+            let name = storage.save(stats)?;
+            eprintln!();
+            eprintln!("Save stats: {name}");
+        }
 
         Ok(())
     }
@@ -160,10 +240,10 @@ impl StatsArgs {
         let all_stats = batch::must_run("Stats", tasks)?;
         eprintln!();
 
-        let mut result: HashMap<&str, LanguageStats> = HashMap::new();
+        let mut result: HashMap<String, LanguageStats> = HashMap::new();
         for stats in all_stats {
             for lang in stats {
-                match result.get_mut(lang.name) {
+                match result.get_mut(lang.name.as_ref()) {
                     Some(result_lang) => {
                         result_lang.files += lang.files;
                         result_lang.blank += lang.blank;
@@ -171,7 +251,7 @@ impl StatsArgs {
                         result_lang.code += lang.code;
                     }
                     None => {
-                        result.insert(lang.name, lang);
+                        result.insert(lang.name.to_string(), lang);
                     }
                 }
             }
@@ -179,6 +259,90 @@ impl StatsArgs {
 
         let result: Vec<_> = result.into_values().collect();
         Ok(result)
+    }
+
+    fn show_compare(&self, old: Vec<LanguageStats>, current: Vec<LanguageStats>) {
+        let changes = LanguageStatsChange::compare(old, current);
+        if changes.is_empty() {
+            eprintln!("<Nothing changed>");
+            return;
+        }
+        let mut table = Table::with_capacity(changes.len());
+        table.add(vec![
+            String::from("Language"),
+            String::from("files"),
+            String::from("blank"),
+            String::from("comment"),
+            String::from("code"),
+            String::from("lines"),
+            String::from("percent"),
+        ]);
+
+        let change_cell = |num: i64| -> TableCell {
+            if num == 0 {
+                return TableCell::no_color(String::from("0"));
+            }
+            if num > 0 {
+                TableCell::with_color(format!("+{num}"), TableCellColor::Green)
+            } else {
+                TableCell::with_color(format!("{num}"), TableCellColor::Red)
+            }
+        };
+
+        let need_foot = changes.len() > 1;
+        let name_tail = " ".repeat(8);
+
+        let mut total_files: i64 = 0;
+        let mut total_lines: i64 = 0;
+        let mut total_blank: i64 = 0;
+        let mut total_comment: i64 = 0;
+        let mut total_code: i64 = 0;
+        for change in changes {
+            let LanguageStatsChange {
+                name,
+                files,
+                blank,
+                comment,
+                code,
+                lines,
+                lines_abs: _,
+                percent,
+            } = change;
+
+            let mut name = name.into_owned();
+            name.push_str(&name_tail);
+
+            total_files += files;
+            total_lines += lines;
+            total_blank += blank;
+            total_comment += comment;
+            total_code += code;
+
+            table.add_color(vec![
+                TableCell::no_color(name),
+                change_cell(files),
+                change_cell(blank),
+                change_cell(comment),
+                change_cell(code),
+                change_cell(lines),
+                TableCell::no_color(format!("{:.2}%", percent)),
+            ]);
+        }
+
+        if need_foot {
+            table.foot();
+            table.add_color(vec![
+                TableCell::no_color(String::from("SUM")),
+                change_cell(total_files),
+                change_cell(total_blank),
+                change_cell(total_comment),
+                change_cell(total_code),
+                change_cell(total_lines),
+                TableCell::no_color(String::new()),
+            ]);
+        }
+
+        table.show();
     }
 
     fn show_speed(&self, start: Instant, files: usize, lines: usize) {
@@ -204,7 +368,30 @@ impl StatsArgs {
     pub fn completion() -> Completion {
         Completion {
             args: Completion::repo_args,
-            flags: Some(Completion::labels),
+            flags: Some(|cfg, flag, to_complete| match flag {
+                'l' => Completion::labels_flag(cfg, to_complete),
+                'n' | 'd' | 'c' => {
+                    let storage = StatsStorage::load(cfg)?;
+                    if !to_complete.contains('_') {
+                        let dates = storage.list_dates()?;
+                        return Ok(Some(CompletionResult::from(dates)));
+                    }
+                    let mut fields = to_complete.split('_');
+                    let date = fields.next();
+                    let date = match date {
+                        Some(date) => date,
+                        None => return Ok(None),
+                    };
+                    let count = storage.date_count(date)?;
+                    let mut items = Vec::with_capacity(count);
+                    for i in 0..count {
+                        let item = format!("{date}_{i}");
+                        items.push(item);
+                    }
+                    Ok(Some(CompletionResult::from(items)))
+                }
+                _ => Ok(None),
+            }),
         }
     }
 }
