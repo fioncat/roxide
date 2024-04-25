@@ -3,15 +3,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args;
+use console::style;
 
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::repo::detect::stats::{DetectStats, LanguageStats, StatsStorage};
-use crate::term::Table;
+use crate::repo::detect::stats::{DetectStats, LanguageStats, LanguageStatsChange, StatsStorage};
+use crate::term::{Table, TableCell, TableCellColor};
 use crate::{confirm, utils};
 
 /// Count and display repository code stats.
@@ -39,6 +40,10 @@ pub struct StatsArgs {
     #[clap(short, long)]
     pub name: Option<Option<String>>,
 
+    /// Compare with given saved stats.
+    #[clap(short, long)]
+    pub compare: Option<Option<String>>,
+
     /// Save current stats.
     #[clap(short, long)]
     pub save: bool,
@@ -46,6 +51,8 @@ pub struct StatsArgs {
 
 impl Run for StatsArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
+        let storage = StatsStorage::load(cfg)?;
+
         if let Some(name) = self.delete.as_ref() {
             if let Some(name) = name {
                 confirm!("Do you want to remove stats {}", name);
@@ -53,7 +60,6 @@ impl Run for StatsArgs {
                 confirm!("Do you want to remove all saved stats");
             }
 
-            let storage = StatsStorage::load(cfg)?;
             storage.remove(name)?;
 
             return Ok(());
@@ -63,9 +69,9 @@ impl Run for StatsArgs {
             if self.save {
                 bail!("when using `-n` to show stats, cannot use `-s` to save it again");
             }
-
-            let storage = StatsStorage::load(cfg)?;
-            (storage.get(name)?, None)
+            let (stats, name) = storage.get(name)?;
+            eprintln!("Show saved stats: {name}");
+            (stats, None)
         } else {
             let start = Instant::now();
             let db = Database::load(cfg)?;
@@ -103,11 +109,17 @@ impl Run for StatsArgs {
         }
 
         for lang in stats.iter_mut() {
+            assert!(total_lines_f64 > 0.0);
             lang.percent = (lang.lines as f64 / total_lines_f64) * 100.0;
         }
         stats.sort_unstable_by(|a, b| b.lines.cmp(&a.lines));
 
         let save_stats = if self.save { Some(stats.clone()) } else { None };
+        let compare_stats = if self.compare.is_some() {
+            Some(stats.clone())
+        } else {
+            None
+        };
 
         let mut table = Table::with_capacity(stats.len());
         table.add(vec![
@@ -156,7 +168,7 @@ impl Run for StatsArgs {
                 format!("{total_comment}"),
                 format!("{total_code}"),
                 format!("{total_lines}"),
-                format!(""),
+                String::new(),
             ]);
         }
 
@@ -165,8 +177,18 @@ impl Run for StatsArgs {
         }
         table.show();
 
+        if let Some(stats) = compare_stats {
+            let (target, name) = storage
+                .get(self.compare.as_ref().unwrap())
+                .context("get compare target")?;
+
+            eprintln!();
+            eprintln!("Compare with: {}", style(name).magenta().bold());
+
+            self.show_compare(target, stats);
+        }
+
         if let Some(stats) = save_stats {
-            let storage = StatsStorage::load(cfg)?;
             let name = storage.save(stats)?;
             eprintln!();
             eprintln!("Save stats: {name}");
@@ -237,6 +259,90 @@ impl StatsArgs {
 
         let result: Vec<_> = result.into_values().collect();
         Ok(result)
+    }
+
+    fn show_compare(&self, old: Vec<LanguageStats>, current: Vec<LanguageStats>) {
+        let changes = LanguageStatsChange::compare(old, current);
+        if changes.is_empty() {
+            eprintln!("<Nothing changed>");
+            return;
+        }
+        let mut table = Table::with_capacity(changes.len());
+        table.add(vec![
+            String::from("Language"),
+            String::from("files"),
+            String::from("blank"),
+            String::from("comment"),
+            String::from("code"),
+            String::from("lines"),
+            String::from("percent"),
+        ]);
+
+        let change_cell = |num: i64| -> TableCell {
+            if num == 0 {
+                return TableCell::no_color(String::from("0"));
+            }
+            if num > 0 {
+                TableCell::with_color(format!("+{num}"), TableCellColor::Green)
+            } else {
+                TableCell::with_color(format!("{num}"), TableCellColor::Red)
+            }
+        };
+
+        let need_foot = changes.len() > 1;
+        let name_tail = " ".repeat(8);
+
+        let mut total_files: i64 = 0;
+        let mut total_lines: i64 = 0;
+        let mut total_blank: i64 = 0;
+        let mut total_comment: i64 = 0;
+        let mut total_code: i64 = 0;
+        for change in changes {
+            let LanguageStatsChange {
+                name,
+                files,
+                blank,
+                comment,
+                code,
+                lines,
+                lines_abs: _,
+                percent,
+            } = change;
+
+            let mut name = name.into_owned();
+            name.push_str(&name_tail);
+
+            total_files += files;
+            total_lines += lines;
+            total_blank += blank;
+            total_comment += comment;
+            total_code += code;
+
+            table.add_color(vec![
+                TableCell::no_color(name),
+                change_cell(files),
+                change_cell(blank),
+                change_cell(comment),
+                change_cell(code),
+                change_cell(lines),
+                TableCell::no_color(format!("{:.2}%", percent)),
+            ]);
+        }
+
+        if need_foot {
+            table.foot();
+            table.add_color(vec![
+                TableCell::no_color(String::from("SUM")),
+                change_cell(total_files),
+                change_cell(total_blank),
+                change_cell(total_comment),
+                change_cell(total_code),
+                change_cell(total_lines),
+                TableCell::no_color(String::new()),
+            ]);
+        }
+
+        table.show();
     }
 
     fn show_speed(&self, start: Instant, files: usize, lines: usize) {

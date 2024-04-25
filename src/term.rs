@@ -1370,8 +1370,32 @@ impl GitTag {
 
 pub struct Table {
     ncol: usize,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<TableCell>>,
     foot_index: usize,
+}
+
+#[derive(Clone, Copy)]
+pub enum TableCellColor {
+    Red,
+    Green,
+}
+
+pub struct TableCell {
+    pub text: String,
+    pub color: Option<TableCellColor>,
+}
+
+impl TableCell {
+    pub fn no_color(text: String) -> Self {
+        Self { text, color: None }
+    }
+
+    pub fn with_color(text: String, color: TableCellColor) -> Self {
+        Self {
+            text,
+            color: Some(color),
+        }
+    }
 }
 
 impl Table {
@@ -1389,6 +1413,11 @@ impl Table {
     }
 
     pub fn add(&mut self, row: Vec<String>) {
+        let row = row.into_iter().map(TableCell::no_color).collect();
+        self.add_color(row)
+    }
+
+    pub fn add_color(&mut self, row: Vec<TableCell>) {
         if row.is_empty() {
             panic!("empty row");
         }
@@ -1406,7 +1435,7 @@ impl Table {
             let mut max_size: usize = 0;
             for row in self.rows.iter() {
                 let cell = row.get(coli).unwrap();
-                let raw_size = console::measure_text_width(cell);
+                let raw_size = console::measure_text_width(&cell.text);
                 let size = if coli == self.ncol - 1 {
                     raw_size
                 } else {
@@ -1424,21 +1453,30 @@ impl Table {
 
         for (rowi, row) in self.rows.into_iter().enumerate() {
             if rowi == 0 || (self.foot_index > 0 && rowi >= self.foot_index) {
-                println!("{split}");
+                eprintln!("{split}");
             }
             for (coli, cell) in row.into_iter().enumerate() {
                 let pad = pads[coli];
-                let cell = cell.pad_to_width_with_alignment(pad, pad::Alignment::Left);
-                print!("{}", cell);
+                let mut text = cell
+                    .text
+                    .pad_to_width_with_alignment(pad, pad::Alignment::Left);
+                if let Some(color) = cell.color {
+                    let style_text = match color {
+                        TableCellColor::Red => style(&text).red(),
+                        TableCellColor::Green => style(&text).green(),
+                    };
+                    text = format!("{style_text}");
+                }
+                eprint!("{text}");
             }
-            println!();
+            eprintln!();
 
             if rowi == 0 {
-                println!("{split}");
+                eprintln!("{split}");
             }
         }
 
-        println!("{split}");
+        eprintln!("{split}");
     }
 }
 

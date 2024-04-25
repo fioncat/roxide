@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -193,7 +194,7 @@ impl StatsStorage {
         Ok(data.len())
     }
 
-    pub fn get(&self, name: &Option<String>) -> Result<Vec<LanguageStats>> {
+    pub fn get(&self, name: &Option<String>) -> Result<(Vec<LanguageStats>, String)> {
         let (name, index) = match name.as_ref() {
             Some(name) => self.parse_name(name)?,
             None => {
@@ -221,7 +222,7 @@ impl StatsStorage {
             bail!("index {index} is out of bound of stats");
         }
 
-        Ok(data.remove(index))
+        Ok((data.remove(index), format!("{name}_{index}")))
     }
 
     pub fn remove(&self, name: &Option<String>) -> Result<()> {
@@ -304,5 +305,109 @@ impl StatsStorage {
         utils::ensure_dir(path)?;
         fs::write(path, data)
             .with_context(|| format!("write stats json to file '{}'", path.display()))
+    }
+}
+
+pub struct LanguageStatsChange {
+    pub name: Cow<'static, str>,
+
+    pub files: i64,
+
+    pub blank: i64,
+    pub comment: i64,
+    pub code: i64,
+
+    pub lines: i64,
+
+    pub lines_abs: usize,
+    pub percent: f64,
+}
+
+impl LanguageStatsChange {
+    pub fn compare(old: Vec<LanguageStats>, current: Vec<LanguageStats>) -> Vec<Self> {
+        let mut old_map: HashMap<_, _> = old
+            .into_iter()
+            .map(|lang| (lang.name.clone(), lang))
+            .collect();
+
+        let mut changes = Vec::with_capacity(current.len());
+        let mut lines_total: usize = 0;
+        for stats in current {
+            let old = match old_map.remove(stats.name.as_ref()) {
+                Some(old) => old,
+                None => {
+                    lines_total += stats.lines;
+                    // A new added language
+                    changes.push(LanguageStatsChange {
+                        name: stats.name,
+                        files: stats.files as _,
+                        blank: stats.blank as _,
+                        comment: stats.comment as _,
+                        code: stats.code as _,
+                        lines: stats.lines as _,
+                        lines_abs: stats.lines,
+                        percent: 0.0,
+                    });
+                    continue;
+                }
+            };
+
+            let change_files = stats.files as i64 - old.files as i64;
+
+            let change_blank = stats.blank as i64 - old.blank as i64;
+            let change_comment = stats.comment as i64 - old.comment as i64;
+            let change_code = stats.code as i64 - old.code as i64;
+
+            let change_lines = stats.lines as i64 - old.lines as i64;
+
+            if change_files == 0
+                && change_blank == 0
+                && change_comment == 0
+                && change_code == 0
+                && change_lines == 0
+            {
+                // Nothing changes, skip this language
+                continue;
+            }
+
+            let lines_abs =
+                (change_blank.abs() + change_comment.abs() + change_code.abs()) as usize;
+            lines_total += lines_abs;
+
+            changes.push(LanguageStatsChange {
+                name: stats.name,
+                files: change_files,
+                blank: change_blank,
+                comment: change_comment,
+                code: change_code,
+                lines: change_lines,
+                lines_abs,
+                percent: 0.0,
+            });
+        }
+
+        for stats in old_map.into_values() {
+            lines_total += stats.lines;
+            // Ths language is deleted
+            changes.push(LanguageStatsChange {
+                name: stats.name,
+                files: -(stats.files as i64),
+                blank: -(stats.blank as i64),
+                comment: -(stats.comment as i64),
+                code: -(stats.code as i64),
+                lines: -(stats.lines as i64),
+                lines_abs: stats.lines as _,
+                percent: 0.0,
+            });
+        }
+
+        for change in changes.iter_mut() {
+            assert!(lines_total > 0);
+            let percent = (change.lines_abs as f64 / lines_total as f64) * 100.0;
+            change.percent = percent;
+        }
+
+        changes.sort_unstable_by(|a, b| b.lines_abs.cmp(&a.lines_abs));
+        changes
     }
 }
