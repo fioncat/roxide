@@ -7,8 +7,4 @@ install:
 
 .PHONY: clean
 clean:
-	@rm -rf ./target
-
-.PHONY: cloc
-cloc:
-	cloc --exclude-dir target .
+	@cargo clean

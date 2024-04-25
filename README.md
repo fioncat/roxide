@@ -17,9 +17,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/fioncat/roxide/HEAD/inst
 If you have Rust installed, you can build it from source:
 
 ```bash
-git clone https://github.com/fioncat/roxide.git /path/to/roxide
-cd /path/to/roxide
-make install
+cargo install --git https://github.com/fioncat/roxide
 ```
 
 ## Config

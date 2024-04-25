@@ -1,5 +1,0 @@
-include = ["get-image-name"]
-
-[[steps]]
-name = "Build docker image"
-docker_build = {image = "${IMAGE_NAME}", file = "Dockerfile"}

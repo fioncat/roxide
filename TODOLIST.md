@@ -3,8 +3,8 @@
 ## v0.10.1
 
 - [x] In `url`, expand the alias name.
-- [ ] Support completion for `keyword` and `repo name`.
-- [ ] Support `@[n]`, to select the `nth` visited repo. Usage: `rox home @3`, `rox home github @5`. The `n` can be defaulted to `5`.
+- [x] Support completion for `keyword` and `repo name`.
+- [x] Support `@[n]`, to select the `nth` visited repo. Usage: `rox home @3`, `rox home github @5`. The `n` can be defaulted to `5`.
 
 ## v0.10.0
 
