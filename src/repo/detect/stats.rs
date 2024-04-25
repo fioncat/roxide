@@ -388,7 +388,7 @@ impl LanguageStatsChange {
 
         for stats in old_map.into_values() {
             lines_total += stats.lines;
-            // Ths language is deleted
+            // This language is deleted
             changes.push(LanguageStatsChange {
                 name: stats.name,
                 files: -(stats.files as i64),
