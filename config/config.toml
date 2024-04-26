@@ -7,6 +7,22 @@ metadir = "~/.local/share/roxide"
 # The generated command name, to support terminal navigation.
 cmd = "rox"
 
+# The expire seconds for keyword completion, default is 1 day.
+keyword_expire = 86400
+
+[detect]
+# Auto detect project languages and modules, add them to labels.
+auto = false
+# Ignore glob patterns when detecting and counting stats.
+ignores = []
+
+[docker]
+# The docker command name and args.
+name = "docker"
+args = []
+# The docker shell program name.
+shell = "sh"
+
 # The tag release rule.
 [release]
 patch = "v{0}.{1}.{2+}"
