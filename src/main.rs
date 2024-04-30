@@ -23,6 +23,13 @@ use crate::cmd::{App, Run};
 use crate::config::Config;
 use crate::errors::SilentExit;
 
+/// Embed commands list, user should not use these commands directly.
+/// TODO: Hide these commands in help message, prefix these commands with an underscore.
+#[inline(always)]
+fn is_embed_command(action: &str) -> bool {
+    matches!(action, "init" | "complete" | "current")
+}
+
 #[inline(always)]
 fn wrap_result<T>(result: Result<T>, message: &str, error_code: i32) -> T {
     match result {
@@ -39,14 +46,16 @@ fn wrap_result<T>(result: Result<T>, message: &str, error_code: i32) -> T {
 
 fn main() {
     let mut args: Vec<OsString> = env::args_os().collect();
-    let is_complete = args.get(1).is_some_and(|arg| arg == "complete");
+    let allow_non_tty = args
+        .get(1)
+        .is_some_and(|arg| arg.to_str().is_some_and(is_embed_command));
 
-    if !is_complete && !termion::is_tty(&io::stderr()) {
+    if !allow_non_tty && !termion::is_tty(&io::stderr()) {
         // We donot allow stderr been redirected, this will cause message been dismissed.
         // Another reason we do this check is that the terminal control characters will be
         // printed in stderr, redirecting it to non-tty will cause confusion.
-        // The `complete` command is a special condition, its output is allowed to be
-        // dismissed since we donot care about it.
+        // The embed commands are special conditions, their output will be captured by other
+        // programs so we should skip this check.
         process::exit(errors::CODE_STDERR_REDIRECT);
     }
     // It is safe to set this since all the colored texts will be printed to stderr.
