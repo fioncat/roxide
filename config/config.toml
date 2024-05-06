@@ -7,6 +7,10 @@ metadir = "~/.local/share/roxide"
 # The generated command name, to support terminal navigation.
 cmd = "rox"
 
+# The text format for display command.
+# Available placeholders are: {icon}, {remote}, {owner}, {name}.
+display_format = "{icon} {owner}/{name}"
+
 # The expire seconds for keyword completion, default is 1 day.
 keyword_expire = 86400
 

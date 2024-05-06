@@ -1,3 +1,5 @@
+icon = ""
+
 # A local remote without a "clone" field means that we cannot perform
 # operations such as cloning or calling APIs on this remote. Typically, it
 # represents a local test remote.

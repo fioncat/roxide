@@ -27,7 +27,7 @@ use crate::errors::SilentExit;
 /// TODO: Hide these commands in help message, prefix these commands with an underscore.
 #[inline(always)]
 fn is_embed_command(action: &str) -> bool {
-    matches!(action, "init" | "complete" | "current")
+    matches!(action, "init" | "complete" | "display")
 }
 
 #[inline(always)]

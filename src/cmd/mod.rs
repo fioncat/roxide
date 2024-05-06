@@ -6,9 +6,9 @@ mod clean;
 mod complete;
 mod config;
 mod copy;
-mod current;
 mod detach;
 mod detect;
+mod display;
 mod get;
 mod home;
 mod import;
@@ -62,9 +62,9 @@ pub enum Commands {
     Complete(complete::CompleteArgs),
     Config(config::ConfigArgs),
     Copy(copy::CopyArgs),
-    Current(current::CurrentArgs),
     Detach(detach::DetachArgs),
     Detect(detect::DetectArgs),
+    Display(display::DisplayArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
     Import(import::ImportArgs),
@@ -129,9 +129,9 @@ impl Run for App {
             Commands::Complete(args) => args.run(cfg),
             Commands::Config(args) => args.run(cfg),
             Commands::Copy(args) => args.run(cfg),
-            Commands::Current(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
             Commands::Detect(args) => args.run(cfg),
+            Commands::Display(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),
             Commands::Import(args) => args.run(cfg),
