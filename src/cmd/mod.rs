@@ -30,7 +30,6 @@ mod stats;
 mod sync;
 mod tag;
 mod update;
-mod version;
 
 use std::collections::{HashMap, HashSet};
 
@@ -86,7 +85,6 @@ pub enum Commands {
     Sync(sync::SyncArgs),
     Tag(tag::TagArgs),
     Update(update::UpdateArgs),
-    Version(version::VersionArgs),
 }
 
 impl Commands {
@@ -153,7 +151,6 @@ impl Run for App {
             Commands::Sync(args) => args.run(cfg),
             Commands::Tag(args) => args.run(cfg),
             Commands::Update(args) => args.run(cfg),
-            Commands::Version(args) => args.run(cfg),
         }
     }
 }
