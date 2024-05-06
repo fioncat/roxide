@@ -1,0 +1,8 @@
+# ~/.config/starship.toml
+
+[custom.roxide]
+command = 'roxide display'
+when = ''' test "$(roxide display)" '''
+require_repo = true
+style = "fg:#fab387"
+format = "as [$output]($style) "
