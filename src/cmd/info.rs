@@ -178,7 +178,7 @@ impl Info {
             hostname: Self::option_info(System::host_name()),
             distribution: System::distribution_id(),
             os_version: System::long_os_version()
-                .map(Cow::Owned)
+                .map(|s| Cow::Owned(s.trim().to_string()))
                 .unwrap_or(Cow::Borrowed("rolling")),
             kernel_version: Self::option_info(System::kernel_version()),
             uptime: utils::format_elapsed(Duration::from_secs(System::uptime())),
@@ -236,7 +236,6 @@ impl Info {
 
     #[inline]
     fn option_info(s: Option<String>) -> Cow<'static, str> {
-        s.map(|s| Cow::Owned(s.trim().to_string()))
-            .unwrap_or(Cow::Borrowed("Unknown"))
+        s.map(Cow::Owned).unwrap_or(Cow::Borrowed("Unknown"))
     }
 }
