@@ -236,6 +236,7 @@ impl Info {
 
     #[inline]
     fn option_info(s: Option<String>) -> Cow<'static, str> {
-        s.map(Cow::Owned).unwrap_or(Cow::Borrowed("Unknown"))
+        s.map(|s| Cow::Owned(s.trim().to_string()))
+            .unwrap_or(Cow::Borrowed("Unknown"))
     }
 }
