@@ -53,6 +53,10 @@ token = ""
 # remote information has been updated.
 cache_hours = 24
 
+# The icon to display. Default is: "<{remote_name}>".
+# The following icon require Nerd Font: https://www.nerdfonts.com/.
+icon = ""
+
 # The list limit when perform searching.
 list_limit = 200
 
