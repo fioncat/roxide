@@ -29,6 +29,7 @@ console = "0.15.8"
 dialoguer = "0.11.0"
 file-lock = "2.1.11"
 glob = "0.3.1"
+libc = "0.2.154"
 nix = { version = "0.28.0", features = ["user"] }
 num_cpus = "1.16.0"
 open = "5.1.2"

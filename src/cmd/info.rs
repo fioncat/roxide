@@ -45,6 +45,8 @@ struct BuildInfo {
     commit: &'static str,
     time: &'static str,
     binary_size: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    glibc_version: Option<String>,
     rust: RustInfo,
     cargo: CargoInfo,
     builder: BuilderInfo,
@@ -130,6 +132,7 @@ impl Info {
             target: env!("ROXIDE_TARGET"),
             commit: env!("ROXIDE_SHA"),
             time: env!("VERGEN_BUILD_TIMESTAMP"),
+            glibc_version: get_glibc_version(),
             binary_size: utils::human_bytes(exec_meta.len()),
             rust: RustInfo {
                 version: env!("VERGEN_RUSTC_SEMVER"),
@@ -238,4 +241,25 @@ impl Info {
     fn option_info(s: Option<String>) -> Cow<'static, str> {
         s.map(Cow::Owned).unwrap_or(Cow::Borrowed("Unknown"))
     }
+}
+
+#[cfg(target_env = "gnu")]
+#[inline(always)]
+fn get_glibc_version() -> Option<String> {
+    use std::ffi::CStr;
+
+    let version = unsafe { libc::gnu_get_libc_version() };
+
+    if version.is_null() {
+        None
+    } else {
+        let version_str = unsafe { CStr::from_ptr(version).to_string_lossy().to_string() };
+        Some(version_str)
+    }
+}
+
+#[cfg(not(target_env = "gnu"))]
+#[inline(always)]
+fn get_glibc_version() -> Option<String> {
+    None
 }
