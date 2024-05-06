@@ -44,10 +44,10 @@ struct BuildInfo {
     target: &'static str,
     commit: &'static str,
     time: &'static str,
+    binary_size: String,
     rust: RustInfo,
     cargo: CargoInfo,
-    tls_vendored: bool,
-    binary_size: String,
+    builder: BuilderInfo,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,6 +62,16 @@ struct CargoInfo {
     debug: &'static str,
     features: &'static str,
     opt_level: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct BuilderInfo {
+    name: &'static str,
+    os_version: &'static str,
+    user: &'static str,
+    cpu: &'static str,
+    cpu_cores: &'static str,
+    memory: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,6 +130,7 @@ impl Info {
             target: env!("ROXIDE_TARGET"),
             commit: env!("ROXIDE_SHA"),
             time: env!("VERGEN_BUILD_TIMESTAMP"),
+            binary_size: utils::human_bytes(exec_meta.len()),
             rust: RustInfo {
                 version: env!("VERGEN_RUSTC_SEMVER"),
                 channel: env!("VERGEN_RUSTC_CHANNEL"),
@@ -130,8 +141,14 @@ impl Info {
                 features: env!("VERGEN_CARGO_FEATURES"),
                 opt_level: env!("VERGEN_CARGO_OPT_LEVEL"),
             },
-            tls_vendored: cfg!(feature = "tls-vendored"),
-            binary_size: utils::human_bytes(exec_meta.len()),
+            builder: BuilderInfo {
+                name: env!("VERGEN_SYSINFO_NAME"),
+                os_version: env!("VERGEN_SYSINFO_OS_VERSION"),
+                cpu: env!("VERGEN_SYSINFO_CPU_BRAND"),
+                cpu_cores: env!("VERGEN_SYSINFO_CPU_CORE_COUNT"),
+                user: env!("VERGEN_SYSINFO_USER"),
+                memory: env!("VERGEN_SYSINFO_TOTAL_MEMORY"),
+            },
         };
 
         let mut sysinfo = System::new();

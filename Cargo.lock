@@ -2031,6 +2031,7 @@ dependencies = [
  "regex",
  "rustc_version",
  "rustversion",
+ "sysinfo",
  "time",
 ]
 

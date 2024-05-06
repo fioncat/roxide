@@ -24,13 +24,10 @@ fn exec_git(args: &[&str]) -> Result<String, Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     EmitBuilder::builder()
-        .rustc_semver()
-        .rustc_llvm_version()
-        .rustc_channel()
-        .build_timestamp()
-        .cargo_features()
-        .cargo_debug()
-        .cargo_opt_level()
+        .all_build()
+        .all_rustc()
+        .all_cargo()
+        .all_sysinfo()
         .emit()?;
 
     let describe = match exec_git(&["describe", "--tags"]) {
