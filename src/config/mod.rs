@@ -28,6 +28,13 @@ pub struct Config {
     #[serde(default = "defaults::cmd")]
     pub cmd: String,
 
+    /// The text format for display command.
+    /// Available placeholders are: {icon}, {remote}, {owner}, {name}.
+    /// Default is: "{icon} {owner}/{name}".
+    /// If the remote icon is empty, the "{icon}" will be replaced with "<{remote}>".
+    #[serde(default = "defaults::display_format")]
+    pub display_format: String,
+
     /// Auto detect repository labels when accessing it.
     #[serde(default = "defaults::detect")]
     pub detect: Detect,
@@ -226,6 +233,9 @@ pub struct RemoteConfig {
     /// User email, optional, if not empty, will execute the following command for
     /// each repo: `git config user.email {name}`
     pub email: Option<String>,
+
+    // The icon to display.
+    pub icon: Option<String>,
 
     /// If true, will use ssh protocol to clone repo, else, use https.
     #[serde(default = "defaults::disable")]
@@ -513,6 +523,7 @@ impl Config {
             workspace: defaults::workspace(),
             metadir: defaults::metadir(),
             docker: defaults::docker(),
+            display_format: defaults::display_format(),
             keyword_expire: defaults::keyword_expire(),
             cmd: defaults::cmd(),
             detect: defaults::detect(),
@@ -906,6 +917,7 @@ env = [
             user: Some("fioncat".to_string()),
             email: Some("lazycat7706@gmail.com".to_string()),
             ssh: false,
+            icon: None,
             labels: Some(hashset_strings!["sync"]),
             provider: Some(ProviderType::Github),
 
@@ -949,6 +961,7 @@ env = [
             clone: Some("gitlab.com".to_string()),
             user: Some("test".to_string()),
             email: Some("test-email@test.com".to_string()),
+            icon: None,
             ssh: false,
             provider: Some(ProviderType::Gitlab),
             token: Some("test-token-gitlab".to_string()),
@@ -986,6 +999,7 @@ env = [
             clone: None,
             user: None,
             email: None,
+            icon: None,
             ssh: false,
             provider: None,
             token: None,

@@ -17,6 +17,10 @@ pub fn cmd() -> String {
     String::from("rox")
 }
 
+pub fn display_format() -> String {
+    String::from("{icon} {owner}/{name}")
+}
+
 pub fn docker() -> Docker {
     Docker {
         name: docker_name(),
@@ -37,6 +41,7 @@ pub fn remote(remote: impl AsRef<str>) -> RemoteConfig {
         clone: None,
         user: None,
         email: None,
+        icon: None,
         ssh: false,
         labels: None,
         provider: None,
