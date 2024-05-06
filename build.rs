@@ -28,6 +28,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .rustc_llvm_version()
         .rustc_channel()
         .build_timestamp()
+        .cargo_features()
+        .cargo_debug()
+        .cargo_opt_level()
         .emit()?;
 
     let describe = match exec_git(&["describe", "--tags"]) {

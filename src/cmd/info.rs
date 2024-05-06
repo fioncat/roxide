@@ -45,8 +45,9 @@ struct BuildInfo {
     commit: &'static str,
     time: &'static str,
     rust: RustInfo,
+    cargo: CargoInfo,
     tls_vendored: bool,
-    size: String,
+    binary_size: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,11 +58,20 @@ struct RustInfo {
 }
 
 #[derive(Debug, Serialize)]
+struct CargoInfo {
+    debug: &'static str,
+    features: &'static str,
+    opt_level: &'static str,
+}
+
+#[derive(Debug, Serialize)]
 struct SystemInfo {
     name: Cow<'static, str>,
-    uptime: String,
-    kernel_version: Cow<'static, str>,
+    hostname: Cow<'static, str>,
+    distribution: String,
     os_version: Cow<'static, str>,
+    kernel_version: Cow<'static, str>,
+    uptime: String,
     cpu: CpuInfo,
     memory: MemoryInfo,
 }
@@ -70,7 +80,8 @@ struct SystemInfo {
 struct CpuInfo {
     brands: Vec<String>,
     arch: Cow<'static, str>,
-    total: usize,
+    physical_cores: Cow<'static, str>,
+    logic_cores: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -114,11 +125,18 @@ impl Info {
                 channel: env!("VERGEN_RUSTC_CHANNEL"),
                 llvm_version: env!("VERGEN_RUSTC_LLVM_VERSION"),
             },
+            cargo: CargoInfo {
+                debug: env!("VERGEN_CARGO_DEBUG"),
+                features: env!("VERGEN_CARGO_FEATURES"),
+                opt_level: env!("VERGEN_CARGO_OPT_LEVEL"),
+            },
             tls_vendored: cfg!(feature = "tls-vendored"),
-            size: utils::human_bytes(exec_meta.len()),
+            binary_size: utils::human_bytes(exec_meta.len()),
         };
 
-        let sysinfo = System::new_all();
+        let mut sysinfo = System::new();
+        sysinfo.refresh_cpu();
+        sysinfo.refresh_memory();
 
         let cpus = sysinfo.cpus();
         let total_cpu = cpus.len();
@@ -140,15 +158,21 @@ impl Info {
 
         let system = SystemInfo {
             name: Self::option_info(System::name()),
-            uptime: utils::format_elapsed(Duration::from_secs(System::uptime())),
-            kernel_version: Self::option_info(System::kernel_version()),
-            os_version: System::os_version()
+            hostname: Self::option_info(System::host_name()),
+            distribution: System::distribution_id(),
+            os_version: System::long_os_version()
                 .map(Cow::Owned)
                 .unwrap_or(Cow::Borrowed("rolling")),
+            kernel_version: Self::option_info(System::kernel_version()),
+            uptime: utils::format_elapsed(Duration::from_secs(System::uptime())),
             cpu: CpuInfo {
                 brands: cpu_brands,
                 arch: Self::option_info(System::cpu_arch()),
-                total: total_cpu,
+                physical_cores: sysinfo
+                    .physical_core_count()
+                    .map(|cores| Cow::Owned(format!("{cores}")))
+                    .unwrap_or(Cow::Borrowed("Unknown")),
+                logic_cores: total_cpu,
             },
             memory: MemoryInfo {
                 total: utils::human_bytes(sysinfo.total_memory()),
