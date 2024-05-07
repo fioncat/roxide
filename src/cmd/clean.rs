@@ -102,7 +102,7 @@ impl CleanArgs {
                 return Ok(false);
             }
 
-            if repo_set.get(&path).is_some() {
+            if repo_set.contains(&path) {
                 return Ok(false);
             }
 

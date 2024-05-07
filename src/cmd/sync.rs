@@ -277,7 +277,7 @@ impl Task<()> for SyncTask {
             if branch.current {
                 match branch.status {
                     BranchStatus::Gone => {}
-                    _ => backup_branch = branch.name.clone(),
+                    _ => backup_branch.clone_from(&branch.name),
                 }
             }
             match branch.status {
