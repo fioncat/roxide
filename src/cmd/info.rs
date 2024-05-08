@@ -90,7 +90,7 @@ struct SystemInfo {
 
 #[derive(Debug, Serialize)]
 struct CpuInfo {
-    brands: Vec<String>,
+    brand: String,
     arch: Cow<'static, str>,
     physical_cores: Cow<'static, str>,
     logic_cores: usize,
@@ -170,23 +170,35 @@ impl Info {
             cpu_brands.insert(String::from(brand), 1);
         }
 
+        let has_multi_cpus = cpu_brands.len() > 1;
         let mut cpu_brands: Vec<String> = cpu_brands
             .into_iter()
-            .map(|(name, count)| format!("{name} x {count}"))
+            .map(|(name, count)| {
+                // We only show cpu count if there are multiple cpus.
+                if has_multi_cpus {
+                    format!("{name} ({count})")
+                } else {
+                    name
+                }
+            })
             .collect();
         cpu_brands.sort_unstable();
+        let cpu_brand = cpu_brands.join(",");
+
+        // Some rolling release distros don't have a version (such as Arch Linux).
+        let os_version = System::os_version()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed("rolling"));
 
         let system = SystemInfo {
             name: Self::option_info(System::name()),
             hostname: Self::option_info(System::host_name()),
             distribution: System::distribution_id(),
-            os_version: System::long_os_version()
-                .map(|s| Cow::Owned(s.trim().to_string()))
-                .unwrap_or(Cow::Borrowed("rolling")),
+            os_version,
             kernel_version: Self::option_info(System::kernel_version()),
             uptime: utils::format_elapsed(Duration::from_secs(System::uptime())),
             cpu: CpuInfo {
-                brands: cpu_brands,
+                brand: cpu_brand,
                 arch: Self::option_info(System::cpu_arch()),
                 physical_cores: sysinfo
                     .physical_core_count()
