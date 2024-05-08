@@ -444,6 +444,15 @@ pub fn git_version() -> Result<Version> {
         Some(v) => v.trim(),
         None => bail!("unknown git version output: '{version}'"),
     };
+    // Some distributions may add additional information to the version number,
+    // like macos's git version: `2.24.3 (Apple Git-128)`. We need to remove the
+    // extra information here.
+    let mut split = version.split_whitespace();
+    let version = split.next();
+    if version.is_none() {
+        bail!("git returned empty version");
+    }
+    let version = version.unwrap();
 
     match Version::parse(version) {
         Ok(ver) => Ok(ver),
