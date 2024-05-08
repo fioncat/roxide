@@ -170,13 +170,22 @@ impl Info {
             cpu_brands.insert(String::from(brand), 1);
         }
 
+        let has_multi_cpus = cpu_brands.len() > 1;
         let mut cpu_brands: Vec<String> = cpu_brands
             .into_iter()
-            .map(|(name, count)| format!("{name} ({count})"))
+            .map(|(name, count)| {
+                // We only show cpu count if there are multiple cpus.
+                if has_multi_cpus {
+                    format!("{name} ({count})")
+                } else {
+                    name
+                }
+            })
             .collect();
         cpu_brands.sort_unstable();
         let cpu_brand = cpu_brands.join(",");
 
+        // Some rolling release distros don't have a version (such as Arch Linux).
         let os_version = System::os_version()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed("rolling"));
