@@ -177,13 +177,9 @@ impl Info {
         cpu_brands.sort_unstable();
         let cpu_brand = cpu_brands.join(",");
 
-        let os_version = if System::os_version().is_some() {
-            System::long_os_version()
-                .map(Cow::Owned)
-                .unwrap_or_default()
-        } else {
-            Cow::Borrowed("rolling")
-        };
+        let os_version = System::os_version()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed("rolling"));
 
         let system = SystemInfo {
             name: Self::option_info(System::name()),
