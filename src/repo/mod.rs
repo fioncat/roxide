@@ -9,7 +9,7 @@ use std::{borrow::Cow, path::PathBuf};
 use anyhow::Result;
 
 use crate::api::ApiUpstream;
-use crate::config::{defaults, Config, OwnerConfig, RemoteConfig};
+use crate::config::{defaults, Config, RemoteConfig};
 use crate::utils;
 
 /// Represents a repository, which is the most fundamental operational object
@@ -42,9 +42,6 @@ pub struct Repo<'a> {
 
     /// The remote config reference.
     pub remote_cfg: Cow<'a, RemoteConfig>,
-
-    /// The owner config reference.
-    pub owner_cfg: Option<Cow<'a, OwnerConfig>>,
 }
 
 /// Represents how to display the repository, passes to [`Repo::to_string`].
@@ -110,7 +107,6 @@ impl Repo<'_> {
             accessed: 0,
             last_accessed: 0,
             labels,
-            owner_cfg,
             remote_cfg,
             path: path.map(Cow::Owned),
         })
@@ -132,14 +128,12 @@ impl Repo<'_> {
             last_accessed: self.last_accessed,
             accessed: self.accessed,
             remote_cfg: Cow::Owned(defaults::remote("")),
-            owner_cfg: None,
         }
     }
 
     /// Use [`ApiUpstream`] to build a repository object.
     #[inline]
     pub fn from_api_upstream(cfg: &Config, remote: impl AsRef<str>, upstream: ApiUpstream) -> Repo {
-        let owner_cfg = cfg.get_owner(remote.as_ref(), &upstream.owner);
         Repo {
             remote: Cow::Owned(remote.as_ref().to_string()),
             owner: Cow::Owned(upstream.owner),
@@ -148,7 +142,6 @@ impl Repo<'_> {
             last_accessed: 0,
             labels: None,
             remote_cfg: cfg.get_remote_or_default(remote),
-            owner_cfg,
             path: None,
         }
     }
