@@ -700,7 +700,6 @@ impl Database<'_> {
             accessed: bucket.accessed,
 
             remote_cfg: self.cfg.get_remote_or_default(remote),
-            owner_cfg: self.cfg.get_owner(remote, owner),
         }
     }
 
@@ -1649,10 +1648,7 @@ pub mod database_tests {
             name: Cow::Borrowed(name),
             last_accessed: 0,
             accessed: 0,
-
             remote_cfg: cfg.get_remote_or_default(remote),
-            owner_cfg: cfg.get_owner(remote, owner),
-
             labels,
             path: None,
         }
