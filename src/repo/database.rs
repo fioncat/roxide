@@ -299,9 +299,9 @@ impl Database<'_> {
     /// certain rules:
     ///
     /// 1. If the current position is exactly at the most recently accessed
-    /// repository, the function will not return the current repository.
+    ///    repository, the function will not return the current repository.
     /// 2. If the current position is within a subdirectory of a repository,
-    /// it will directly return the current repository.
+    ///    it will directly return the current repository.
     ///
     /// This design is intended to make the function more flexible, allowing it to
     /// achieve effects similar to `cd -` in Linux.

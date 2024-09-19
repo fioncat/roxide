@@ -309,16 +309,16 @@ fn build_common_client(remote_cfg: &RemoteConfig) -> Client {
 /// # Arguments
 ///
 /// * `cfg` - We need configuration about `cache`, `limit`, and other settings from
-/// the [`Config`] to build the [`Provider`]. Note that if `cache` is greater
-/// than 0, a caching layer will be added on top of the original [`Provider`] to
-/// speed up calls. All cached data will be stored in `{metadir}/cache`.
+///   the [`Config`] to build the [`Provider`]. Note that if `cache` is greater
+///   than 0, a caching layer will be added on top of the original [`Provider`] to
+///   speed up calls. All cached data will be stored in `{metadir}/cache`.
 /// * `remote` - If the provider type is not configured in the remote, the build
-/// will fail. The [`Provider`] will use the token from the remote for authentication.
-/// Additionally, if the remote has aliases configured, an alias layer will be added
-/// on top of the original [`Provider`] to convert repository alias names to real
-/// names so that the remote API can correctly identify them.
+///   will fail. The [`Provider`] will use the token from the remote for authentication.
+///   Additionally, if the remote has aliases configured, an alias layer will be added
+///   on top of the original [`Provider`] to convert repository alias names to real
+///   names so that the remote API can correctly identify them.
 /// * `force` - Only effective when cache is enabled, indicating that the current
-/// cache should be forcibly expired to refresh cache data.
+///   cache should be forcibly expired to refresh cache data.
 pub fn build_provider(
     cfg: &Config,
     remote_cfg: &RemoteConfig,
