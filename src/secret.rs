@@ -57,11 +57,11 @@ impl Write for StdoutWrap {
 ///
 /// 1. Generates a random `salt` of length 5.
 /// 2. Utilizes the PBKDF2 + SHA256 algorithm to derive a key of length 32 bytes
-/// from the user-provided password. The key undergoes salting and PBKDF2 processing
-/// to enhance security.
+///    from the user-provided password. The key undergoes salting and PBKDF2 processing
+///    to enhance security.
 /// 3. Generates a random `nonce` of length 12 for use in AES-256-GCM encryption.
 /// 4. Reads 4096 bytes of data from the file at a time, encrypts using AES-256-GCM,
-/// and stores the Base64 result as a string.
+///    and stores the Base64 result as a string.
 ///
 /// See:
 ///
@@ -71,12 +71,12 @@ impl Write for StdoutWrap {
 /// The format of the encrypted file:
 ///
 /// - First line: File begin, indicating that the file is an encrypted file using
-/// the roxide encryption.
+///   the roxide encryption.
 /// - Second line: Secret header, randomly generated salt + nonce.
 /// - Subsequent lines: Each line represents the encrypted result of 4096 bytes of
-/// original data.
+///   original data.
 /// - Last line: File footer, marking the end of the encrypted content; subsequent
-/// lines after this are ignored.
+///   lines after this are ignored.
 ///
 /// In summary, the encrypted file is a text file, easily viewable and storable.
 /// However, the encrypted file is generally larger than the original file and users
@@ -94,15 +94,15 @@ impl Write for StdoutWrap {
 /// ## Arguments
 ///
 /// * `path` - The source file. The function does not need to be informed whether
-/// the file is encrypted or decrypted; it will determine it based on the file header.
-/// If the file is encrypted, the function will decrypt the file content; otherwise,
-/// it will encrypt the file content.
+///   the file is encrypted or decrypted; it will determine it based on the file header.
+///   If the file is encrypted, the function will decrypt the file content; otherwise,
+///   it will encrypt the file content.
 /// * `dest` - If the value is [`None`], the encryption/decryption result will
-/// be directly output to stdout. If it is [`Some`], the result will be output
-/// to a file.
+///   be directly output to stdout. If it is [`Some`], the result will be output
+///   to a file.
 /// * `password` - The password entered by the user. If the password is incorrect,
-/// decryption will fail. If [`None`], the function will prompt the user to enter a
-/// password.
+///   decryption will fail. If [`None`], the function will prompt the user to enter a
+///   password.
 pub fn handle<P: AsRef<Path>>(
     path: P,
     dest: &Option<String>,

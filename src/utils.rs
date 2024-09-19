@@ -134,7 +134,7 @@ impl FileLock {
     ///
     /// * `cfg` - We will create file lock under `cfg.metadir`.
     /// * `name` - File lock name, you can use this to create locks at different
-    /// granularity to lock different processes.
+    ///   granularity to lock different processes.
     pub fn acquire(cfg: &Config, name: impl AsRef<str>) -> Result<FileLock> {
         let path = cfg.get_meta_dir().join("lock").join(name.as_ref());
         ensure_dir(&path)?;

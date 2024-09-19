@@ -155,7 +155,7 @@ impl Info {
         };
 
         let mut sysinfo = System::new();
-        sysinfo.refresh_cpu();
+        sysinfo.refresh_cpu_all();
         sysinfo.refresh_memory();
 
         let cpus = sysinfo.cpus();
