@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,7 +13,7 @@ use crate::cmd::{Completion, Run};
 use crate::config::{Config, RemoteConfig};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::{NameLevel, Repo};
-use crate::term::{BranchStatus, GitBranch, GitCmd};
+use crate::term::{BranchStatus, GitBranch, GitCmd, Table, TableCell, TableCellColor};
 use crate::{hashset_strings, term, utils};
 
 /// Check if branches need to be updated.
@@ -30,7 +29,7 @@ pub struct DiagnoseArgs {
     #[clap(short, long)]
     pub edit: bool,
 
-    /// Force spy, ignore label "sync".
+    /// Force diagnose, ignore label "sync".
     #[clap(short, long)]
     pub force: bool,
 
@@ -156,17 +155,25 @@ struct DiagnoseTask {
 struct DiagnoseResult {
     name: String,
     missing: bool,
+    default_branch: String,
     branches: Vec<DiagnoseBranch>,
 }
 
 struct DiagnoseBranch {
     name: String,
-    info_list: Vec<DiagnoseInfo>,
-}
 
-struct DiagnoseInfo {
-    info: Cow<'static, str>,
-    suggestion: &'static str,
+    uncommitted: usize,
+
+    detached: bool,
+    gone: bool,
+
+    ahead_remote: usize,
+    behind_remote: usize,
+
+    ahead_main: usize,
+    behind_main: usize,
+
+    ops: Vec<&'static str>,
 }
 
 impl Task<Option<DiagnoseResult>> for DiagnoseTask {
@@ -186,6 +193,7 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
             return Ok(Some(DiagnoseResult {
                 name: self.name.clone(),
                 missing: true,
+                default_branch: String::new(),
                 branches: vec![],
             }));
         }
@@ -202,14 +210,23 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
         let lines = git.lines(&["branch", "-vv"])?;
         for line in lines {
             let branch = GitBranch::parse(&self.branch_re, line.as_str())?;
-            let mut info_list = vec![];
+            let mut diagnosis = DiagnoseBranch {
+                name: branch.name.clone(),
+                uncommitted: 0,
+                detached: false,
+                gone: false,
+                ahead_remote: 0,
+                behind_remote: 0,
+                ahead_main: 0,
+                behind_main: 0,
+                ops: vec![],
+            };
+
             if branch.current {
                 let lines = git.lines(&["status", "-s"])?;
                 if !lines.is_empty() {
-                    info_list.push(DiagnoseInfo {
-                        info: Cow::Owned(format!("{} uncommitted change(s)", lines.len())),
-                        suggestion: "commit",
-                    });
+                    diagnosis.uncommitted = lines.len();
+                    diagnosis.ops.push("commit");
                 }
             }
 
@@ -220,17 +237,13 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
 
             match branch.status {
                 BranchStatus::Detached => {
-                    info_list.push(DiagnoseInfo {
-                        info: Cow::Borrowed("Missing in remote"),
-                        suggestion: "create",
-                    });
+                    diagnosis.detached = true;
+                    diagnosis.ops.push("create");
                     need_check_rebase = false;
                 }
                 BranchStatus::Gone => {
-                    info_list.push(DiagnoseInfo {
-                        info: Cow::Borrowed("Deleted in remote"),
-                        suggestion: "delete",
-                    });
+                    diagnosis.gone = true;
+                    diagnosis.ops.push("delete");
                     need_check_rebase = false;
                 }
                 BranchStatus::Behind | BranchStatus::Ahead | BranchStatus::Conflict => {
@@ -238,17 +251,13 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
                         compare_logs(&git, branch.name.as_str(), default_branch.as_str())?;
 
                     if ahead > 0 {
-                        info_list.push(DiagnoseInfo {
-                            info: Cow::Owned(format!("{} commit(s) ahead remote", ahead)),
-                            suggestion: "push",
-                        });
+                        diagnosis.ahead_remote = ahead;
+                        diagnosis.ops.push("push");
                     }
 
                     if behind > 0 {
-                        info_list.push(DiagnoseInfo {
-                            info: Cow::Owned(format!("{} commit(s) behind remote", behind)),
-                            suggestion: "pull",
-                        });
+                        diagnosis.behind_remote = behind;
+                        diagnosis.ops.push("pull");
                     }
                 }
                 BranchStatus::Sync => {}
@@ -258,24 +267,17 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
                 let (ahead, behind) =
                     compare_logs(&git, branch.name.as_str(), default_branch.as_str())?;
                 if ahead > 0 {
-                    info_list.push(DiagnoseInfo {
-                        info: Cow::Owned(format!("{ahead} commit(s) ahead {default_branch}")),
-                        suggestion: "merge",
-                    });
+                    diagnosis.ahead_main = ahead;
+                    diagnosis.ops.push("merge");
                 }
                 if behind > 0 {
-                    info_list.push(DiagnoseInfo {
-                        info: Cow::Owned(format!("{behind} commit(s) behind {default_branch}")),
-                        suggestion: "rebase",
-                    });
+                    diagnosis.behind_main = behind;
+                    diagnosis.ops.push("rebase");
                 }
             }
 
-            if !info_list.is_empty() {
-                branches.push(DiagnoseBranch {
-                    name: branch.name,
-                    info_list,
-                });
+            if !diagnosis.ops.is_empty() {
+                branches.push(diagnosis);
             }
         }
 
@@ -286,33 +288,113 @@ impl Task<Option<DiagnoseResult>> for DiagnoseTask {
         Ok(Some(DiagnoseResult {
             name: self.name.clone(),
             missing: false,
+            default_branch,
             branches,
         }))
     }
 }
 
 impl DiagnoseResult {
-    fn show(&self) {
-        if self.missing {
-            eprintln!(
-                "{}: {}",
-                style(&self.name).bold().cyan(),
-                style("Missing").bold().red()
-            );
+    fn show(self) {
+        let DiagnoseResult {
+            name,
+            missing,
+            default_branch,
+            branches,
+        } = self;
+        if missing {
+            eprintln!("{name}: {}", style("Missing").bold().red());
             return;
         }
 
-        eprintln!("{}:", style(&self.name).bold().cyan());
-        for branch in self.branches.iter() {
-            eprintln!("  * {}:", style(&branch.name).green());
-            for info in branch.info_list.iter() {
-                eprintln!(
-                    "    > {} ({})",
-                    info.info,
-                    style(info.suggestion).magenta().bold()
-                );
+        let name = style(&name).bold().cyan();
+
+        let mut has_uncommitted = false;
+        let mut has_remote = false;
+        let mut has_main = false;
+        for branch in branches.iter() {
+            if branch.uncommitted > 0 {
+                has_uncommitted = true;
+            }
+            if branch.detached || branch.gone || branch.ahead_remote > 0 || branch.behind_remote > 0
+            {
+                has_remote = true;
+            }
+            if branch.ahead_main > 0 || branch.behind_main > 0 {
+                has_main = true;
             }
         }
+
+        let mut titles = vec![String::from("Branch")];
+        if has_uncommitted {
+            titles.push(String::from("Uncommitted"));
+        }
+        if has_remote {
+            titles.push(String::from("Remote"));
+        }
+        if has_main {
+            titles.push(default_branch);
+        }
+        titles.push(String::from("Operation"));
+
+        eprintln!("{name}");
+        let mut table = Table::with_capacity(branches.len());
+        table.add(titles);
+
+        for branch in branches {
+            let mut row = vec![TableCell::no_color(branch.name)];
+            if has_uncommitted {
+                row.push(TableCell::with_color(
+                    format!("{}", branch.uncommitted),
+                    TableCellColor::Red,
+                ));
+            }
+
+            if has_remote {
+                let remote = if branch.detached {
+                    TableCell::with_color(String::from("Detached"), TableCellColor::Red)
+                } else if branch.gone {
+                    TableCell::with_color(String::from("Gone"), TableCellColor::Red)
+                } else if branch.ahead_remote > 0 && branch.behind_remote == 0 {
+                    TableCell::with_color(
+                        format!("↑{}", branch.ahead_remote),
+                        TableCellColor::Green,
+                    )
+                } else if branch.behind_remote > 0 && branch.ahead_remote == 0 {
+                    TableCell::with_color(format!("↓{}", branch.behind_remote), TableCellColor::Red)
+                } else if branch.ahead_remote > 0 && branch.behind_remote > 0 {
+                    TableCell::with_color(
+                        format!("↑{} ↓{}", branch.ahead_remote, branch.behind_remote),
+                        TableCellColor::Yellow,
+                    )
+                } else {
+                    TableCell::no_color(String::new())
+                };
+                row.push(remote);
+            }
+
+            if has_main {
+                let main = if branch.ahead_main > 0 && branch.behind_main == 0 {
+                    TableCell::with_color(format!("↑{}", branch.ahead_main), TableCellColor::Green)
+                } else if branch.behind_main > 0 && branch.ahead_main == 0 {
+                    TableCell::with_color(format!("↓{}", branch.behind_main), TableCellColor::Red)
+                } else if branch.ahead_main > 0 && branch.behind_main > 0 {
+                    TableCell::with_color(
+                        format!("↑{} ↓{}", branch.ahead_main, branch.behind_main),
+                        TableCellColor::Yellow,
+                    )
+                } else {
+                    TableCell::no_color(String::new())
+                };
+                row.push(main);
+            }
+
+            let ops = TableCell::no_color(branch.ops.join(","));
+            row.push(ops);
+            table.add_color(row);
+        }
+
+        table.show();
     }
 }
 
