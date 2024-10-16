@@ -8,6 +8,7 @@ mod config;
 mod copy;
 mod detach;
 mod detect;
+mod diagnose;
 mod display;
 mod get;
 mod home;
@@ -63,6 +64,7 @@ pub enum Commands {
     Copy(copy::CopyArgs),
     Detach(detach::DetachArgs),
     Detect(detect::DetectArgs),
+    Diagnose(diagnose::DiagnoseArgs),
     Display(display::DisplayArgs),
     Get(get::GetArgs),
     Home(home::HomeArgs),
@@ -95,6 +97,7 @@ impl Commands {
             "config" => config::ConfigArgs::completion(),
             "copy" => copy::CopyArgs::completion(),
             "detect" => detect::DetectArgs::completion(),
+            "diagnose" => diagnose::DiagnoseArgs::completion(),
             "get" => get::GetArgs::completion(),
             "home" => home::HomeArgs::completion(),
             "import" => import::ImportArgs::completion(),
@@ -129,6 +132,7 @@ impl Run for App {
             Commands::Copy(args) => args.run(cfg),
             Commands::Detach(args) => args.run(cfg),
             Commands::Detect(args) => args.run(cfg),
+            Commands::Diagnose(args) => args.run(cfg),
             Commands::Display(args) => args.run(cfg),
             Commands::Get(args) => args.run(cfg),
             Commands::Home(args) => args.run(cfg),

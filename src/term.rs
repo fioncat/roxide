@@ -1387,6 +1387,7 @@ pub struct Table {
 pub enum TableCellColor {
     Red,
     Green,
+    Yellow,
 }
 
 pub struct TableCell {
@@ -1473,6 +1474,7 @@ impl Table {
                     let style_text = match color {
                         TableCellColor::Red => style(&text).red(),
                         TableCellColor::Green => style(&text).green(),
+                        TableCellColor::Yellow => style(&text).yellow(),
                     };
                     text = format!("{style_text}");
                 }
