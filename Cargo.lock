@@ -1448,7 +1448,7 @@ dependencies = [
 
 [[package]]
 name = "roxide"
-version = "0.16.3"
+version = "0.17.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
