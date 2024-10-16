@@ -1445,12 +1445,7 @@ impl Table {
             let mut max_size: usize = 0;
             for row in self.rows.iter() {
                 let cell = row.get(coli).unwrap();
-                let raw_size = console::measure_text_width(&cell.text);
-                let size = if coli == self.ncol - 1 {
-                    raw_size
-                } else {
-                    raw_size + 2
-                };
+                let size = console::measure_text_width(&cell.text);
                 if size > max_size {
                     max_size = size
                 }
@@ -1458,13 +1453,19 @@ impl Table {
             pads.push(max_size);
         }
 
-        let total_pad: usize = pads.iter().sum();
-        let split = "-".repeat(total_pad);
+        let mut split = String::from("+");
+        for pad in pads.iter() {
+            for _ in 0..*pad + 2 {
+                split.push('-');
+            }
+            split.push('+');
+        }
 
         for (rowi, row) in self.rows.into_iter().enumerate() {
             if rowi == 0 || (self.foot_index > 0 && rowi >= self.foot_index) {
                 eprintln!("{split}");
             }
+            eprint!("|");
             for (coli, cell) in row.into_iter().enumerate() {
                 let pad = pads[coli];
                 let mut text = cell
@@ -1478,7 +1479,7 @@ impl Table {
                     };
                     text = format!("{style_text}");
                 }
-                eprint!("{text}");
+                eprint!(" {text} |");
             }
             eprintln!();
 

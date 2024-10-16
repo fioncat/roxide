@@ -4,7 +4,7 @@ use console::style;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
-use crate::term;
+use crate::term::{self, TableCell, TableCellColor};
 use crate::term::{BranchStatus, Cmd, GitBranch, Table};
 
 /// Git branch operations
@@ -122,9 +122,32 @@ impl BranchArgs {
             } else {
                 String::new()
             };
-            let status = format!("{}", branch.status.display());
-            let row = vec![cur, branch.name.clone(), status];
-            table.add(row);
+            let status = match branch.status {
+                BranchStatus::Sync => {
+                    TableCell::with_color(String::from("sync"), TableCellColor::Green)
+                }
+                BranchStatus::Gone => {
+                    TableCell::with_color(String::from("gone"), TableCellColor::Red)
+                }
+                BranchStatus::Ahead => {
+                    TableCell::with_color(String::from("ahead"), TableCellColor::Yellow)
+                }
+                BranchStatus::Behind => {
+                    TableCell::with_color(String::from("behind"), TableCellColor::Yellow)
+                }
+                BranchStatus::Conflict => {
+                    TableCell::with_color(String::from("conflict"), TableCellColor::Yellow)
+                }
+                BranchStatus::Detached => {
+                    TableCell::with_color(String::from("detached"), TableCellColor::Red)
+                }
+            };
+            let row = vec![
+                TableCell::no_color(cur),
+                TableCell::no_color(branch.name.clone()),
+                status,
+            ];
+            table.add_color(row);
         }
 
         if self.all {
