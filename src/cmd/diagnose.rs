@@ -344,10 +344,12 @@ impl DiagnoseResult {
         for branch in branches {
             let mut row = vec![TableCell::no_color(branch.name)];
             if has_uncommitted {
-                row.push(TableCell::with_color(
-                    format!("{}", branch.uncommitted),
-                    TableCellColor::Red,
-                ));
+                let uncommitted = if branch.uncommitted == 0 {
+                    TableCell::no_color(String::new())
+                } else {
+                    TableCell::with_color(format!("{}", branch.uncommitted), TableCellColor::Red)
+                };
+                row.push(uncommitted);
             }
 
             if has_remote {
