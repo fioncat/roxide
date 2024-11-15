@@ -17,9 +17,11 @@ use crate::api::ActionTarget;
 use crate::api::Provider;
 use crate::cmd::Run;
 use crate::config::Config;
+use crate::exec::{self, Cmd};
+use crate::git::GitBranch;
 use crate::repo::database::Database;
 use crate::repo::Repo;
-use crate::term::{self, Cmd, GitBranch};
+use crate::term;
 use crate::utils;
 
 /// The remote action (CI/CD) operations.
@@ -139,7 +141,7 @@ impl ActionArgs {
         }
 
         let items: Vec<&str> = action.runs.iter().map(|run| run.name.as_str()).collect();
-        let idx = term::fzf_search(&items)?;
+        let idx = exec::fzf_search(&items)?;
         let run = &action.runs[idx];
 
         if run.url.is_none() {
@@ -207,7 +209,7 @@ impl ActionArgs {
             return Ok(jobs.remove(0));
         }
 
-        let idx = term::fzf_search(&items)?;
+        let idx = exec::fzf_search(&items)?;
         let job = jobs.remove(idx);
         Ok(job)
     }

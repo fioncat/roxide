@@ -4,7 +4,8 @@ use clap::Args;
 use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::confirm;
-use crate::term::{Cmd, GitTag};
+use crate::exec::Cmd;
+use crate::git::GitTag;
 
 /// Git tag operations
 #[derive(Args)]

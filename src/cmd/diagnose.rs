@@ -11,9 +11,11 @@ use regex::Regex;
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, Run};
 use crate::config::{Config, RemoteConfig};
+use crate::exec::GitCmd;
+use crate::git::{BranchStatus, GitBranch};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::{NameLevel, Repo};
-use crate::term::{BranchStatus, GitBranch, GitCmd, Table, TableCell, TableCellColor};
+use crate::table::{Table, TableCell, TableCellColor};
 use crate::{hashset_strings, term, utils};
 
 /// Check if branches need to be updated.

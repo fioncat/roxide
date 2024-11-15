@@ -16,9 +16,9 @@ use crate::config::WorkflowEnv;
 use crate::config::WorkflowFromRepo;
 use crate::config::WorkflowOS;
 use crate::config::WorkflowStep;
+use crate::exec::Cmd;
 use crate::info;
 use crate::repo::Repo;
-use crate::term::Cmd;
 use crate::{exec, utils};
 
 struct StepContext<'a> {

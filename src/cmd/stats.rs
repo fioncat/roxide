@@ -12,7 +12,7 @@ use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::detect::stats::{DetectStats, LanguageStats, LanguageStatsChange, StatsStorage};
-use crate::term::{Table, TableCell, TableCellColor};
+use crate::table::{Table, TableCell, TableCellColor};
 use crate::{confirm, utils};
 
 /// Count and display repository code stats.

@@ -13,7 +13,8 @@ use base64::Engine;
 use pbkdf2::pbkdf2_hmac_array;
 use sha2::Sha256;
 
-use crate::term::{self, ProgressReader};
+use crate::progress::ProgressReader;
+use crate::term;
 
 const ENCRYPT_READ_BUFFER_SIZE: usize = 4096;
 const SHOW_PROGRESS_BAR_SIZE: u64 = 4096 * 1024;
@@ -197,7 +198,7 @@ where
 
     let mut write_data = |data: &[u8]| -> Result<()> {
         dest.write_all(data).context("write data to dest")?;
-        dest.write(&[b'\n']).context("write break to dest")?;
+        dest.write(b"\n").context("write break to dest")?;
         dest.flush().context("flush dest")?;
         Ok(())
     };

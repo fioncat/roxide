@@ -39,10 +39,10 @@ use clap::{Parser, Subcommand};
 use strum::VariantNames;
 
 use crate::config::Config;
+use crate::git::{self, GitBranch, GitRemote};
 use crate::repo::database::{self, Database};
 use crate::repo::keywords::Keywords;
-use crate::term::{GitBranch, GitRemote};
-use crate::{api, hashmap, term};
+use crate::{api, hashmap};
 
 #[derive(Parser)]
 #[command(author, version = env!("ROXIDE_VERSION"), about)]
@@ -453,7 +453,7 @@ impl Completion {
 }
 
 pub fn get_git_remote(cfg: &Config, upstream: bool, force: bool) -> Result<GitRemote> {
-    term::ensure_no_uncommitted()?;
+    git::ensure_no_uncommitted()?;
     if upstream {
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;

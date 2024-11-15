@@ -9,10 +9,10 @@ use clap::Args;
 use crate::batch::Task;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
+use crate::exec::Cmd;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::detect::labels::DetectLabels;
 use crate::repo::Repo;
-use crate::term::Cmd;
 use crate::workflow::Workflow;
 use crate::{api, confirm, utils};
 

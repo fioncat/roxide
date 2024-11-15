@@ -7,7 +7,7 @@ use console::style;
 use crate::cmd::{self, Completion, Run};
 use crate::config::Config;
 use crate::errors::SilentExit;
-use crate::term::Cmd;
+use crate::exec::Cmd;
 use crate::{confirm, exec};
 
 /// Squash multiple commits into one

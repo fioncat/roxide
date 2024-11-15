@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::detect::labels::DetectLabels;
 use crate::repo::{NameLevel, Repo};
-use crate::term::Table;
+use crate::table::Table;
 use crate::{term, utils};
 
 /// Show repository info.
