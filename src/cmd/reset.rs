@@ -3,7 +3,7 @@ use clap::Args;
 
 use crate::cmd::{self, Completion, Run};
 use crate::config::Config;
-use crate::term::Cmd;
+use crate::exec::Cmd;
 
 /// Reset the current branch
 #[derive(Args)]

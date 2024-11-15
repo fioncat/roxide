@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use glob::Pattern as GlobPattern;
 
-use crate::term;
+use crate::git;
 
 #[derive(Debug, Clone)]
 pub(super) struct Language {
@@ -206,7 +206,7 @@ pub(super) fn detect_languages(
     path: &Path,
     languages: &[Language],
 ) -> Result<Vec<LanguageGroup>> {
-    let files = term::list_git_files(path, ignores)?;
+    let files = git::list_git_files(path, ignores)?;
     let mut groups_map: HashMap<&str, LanguageGroup> = HashMap::with_capacity(languages.len());
 
     for file in files {

@@ -4,8 +4,9 @@ use clap::Args;
 use crate::api::MergeOptions;
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
+use crate::git::{self, GitBranch, GitRemote};
 use crate::repo::database::Database;
-use crate::term::{self, GitBranch, GitRemote};
+use crate::term;
 use crate::{api, confirm, info, utils};
 
 /// Create or open MergeRequest (PullRequest for Github)
@@ -25,7 +26,7 @@ pub struct MergeArgs {
 
 impl Run for MergeArgs {
     fn run(&self, cfg: &Config) -> Result<()> {
-        term::ensure_no_uncommitted()?;
+        git::ensure_no_uncommitted()?;
         let db = Database::load(cfg)?;
         let repo = db.must_get_current()?;
 

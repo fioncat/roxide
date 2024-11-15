@@ -10,9 +10,11 @@ use regex::Regex;
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, Run};
 use crate::config::{Config, RemoteConfig};
+use crate::exec::{Cmd, GitCmd};
+use crate::git::{BranchStatus, GitBranch};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::{NameLevel, Repo};
-use crate::term::{self, BranchStatus, Cmd, GitBranch, GitCmd};
+use crate::term;
 use crate::{hashset_strings, utils};
 
 /// Sync repositories (filter with "sync" label) git branches.

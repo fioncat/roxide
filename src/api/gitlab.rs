@@ -349,7 +349,7 @@ impl GitLab {
 
     fn execute_get<T>(&self, path: &str) -> Result<T>
     where
-        T: DeserializeOwned + ?Sized,
+        T: DeserializeOwned,
     {
         let req = self.build_request(path, Method::GET, None)?;
         self.execute(req)
@@ -358,7 +358,7 @@ impl GitLab {
     fn execute_post<B, R>(&self, path: &str, body: B) -> Result<R>
     where
         B: Serialize,
-        R: DeserializeOwned + ?Sized,
+        R: DeserializeOwned,
     {
         let body = serde_json::to_vec(&body).context("encode GitLab request body")?;
         let req = self.build_request(path, Method::POST, Some(body))?;
@@ -372,7 +372,7 @@ impl GitLab {
 
     fn execute<T>(&self, req: Request) -> Result<T>
     where
-        T: DeserializeOwned + ?Sized,
+        T: DeserializeOwned,
     {
         let resp = self.execute_resp(req)?;
         let data = resp.bytes().context("read GitLab response body")?;

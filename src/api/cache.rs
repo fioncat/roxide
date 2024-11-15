@@ -10,7 +10,8 @@ use serde::Serialize;
 
 use crate::api::*;
 use crate::config::{Config, RemoteConfig};
-use crate::utils::{self, FileLock};
+use crate::filelock::FileLock;
+use crate::utils;
 
 pub struct Cache {
     dir: PathBuf,
@@ -126,7 +127,7 @@ impl Cache {
 
     fn read<T>(&self, path: &PathBuf) -> Result<Option<T>>
     where
-        T: DeserializeOwned + ?Sized,
+        T: DeserializeOwned,
     {
         let data = match fs::read(path) {
             Ok(data) => data,

@@ -3,8 +3,8 @@ use clap::Args;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
+use crate::exec::Cmd;
 use crate::repo::database::{Database, SelectOptions, Selector};
-use crate::term::Cmd;
 use crate::{confirm, info, utils};
 
 /// Attach the current directory to a repository.

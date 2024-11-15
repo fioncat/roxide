@@ -8,9 +8,10 @@ use clap::Args;
 use crate::batch::{self, Task};
 use crate::cmd::{Completion, Run};
 use crate::config::{Config, RemoteConfig};
+use crate::exec::{Cmd, GitCmd};
 use crate::repo::database::{Database, SelectOptions, Selector};
 use crate::repo::Repo;
-use crate::term::{self, Cmd, GitCmd};
+use crate::term;
 use crate::utils;
 
 /// Import repositories from remote in batches.

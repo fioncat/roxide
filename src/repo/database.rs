@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::Provider;
 use crate::config::{Config, RemoteConfig};
+use crate::filelock::FileLock;
 use crate::repo::keywords::Keywords;
 use crate::repo::{NameLevel, Repo};
-use crate::utils::{self, FileLock};
-use crate::{info, term};
+use crate::{exec, info, term, utils};
 
 pub fn get_path<S, R, O, N>(cfg: &Config, path: &Option<S>, remote: R, owner: O, name: N) -> PathBuf
 where
@@ -794,7 +794,7 @@ pub struct DefaultTerminalHelper {}
 
 impl TerminalHelper for DefaultTerminalHelper {
     fn search(&self, items: &[String]) -> Result<usize> {
-        term::fzf_search(items)
+        exec::fzf_search(items)
     }
 
     fn edit(&self, cfg: &Config, items: Vec<String>) -> Result<Vec<String>> {

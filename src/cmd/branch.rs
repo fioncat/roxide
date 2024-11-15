@@ -4,8 +4,10 @@ use console::style;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
-use crate::term::{self, TableCell, TableCellColor};
-use crate::term::{BranchStatus, Cmd, GitBranch, Table};
+use crate::exec::{self, Cmd};
+use crate::git::{self, BranchStatus, GitBranch};
+use crate::table::{Table, TableCell, TableCellColor};
+use crate::term;
 
 /// Git branch operations
 #[derive(Args)]
@@ -50,7 +52,7 @@ enum SyncBranchTask<'a> {
 impl Run for BranchArgs {
     fn run(&self, _cfg: &Config) -> Result<()> {
         if self.sync {
-            term::ensure_no_uncommitted()?;
+            git::ensure_no_uncommitted()?;
             self.fetch(false)?;
         }
         let branches = GitBranch::list().context("list branch")?;
@@ -261,7 +263,7 @@ impl BranchArgs {
         let branch = self.get_branch_or_current(branches)?;
 
         if branch.current {
-            term::ensure_no_uncommitted()?;
+            git::ensure_no_uncommitted()?;
             let default = GitBranch::default()?;
             if branch.name.eq(&default) {
                 bail!("could not delete default branch");
@@ -331,7 +333,7 @@ impl BranchArgs {
             return Ok(());
         }
 
-        let idx = term::fzf_search(&items)?;
+        let idx = exec::fzf_search(&items)?;
 
         let target = items[idx].as_str();
 
@@ -346,7 +348,7 @@ impl BranchArgs {
             return Ok(());
         }
 
-        let idx = term::fzf_search(&branches)?;
+        let idx = exec::fzf_search(&branches)?;
         let target = branches[idx].as_str();
 
         Cmd::git(&["checkout", target]).execute()

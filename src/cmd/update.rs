@@ -6,8 +6,9 @@ use clap::Args;
 use crate::api::github::GitHub;
 use crate::cmd::Run;
 use crate::config::Config;
-use crate::term::Cmd;
-use crate::{confirm, info, term};
+use crate::exec::Cmd;
+use crate::progress;
+use crate::{confirm, info};
 
 /// If there is a new version, update roxide
 #[derive(Args)]
@@ -38,7 +39,7 @@ impl Run for UpdateArgs {
         let file_name = Self::target_filename()?;
         let url = format!("https://github.com/fioncat/roxide/releases/latest/download/{file_name}");
         let target_path = "/tmp/roxide-update/roxide.tar.gz";
-        term::download("roxide", url, target_path)?;
+        progress::download("roxide", url, target_path)?;
 
         Cmd::with_args("tar", &["-xzf", target_path, "-C", "/tmp/roxide-update"])
             .with_display("Unpack roxide")

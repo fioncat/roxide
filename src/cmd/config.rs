@@ -9,7 +9,7 @@ use strum::VariantNames;
 
 use crate::cmd::{Completion, CompletionResult, Run};
 use crate::config::{Config, RemoteConfig, WorkflowConfig};
-use crate::{term, utils};
+use crate::{exec, term, utils};
 
 /// Edit config file in terminal.
 #[derive(Args)]
@@ -86,7 +86,7 @@ impl ConfigArgs {
             );
         }
 
-        let idx = term::fzf_search(&names)?;
+        let idx = exec::fzf_search(&names)?;
 
         Ok(names.remove(idx))
     }

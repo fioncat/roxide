@@ -8,9 +8,10 @@ use clap::Args;
 
 use crate::cmd::{Completion, Run};
 use crate::config::Config;
+use crate::exec::Cmd;
+use crate::git::GitRemote;
 use crate::repo::database::{self, Database};
 use crate::repo::Repo;
-use crate::term::{Cmd, GitRemote};
 use crate::{confirm, info, utils};
 
 /// Copy the current repository to another new repository.

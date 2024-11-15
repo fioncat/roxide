@@ -10,7 +10,7 @@ use glob::Pattern as GlobPattern;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::utils::FileLock;
+use crate::filelock::FileLock;
 use crate::{utils, warn};
 
 use super::{Language, LanguageGroup};
