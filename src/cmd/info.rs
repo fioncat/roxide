@@ -199,7 +199,7 @@ impl Info {
             uptime: utils::format_elapsed(Duration::from_secs(System::uptime())),
             cpu: CpuInfo {
                 brand: cpu_brand,
-                arch: Self::option_info(System::cpu_arch()),
+                arch: Self::option_info(Some(System::cpu_arch())),
                 physical_cores: sysinfo
                     .physical_core_count()
                     .map(|cores| Cow::Owned(format!("{cores}")))
