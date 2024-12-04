@@ -30,7 +30,6 @@ dialoguer = "0.11.0"
 file-lock = "2.1.11"
 glob = "0.3.1"
 libc = "0.2.167"
-nix = { version = "0.29.0", features = ["user"] }
 num_cpus = "1.16.0"
 open = "5.3.1"
 pad = "0.1.6"

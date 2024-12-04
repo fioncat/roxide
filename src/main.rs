@@ -22,7 +22,6 @@ use std::process;
 use anyhow::Result;
 use clap::error::ErrorKind as ArgsErrorKind;
 use clap::Parser;
-use nix::unistd;
 
 use crate::cmd::{App, Run};
 use crate::config::Config;
@@ -50,7 +49,7 @@ fn wrap_result<T>(result: Result<T>, message: &str, error_code: i32) -> T {
 }
 
 fn main() {
-    let mut args: Vec<OsString> = env::args_os().collect();
+    let args: Vec<OsString> = env::args_os().collect();
     let allow_non_tty = args
         .get(1)
         .is_some_and(|arg| arg.to_str().is_some_and(is_embed_command));
@@ -65,20 +64,6 @@ fn main() {
     }
     // It is safe to set this since all the colored texts will be printed to stderr.
     console::set_colors_enabled(true);
-
-    // TODO: Support Windows
-    if unistd::getuid().is_root() {
-        match args.iter().position(|arg| arg == "--allow-root-privieges") {
-            Some(pos) => {
-                warn!("Launching roxide with root privileges can destroy your system, it is strongly not recommended to do this");
-                args.remove(pos);
-            }
-            None => {
-                error!("Launching roxide with root privileges is not allowed (HINT: You can add `--allow-root-privieges` to omit this check)");
-                process::exit(errors::CODE_ROOT_PRIVILEGES);
-            }
-        }
-    }
 
     let app = match App::try_parse_from(args) {
         Ok(app) => app,
