@@ -56,7 +56,7 @@ fn main() {
         .is_some_and(|arg| arg.to_str().is_some_and(is_embed_command));
 
     if !allow_non_tty && !termion::is_tty(&io::stderr()) {
-        // We donot allow stderr been redirected, this will cause message been dismissed.
+        // We don't allow stderr been redirected, this will cause message been dismissed.
         // Another reason we do this check is that the terminal control characters will be
         // printed in stderr, redirecting it to non-tty will cause confusion.
         // The embed commands are special conditions, their output will be captured by other

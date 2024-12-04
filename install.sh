@@ -145,7 +145,7 @@ for support_target in "${targets[@]}"; do
 done
 
 if [ -z ${SUPPORT} ]; then
-	error "Sorry, now we donot support your platform: ${TARGET}"
+	error "Sorry, now we don't support your platform: ${TARGET}"
 	exit 1
 fi
 
@@ -187,7 +187,7 @@ case "$SHELL_TYPE" in
 		PROFILE_PATH=${HOME}/.bashrc
         ;;
     *)
-		error "Sorry, now we donot support your shell ${SHELL_TYPE}"
+		error "Sorry, now we don't support your shell ${SHELL_TYPE}"
 		exit 1
         ;;
 esac
