@@ -76,7 +76,7 @@ impl Run for AttachArgs {
             let url =
                 Repo::get_clone_url(repo.owner.as_ref(), repo.name.as_ref(), &repo.remote_cfg);
             Cmd::git(&["remote", "set-url", "origin", url.as_str()])
-                .with_display(format!("Set original url to '{}'", url))
+                .with_display(format!("Set remote origin url to '{}'", url))
                 .execute()?;
         }
 
