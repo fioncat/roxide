@@ -679,9 +679,9 @@ impl Database<'_> {
     #[inline]
     fn build_repo<'a>(
         &'a self,
-        remote: &'a String,
-        owner: &'a String,
-        name: &'a String,
+        remote: &'a str,
+        owner: &'a str,
+        name: &'a str,
         bucket: &'a RepoBucket,
     ) -> Repo<'a> {
         Repo {

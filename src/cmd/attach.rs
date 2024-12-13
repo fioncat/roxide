@@ -5,6 +5,7 @@ use crate::cmd::{Completion, Run};
 use crate::config::Config;
 use crate::exec::Cmd;
 use crate::repo::database::{Database, SelectOptions, Selector};
+use crate::repo::Repo;
 use crate::{confirm, info, utils};
 
 /// Attach the current directory to a repository.
@@ -69,6 +70,13 @@ impl Run for AttachArgs {
         if let Some(email) = &repo.remote_cfg.email {
             Cmd::git(&["config", "user.email", email.as_str()])
                 .with_display(format!("Set email to '{}'", email))
+                .execute()?;
+        }
+        if repo.remote_cfg.clone.is_some() {
+            let url =
+                Repo::get_clone_url(repo.owner.as_ref(), repo.name.as_ref(), &repo.remote_cfg);
+            Cmd::git(&["remote", "set-url", "origin", url.as_str()])
+                .with_display(format!("Set original url to '{}'", url))
                 .execute()?;
         }
 
