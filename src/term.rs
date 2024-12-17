@@ -218,6 +218,11 @@ pub fn confirm(msg: impl AsRef<str>) -> Result<bool> {
         return Ok(true);
     }
 
+    if env::var_os("ROXIDE_NOCONFIRM").is_some_and(|s| s == "true") {
+        // User can set env `ROXIDE_NOCONFIRM=true` to skip confirm.
+        return Ok(true);
+    }
+
     let msg = format!(":: {}?", msg.as_ref());
     eprint!("{} [Y/n] ", style(msg).bold());
 
