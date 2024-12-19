@@ -37,6 +37,10 @@ pub struct HomeArgs {
     #[clap(short, long)]
     pub open: bool,
 
+    /// If the repo does not exist and needs to be cloned, use `depth=1`.
+    #[clap(short, long)]
+    pub thin: bool,
+
     /// Append these labels to the database.
     #[clap(short, long)]
     pub labels: Option<String>,
@@ -120,7 +124,12 @@ impl HomeArgs {
     fn clone(&self, repo: &Repo, path: &Path) -> Result<()> {
         let url = repo.clone_url();
         let path = format!("{}", path.display());
-        Cmd::git(&["clone", url.as_str(), path.as_str()])
+        let mut args = vec!["clone"];
+        if self.thin {
+            args.extend(&["--depth", "1"]);
+        }
+        args.extend(&[url.as_str(), path.as_str()]);
+        Cmd::git(&args)
             .with_display(format!("Clone {}", repo.name_with_remote()))
             .execute()?;
 
