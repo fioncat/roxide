@@ -167,11 +167,6 @@ pub(super) fn builtin_modules() -> HashMap<&'static str, Module> {
             files: Some(vec!["go.mod", "go.work"]),
             dirs: None,
         },
-        "govendor" => Module {
-            require: vec!["go"],
-            files: None,
-            dirs: Some(vec!["vendor"]),
-        },
         "maven" => Module {
             require: vec!["java"],
             files: Some(vec!["pom.xml"]),
