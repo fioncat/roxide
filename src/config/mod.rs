@@ -60,6 +60,14 @@ pub struct Config {
     #[serde(skip)]
     pub workflows: HashMap<String, WorkflowConfig>,
 
+    /// Scaffolding configuration. Scaffolding is a special mechanism for creating
+    /// repositories. It uses a template repository to derive a new repository. The
+    /// specific derivation process involves first cloning the scaffolding repository,
+    /// then executing the initialization script, and finally deleting the `.git` of
+    /// the scaffolding project and reinitializing it with `git init`.
+    #[serde(skip)]
+    pub scaffoldings: HashMap<String, ScaffoldingConfig>,
+
     #[serde(skip)]
     current_dir: Option<PathBuf>,
 
@@ -329,6 +337,16 @@ pub enum ProviderType {
     Gitlab,
 }
 
+/// The configuration for scaffolding.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ScaffoldingConfig {
+    /// The clone url of scaffolding repo.
+    pub clone: String,
+
+    /// The workflow to execute after cloning the scaffolding repo.
+    pub exec: Vec<String>,
+}
+
 impl RemoteConfig {
     pub fn get_name(&self) -> &str {
         self.name.as_ref().unwrap().as_str()
@@ -455,8 +473,12 @@ impl Config {
         let workflows_dir = root.join("workflows");
         let workflows = Self::load_workflows(&workflows_dir)?;
 
+        let scaffoldings_dir = root.join("scaffoldings");
+        let scaffoldings = Self::load_scaffoldings(&scaffoldings_dir)?;
+
         cfg.remotes = remotes;
         cfg.workflows = workflows;
+        cfg.scaffoldings = scaffoldings;
 
         cfg.validate().context("validate config content")?;
 
@@ -468,6 +490,10 @@ impl Config {
     }
 
     pub fn load_workflows(dir: &Path) -> Result<HashMap<String, WorkflowConfig>> {
+        Self::load_config_items(dir)
+    }
+
+    pub fn load_scaffoldings(dir: &Path) -> Result<HashMap<String, ScaffoldingConfig>> {
         Self::load_config_items(dir)
     }
 
@@ -530,6 +556,7 @@ impl Config {
             remotes: HashMap::new(),
             release: defaults::release(),
             workflows: defaults::empty_map(),
+            scaffoldings: defaults::empty_map(),
             detect_ignores: defaults::empty_vec(),
             current_dir: None,
             now: None,
@@ -577,6 +604,21 @@ impl Config {
                 .validate()
                 .with_context(|| format!("validate config remote '{}'", name))?;
             remote.name = Some(name.clone());
+        }
+
+        for (name, scaf) in self.scaffoldings.iter() {
+            if scaf.clone.is_empty() {
+                bail!("scaffolding '{}' clone url is empty", name);
+            }
+            for wf_name in scaf.exec.iter() {
+                if !self.workflows.contains_key(wf_name) {
+                    bail!(
+                        "scaffolding '{}' exec workflow '{}' not found",
+                        name,
+                        wf_name
+                    );
+                }
+            }
         }
 
         let current_dir = env::current_dir().context("get current work directory")?;
@@ -719,6 +761,14 @@ impl Config {
             includes.push(include_name.clone());
         }
         Ok(())
+    }
+
+    pub fn get_scaffolding(&self, name: impl AsRef<str>) -> Result<Cow<'_, ScaffoldingConfig>> {
+        let scaffolding = match self.scaffoldings.get(name.as_ref()) {
+            Some(scaffolding) => scaffolding,
+            None => bail!("could not find scaffolding '{}'", name.as_ref()),
+        };
+        Ok(Cow::Borrowed(scaffolding))
     }
 
     fn parse_patterns(raw: &[String]) -> Result<Vec<GlobPattern>> {

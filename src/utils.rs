@@ -349,13 +349,15 @@ pub fn plural_full<T>(vec: &[T], name: &str, plural: &str) -> String {
 
 /// Remove a directory, recursively deleting until reaching a non-empty parent
 /// directory.
-pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
+pub fn remove_dir_recursively(path: PathBuf, display: bool) -> Result<()> {
     match fs::read_dir(&path) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(err) => return Err(err).with_context(|| format!("read repo dir '{}'", path.display())),
     }
-    info!("Remove dir {}", path.display());
+    if display {
+        info!("Remove dir {}", path.display());
+    }
     fs::remove_dir_all(&path).context("remove directory")?;
 
     let dir = path.parent();
@@ -370,7 +372,9 @@ pub fn remove_dir_recursively(path: PathBuf) -> Result<()> {
                 if count > 0 {
                     return Ok(());
                 }
-                info!("Remove dir {}", dir.display());
+                if display {
+                    info!("Remove dir {}", dir.display());
+                }
                 fs::remove_dir(dir).context("remove directory")?;
                 match dir.parent() {
                     Some(parent) => dir = parent,
@@ -469,7 +473,7 @@ mod utils_tests {
     fn test_remove_dir_recursively() {
         const PATH: &str = "/tmp/test-roxide/sub01/sub02/sub03";
         fs::create_dir_all(PATH).unwrap();
-        remove_dir_recursively(PathBuf::from(PATH)).unwrap();
+        remove_dir_recursively(PathBuf::from(PATH), false).unwrap();
 
         match fs::read_dir(PATH) {
             Ok(_) => panic!("Expect path {PATH} be deleted, but it is still exists"),

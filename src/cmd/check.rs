@@ -78,7 +78,7 @@ impl Run for CheckArgs {
 
             for repo in to_remove {
                 let path = repo.get_path(cfg);
-                utils::remove_dir_recursively(path)?;
+                utils::remove_dir_recursively(path, true)?;
                 db.remove(repo);
             }
 

@@ -66,7 +66,7 @@ impl RemoveArgs {
         confirm!("Do you want to remove repo {}", repo.name_with_remote());
 
         let path = repo.get_path(cfg);
-        utils::remove_dir_recursively(path)?;
+        utils::remove_dir_recursively(path, true)?;
 
         db.remove(repo.update());
 
@@ -93,7 +93,7 @@ impl RemoveArgs {
         let mut update_repos = Vec::with_capacity(repos.len());
         for repo in repos {
             let path = repo.get_path(cfg);
-            utils::remove_dir_recursively(path)?;
+            utils::remove_dir_recursively(path, true)?;
             update_repos.push(repo.update());
         }
         for repo in update_repos {
