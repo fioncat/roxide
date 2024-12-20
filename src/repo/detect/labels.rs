@@ -70,14 +70,27 @@ impl<'a> DetectLabels<'a> {
         }
 
         let groups = super::detect_languages(&self.cfg.detect_ignores, &path, &self.languages)?;
-        for group in groups {
-            labels.insert(Cow::Borrowed(group.language.label));
-        }
+        let group = groups
+            .into_iter()
+            .max_by(|a, b| a.files.len().cmp(&b.files.len()));
+        let group = match group {
+            Some(group) => group,
+            None => {
+                // No language detected, ealiy return
+                if labels.is_empty() {
+                    repo.labels = None;
+                } else {
+                    repo.labels = Some(labels);
+                }
+                return Ok(());
+            }
+        };
 
+        let mut found_module = false;
         for (label, module) in self.modules.iter() {
             let mut found = false;
             for require_label in module.require.iter() {
-                if labels.contains(*require_label) {
+                if group.language.label == *require_label {
                     found = true;
                     break;
                 }
@@ -86,11 +99,10 @@ impl<'a> DetectLabels<'a> {
                 continue;
             }
 
-            found = false;
             if let Some(files) = module.files.as_ref() {
                 for file in files.iter() {
                     if root_files.contains(*file) {
-                        found = true;
+                        found_module = true;
                         break;
                     }
                 }
@@ -98,16 +110,22 @@ impl<'a> DetectLabels<'a> {
             if let Some(dirs) = module.dirs.as_ref() {
                 for dir in dirs.iter() {
                     if root_dirs.contains(*dir) {
-                        found = true;
+                        found_module = true;
                         break;
                     }
                 }
             }
-            if !found {
+            if !found_module {
                 continue;
             }
 
-            labels.insert(Cow::Borrowed(*label));
+            labels.insert(Cow::Borrowed(label));
+            break;
+        }
+
+        if !found_module {
+            // No module, we use the language label as the detect target.
+            labels.insert(Cow::Borrowed(group.language.label));
         }
 
         if labels.is_empty() {
@@ -139,26 +157,27 @@ impl<'a> DetectLabels<'a> {
         let raw_labels = repo.labels.as_ref()?;
 
         let mut user_labels = Vec::with_capacity(raw_labels.len());
-        let mut ext_labels = Vec::with_capacity(raw_labels.len());
-        let mut module_labels = Vec::with_capacity(raw_labels.len());
+        let mut lang_label = None;
+        let mut module_label = None;
         for label in raw_labels.iter() {
             if self.language_labels.contains(label.as_ref()) {
-                ext_labels.push(label.to_string());
+                lang_label = Some(label.to_string());
                 continue;
             }
             if self.modules.contains_key(label.as_ref()) {
-                module_labels.push(label.to_string());
+                module_label = Some(label.to_string());
                 continue;
             }
             user_labels.push(label.to_string());
         }
 
         user_labels.sort_unstable();
-        ext_labels.sort_unstable();
-        module_labels.sort_unstable();
-
-        user_labels.extend(ext_labels);
-        user_labels.extend(module_labels);
+        if let Some(lang_label) = lang_label {
+            user_labels.push(lang_label);
+        }
+        if let Some(module_label) = module_label {
+            user_labels.push(module_label);
+        }
 
         Some(user_labels)
     }
