@@ -74,7 +74,7 @@ impl CleanArgs {
         }
 
         for dir in dirs {
-            utils::remove_dir_recursively(dir)?;
+            utils::remove_dir_recursively(dir, true)?;
         }
 
         Ok(())
