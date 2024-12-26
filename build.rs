@@ -5,13 +5,20 @@ use std::process::Command;
 use simple_error::bail;
 use vergen::{BuildBuilder, CargoBuilder, Emitter, RustcBuilder, SysinfoBuilder};
 
-fn uncommitted_count() -> Result<usize, Box<dyn Error>> {
-    let output = exec_git(&["status", "-s"])?;
+fn uncommitted_count() -> usize {
+    let output = match _exec_git(&["status", "-s"]) {
+        Ok(output) => output,
+        Err(_) => return 0,
+    };
     let lines = output.trim().split('\n');
-    Ok(lines.filter(|line| !line.trim().is_empty()).count())
+    lines.filter(|line| !line.trim().is_empty()).count()
 }
 
-fn exec_git(args: &[&str]) -> Result<String, Box<dyn Error>> {
+fn exec_git(args: &[&str]) -> String {
+    _exec_git(args).unwrap_or(String::from("unknown"))
+}
+
+fn _exec_git(args: &[&str]) -> Result<String, Box<dyn Error>> {
     let mut cmd = Command::new("git");
     let output = cmd.args(args).output()?;
     if !output.status.success() {
@@ -35,12 +42,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .add_instructions(&si)?
         .emit()?;
 
-    let describe = match exec_git(&["describe", "--tags"]) {
-        Ok(d) => d,
-        Err(_) => String::from("unknown"),
-    };
-    let sha = exec_git(&["rev-parse", "HEAD"])?;
-    let short_sha = exec_git(&["rev-parse", "--short", "HEAD"])?;
+    let describe = exec_git(&["describe", "--tags"]);
+    let sha = exec_git(&["rev-parse", "HEAD"]);
+    let short_sha = exec_git(&["rev-parse", "--short", "HEAD"]);
 
     let cargo_version = env!("CARGO_PKG_VERSION");
     let stable_tag = format!("v{cargo_version}");
@@ -58,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         (format!("{cargo_version}-dev_{short_sha}"), "dev")
     };
 
-    let uncommitted_count = uncommitted_count()?;
+    let uncommitted_count = uncommitted_count();
     if uncommitted_count > 0 {
         version = format!("{version}-uncommitted");
         build_type = "dev-uncommitted";
