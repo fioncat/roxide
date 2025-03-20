@@ -1,0 +1,32 @@
+import (
+	"github.com/fioncat/roxide/cmd"
+	"github.com/fioncat/roxide/pkg/context"
+	"github.com/spf13/cobra"
+)
+
+func newRepo() *cobra.Command {
+	var opts repoOptions
+
+	c := &cobra.Command{
+		Use:   "repo [HEAD] [QUERY]",
+		Short: "Open the repository in the browser",
+
+		Args: cobra.MaximumNArgs(2),
+
+		ValidArgsFunction: cmd.BuildCompletion(cmd.RepoCompletion),
+	}
+
+	return cmd.Build(c, &opts)
+}
+
+type repoOptions struct {
+	args []string
+}
+
+func (o *repoOptions) Complete(c *cobra.Command, args []string) error {
+	return nil
+}
+
+func (o *repoOptions) Run(ctx *context.Context) error {
+	return nil
+}

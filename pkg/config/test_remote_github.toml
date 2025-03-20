@@ -1,0 +1,14 @@
+clone = "github.com"
+icon = "G"
+
+[api]
+type = "github"
+token = ""
+
+[default]
+user = "fioncat"
+email = "lazycat7706@gmail.com"
+
+[owners."fioncat"]
+pin = true
+sync = true

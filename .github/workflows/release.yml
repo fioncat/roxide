@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: contains(github.ref, 'refs/tags/')
+    name: Release ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Install deps for ubuntu
+      if: runner.os == 'Linux'
+      run: sudo apt-get install -y build-essential
+
+    - name: Build Go
+      run: make
+
+    - name: Package for ubuntu
+      if: runner.os == 'Linux'
+      run: tar -czf bin/roxide-linux-amd64.tar.gz -C bin roxide
+
+    - name: Package for macos
+      if: runner.os == 'macOS'
+      run: tar -czf bin/roxide-darwin-arm64.tar.gz -C bin roxide
+
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        files: |
+            bin/*.tar.gz

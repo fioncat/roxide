@@ -1,0 +1,27 @@
+name: Test Go
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Build Go
+      run: make
+
+    - name: Test Go
+      run: make test
