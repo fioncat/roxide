@@ -42,6 +42,7 @@ func (g *Git) Lines(a ...string) ([]string, error) {
 	}
 	var items []string
 	for line := range strings.SplitSeq(out, "\n") {
+		line = strings.TrimSpace(line)
 		if line != "" {
 			items = append(items, line)
 		}
@@ -91,5 +92,6 @@ func (g *Git) Output(a ...string) (string, error) {
 			strings.Join(args, " "), err, stdout.String(), stderr.String())
 	}
 
-	return stdout.String(), nil
+	out := stdout.String()
+	return strings.TrimSpace(out), nil
 }

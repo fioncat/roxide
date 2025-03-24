@@ -9,6 +9,7 @@ func New() *cobra.Command {
 	}
 
 	c.AddCommand(newBranch())
+	c.AddCommand(newTag())
 
 	return c
 }
