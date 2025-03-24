@@ -212,6 +212,33 @@ func BranchCompletion(ctx *context.Context, args []string, toComplete string) (*
 	return &CompletionResult{Items: items}, nil
 }
 
+func TagCompletion(ctx *context.Context, args []string, toComplete string) (*CompletionResult, error) {
+	if len(args) != 0 {
+		return nil, nil
+	}
+
+	repo, err := repoutils.MustGetCurrentRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = ctx.SetRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	term.Mute = true
+	tags, err := git.ListTags(ctx.GetRepoPath())
+	if err != nil {
+		return nil, err
+	}
+	items := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		items = append(items, string(tag))
+	}
+
+	return &CompletionResult{Items: items}, nil
+}
+
 func writeErrorLog(logErr error) {
 	file, err := os.OpenFile("/tmp/roxide_completion_error.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {

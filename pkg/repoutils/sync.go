@@ -121,7 +121,7 @@ func syncBranches(ctx *context.Context) (*SyncResult, error) {
 	gitCmd := git.WithPath(path)
 
 	gitCmd.Info("Fetching origin remote")
-	err := gitCmd.Run("fetch", "origin", "--prune")
+	err := gitCmd.Run("fetch", "origin", "--prune", "--prune-tags")
 	if err != nil {
 		return nil, err
 	}

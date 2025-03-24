@@ -159,6 +159,8 @@ func GetRemoteDefaultBranch(path, remote string) (string, error) {
 	return "", errors.New("no default branch returned by git remote show, please check your git command")
 }
 
+var ErrNoCurrentBranch = errors.New("no current branch")
+
 func GetCurrentBranch(path string) (string, error) {
 	gitCmd := WithPath(path)
 	gitCmd.Info("Get current branch")
@@ -169,7 +171,7 @@ func GetCurrentBranch(path string) (string, error) {
 	out = strings.TrimSpace(out)
 
 	if out == "" {
-		return "", errors.New("no current branch")
+		return "", ErrNoCurrentBranch
 	}
 
 	return out, nil

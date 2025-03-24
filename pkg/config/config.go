@@ -14,6 +14,10 @@ const (
 	defaultDataDir       = "$HOME/.local/share/roxide"
 	defaultDisplayFormat = "{icon} {owner}/{name}"
 	defaultSelectCmd     = "fzf"
+
+	defaultPatchRule = "v{0}.{1}.{2+}"
+	defaultMinorRule = "v{0}.{1+}.{2}"
+	defaultMajorRule = "v{0+}.{1}.{2}"
 )
 
 type Config struct {
@@ -25,7 +29,14 @@ type Config struct {
 
 	SelectCmd string `json:"select_cmd" toml:"select_cmd"`
 
+	TagRules []TagRule `json:"tag_rules" toml:"tag_rules"`
+
 	dir string `json:"-" toml:"-"`
+}
+
+type TagRule struct {
+	Name string `json:"name"`
+	Rule string `json:"rule"`
 }
 
 func Load(dir string) (*Config, error) {
@@ -89,6 +100,16 @@ func (c *Config) complete() error {
 		c.SelectCmd = defaultSelectCmd
 	}
 
+	if _, ok := c.GetTagRule("patch"); !ok {
+		c.TagRules = append(c.TagRules, TagRule{Name: "patch", Rule: defaultPatchRule})
+	}
+	if _, ok := c.GetTagRule("minor"); !ok {
+		c.TagRules = append(c.TagRules, TagRule{Name: "minor", Rule: defaultMinorRule})
+	}
+	if _, ok := c.GetTagRule("major"); !ok {
+		c.TagRules = append(c.TagRules, TagRule{Name: "major", Rule: defaultMajorRule})
+	}
+
 	return nil
 }
 
@@ -145,6 +166,16 @@ func (c *Config) LoadRemotes() ([]*Remote, error) {
 
 func (c *Config) GetDir() string {
 	return c.dir
+}
+
+func (c *Config) GetTagRule(name string) (string, bool) {
+	for _, rule := range c.TagRules {
+		if rule.Name == name {
+			return rule.Rule, true
+		}
+	}
+
+	return "", false
 }
 
 func ensureDir(dir string) error {

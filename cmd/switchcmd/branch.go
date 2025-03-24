@@ -56,7 +56,7 @@ func (o *branchOptions) Run(ctx *context.Context) error {
 		return err
 	}
 	currentBranch, err := git.GetCurrentBranch(ctx.GetRepoPath())
-	if err != nil {
+	if err != nil && !errors.Is(err, git.ErrNoCurrentBranch) {
 		return err
 	}
 
