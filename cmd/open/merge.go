@@ -16,7 +16,7 @@ import (
 )
 
 func newMerge() *cobra.Command {
-	var opts repoOptions
+	var opts mergeOptions
 
 	c := &cobra.Command{
 		Use:   "merge [TARGET]",
@@ -26,6 +26,8 @@ func newMerge() *cobra.Command {
 
 		ValidArgsFunction: cmd.BuildCompletion(cmd.BranchCompletion),
 	}
+
+	c.Flags().BoolVarP(&opts.upstream, "upstream", "u", false, "Upstream mode, only used for forked repo")
 
 	return cmd.BuildWithForceNoCache(c, &opts)
 }
