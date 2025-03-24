@@ -40,6 +40,7 @@ func newCmd() *cobra.Command {
 	c.AddCommand(cmd.NewDisplay())
 	c.AddCommand(cmd.NewHome())
 	c.AddCommand(cmd.NewInit())
+	c.AddCommand(cmd.NewMerge())
 	c.AddCommand(cmd.NewRebase())
 	c.AddCommand(cmd.NewSquash())
 	c.AddCommand(cmd.NewSync())

@@ -56,17 +56,18 @@ func NewGitHub(token string, limit int, timeout time.Duration) (RemoteAPI, error
 }
 
 func newPullRequest(mr *MergeRequest) *pullRequest {
-	headSearch := fmt.Sprintf("%s/%s:%s", mr.Owner, mr.Name, mr.Source)
-
 	var head string
 	var owner string
 	var name string
+	var headSearch string
 	if mr.Upstream != nil {
 		head = fmt.Sprintf("%s:%s", mr.Owner, mr.Source)
+		headSearch = fmt.Sprintf("%s:%s", mr.Owner, mr.Source)
 		owner = mr.Upstream.Owner
 		name = mr.Upstream.Name
 	} else {
 		head = mr.Source
+		headSearch = mr.Source
 		owner = mr.Owner
 		name = mr.Name
 	}

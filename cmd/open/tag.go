@@ -8,6 +8,7 @@ import (
 	"github.com/fioncat/roxide/pkg/context"
 	"github.com/fioncat/roxide/pkg/git"
 	"github.com/fioncat/roxide/pkg/repoutils"
+	"github.com/fioncat/roxide/pkg/term"
 	"github.com/spf13/cobra"
 )
 
@@ -89,5 +90,5 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 
 	url := apiRepo.WebURL
 	url = filepath.Join(url, "tree", toOpen)
-	return openURL(url)
+	return term.OpenURL(url)
 }

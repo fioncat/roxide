@@ -1,4 +1,4 @@
-package open
+package cmd
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/fioncat/roxide/cmd"
 	"github.com/fioncat/roxide/pkg/context"
 	"github.com/fioncat/roxide/pkg/git"
 	"github.com/fioncat/roxide/pkg/remoteapi"
@@ -15,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newMerge() *cobra.Command {
+func NewMerge() *cobra.Command {
 	var opts mergeOptions
 
 	c := &cobra.Command{
@@ -24,12 +23,12 @@ func newMerge() *cobra.Command {
 
 		Args: cobra.MaximumNArgs(1),
 
-		ValidArgsFunction: cmd.BuildCompletion(cmd.BranchCompletion),
+		ValidArgsFunction: BuildCompletion(BranchCompletion),
 	}
 
 	c.Flags().BoolVarP(&opts.upstream, "upstream", "u", false, "Upstream mode, only used for forked repo")
 
-	return cmd.BuildWithForceNoCache(c, &opts)
+	return BuildWithForceNoCache(c, &opts)
 }
 
 type mergeOptions struct {
@@ -111,7 +110,7 @@ func (o *mergeOptions) Run(ctx *context.Context) error {
 	}
 
 	if url != "" {
-		return openURL(url)
+		return term.OpenURL(url)
 	}
 
 	err = term.Confirm("Do you want to create a new merge request")
@@ -164,7 +163,7 @@ func (o *mergeOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	return openURL(url)
+	return term.OpenURL(url)
 }
 
 func (o *mergeOptions) prettyMerge(merge *remoteapi.MergeRequest) string {
