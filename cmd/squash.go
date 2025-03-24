@@ -65,7 +65,7 @@ func (o *squashOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	commits, err := remote.CommitsBetween(o.target)
+	commits, err := remote.CommitsBetween(o.target, true)
 	if err != nil {
 		return err
 	}

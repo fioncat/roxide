@@ -123,7 +123,7 @@ func (o *mergeOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	commits, err := gitRemote.CommitsBetween(target)
+	commits, err := gitRemote.CommitsBetween(target, false)
 	if err != nil {
 		return err
 	}
