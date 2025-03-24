@@ -58,12 +58,12 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 	}
 
 	if len(tags) == 1 {
-		return gitCmd.Run("checkout", string(tags[0]))
+		return gitCmd.Run("checkout", tags[0].Name)
 	}
 
 	items := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		items = append(items, string(tag))
+		items = append(items, tag.Name)
 	}
 
 	idx, err := ctx.Selector.Select(items)
@@ -71,5 +71,5 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	return gitCmd.Run("checkout", string(tags[idx]))
+	return gitCmd.Run("checkout", tags[idx].Name)
 }

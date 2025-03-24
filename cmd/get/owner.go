@@ -20,20 +20,15 @@ func newOwner() *cobra.Command {
 		ValidArgsFunction: cmd.BuildCompletion(cmd.RemoteCompletion),
 	}
 
-	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
-	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of owners per page")
-	c.Flags().BoolVarP(&opts.json, "json", "", false, "output as json")
+	setListFlags(c, &opts.listOptions)
 
 	return cmd.Build(c, &opts)
 }
 
 type ownerOptions struct {
+	listOptions
+
 	remote string
-
-	page  int
-	limit int
-
-	json bool
 }
 
 type OwnerList struct {

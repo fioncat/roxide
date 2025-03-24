@@ -1,7 +1,6 @@
 package open
 
 import (
-	"errors"
 	"path/filepath"
 
 	"github.com/fioncat/roxide/cmd"
@@ -49,33 +48,14 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	var toOpen string
+	var tag *git.Tag
 	if o.name != "" {
-		toOpen = o.name
+		tag, err = git.GetTag(ctx.GetRepoPath(), o.name)
 	} else {
-		tags, err := git.ListTags(ctx.GetRepoPath())
-		if err != nil {
-			return err
-		}
-
-		if len(tags) == 0 {
-			return errors.New("no tag to open")
-		}
-
-		if len(tags) == 1 {
-			toOpen = string(tags[0])
-		} else {
-			items := make([]string, 0, len(tags))
-			for _, tag := range tags {
-				items = append(items, string(tag))
-			}
-
-			idx, err := ctx.Selector.Select(items)
-			if err != nil {
-				return err
-			}
-			toOpen = items[idx]
-		}
+		tag, err = repoutils.SelectTag(ctx)
+	}
+	if err != nil {
+		return err
 	}
 
 	api, err := ctx.RemoteAPI(repo.Remote)
@@ -89,6 +69,6 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 	}
 
 	url := apiRepo.WebURL
-	url = filepath.Join(url, "tree", toOpen)
+	url = filepath.Join(url, "tree", tag.Name)
 	return term.OpenURL(url)
 }

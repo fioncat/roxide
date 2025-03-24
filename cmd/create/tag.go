@@ -92,7 +92,7 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	term.PrintInfo("Apply rule %q on %q", rule, tag)
+	term.PrintInfo("Apply rule %q on %q", rule, tag.Name)
 	err = term.Confirm("Do you want to create tag %q", newTag)
 	if err != nil {
 		return err

@@ -233,7 +233,8 @@ func TagCompletion(ctx *context.Context, args []string, toComplete string) (*Com
 	}
 	items := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		items = append(items, string(tag))
+		item := fmt.Sprintf("%s\t[%s] %s", tag.Name, tag.CommitID, tag.CommitMessage)
+		items = append(items, item)
 	}
 
 	return &CompletionResult{Items: items}, nil
