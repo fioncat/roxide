@@ -8,7 +8,9 @@ func New() *cobra.Command {
 		Short: "Open commands",
 	}
 
+	c.AddCommand(newAction())
 	c.AddCommand(newBranch())
+	c.AddCommand(newJob())
 	c.AddCommand(newRepo())
 	c.AddCommand(newTag())
 

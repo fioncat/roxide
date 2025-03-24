@@ -4,29 +4,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRepo() *cobra.Command {
-	var opts repoOptions
+func newDemo() *cobra.Command {
+	var opts demoOptions
 
 	c := &cobra.Command{
-		Use:   "repo [HEAD] [QUERY]",
-		Short: "Open the repository in the browser",
+		Use:   "demo",
+		Short: "Demo",
 
 		Args: cobra.MaximumNArgs(2),
 
-		ValidArgsFunction: cmd.BuildCompletion(cmd.RepoCompletion),
+		ValidArgsFunction: cmd.BuildCompletion(cmd.DemoCompletion),
 	}
 
 	return cmd.Build(c, &opts)
 }
 
-type repoOptions struct {
+type demoOptions struct {
 	args []string
 }
 
-func (o *repoOptions) Complete(c *cobra.Command, args []string) error {
+func (o *demoOptions) Complete(c *cobra.Command, args []string) error {
 	return nil
 }
 
-func (o *repoOptions) Run(ctx *context.Context) error {
+func (o *demoOptions) Run(ctx *context.Context) error {
 	return nil
 }
