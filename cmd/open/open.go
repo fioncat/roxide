@@ -14,6 +14,7 @@ func New() *cobra.Command {
 	}
 
 	c.AddCommand(newBranch())
+	c.AddCommand(newMerge())
 	c.AddCommand(newRepo())
 	c.AddCommand(newTag())
 
