@@ -5,17 +5,26 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
-type Tag string
+type Tag struct {
+	Name string `json:"name"`
 
-func (t Tag) GetFields(_ uint64) map[string]any {
+	CommitID      string `json:"commit_id"`
+	CommitMessage string `json:"commit_message"`
+}
+
+func (t *Tag) GetFields(_ uint64) map[string]any {
+	msg := truncateCommitMessage(t.CommitMessage)
 	return map[string]any{
-		"Tag": string(t),
+		"Tag":      string(t.Name),
+		"CommitID": t.CommitID,
+		"Commit":   msg,
 	}
 }
 
-func ListTags(path string) ([]Tag, error) {
+func ListTags(path string) ([]*Tag, error) {
 	gitCmd := WithPath(path)
 	gitCmd.Info("List git tags")
 
@@ -23,47 +32,58 @@ func ListTags(path string) ([]Tag, error) {
 		"for-each-ref",
 		"--sort=-creatordate",
 		"refs/tags/",
-		"--format=%(refname:short)")
+		"--format=%(refname:short) %(objectname:short) %(subject)")
 	if err != nil {
 		return nil, err
 	}
 
-	tags := make([]Tag, 0, len(lines))
+	tags := make([]*Tag, 0, len(lines))
 	for _, line := range lines {
-		tags = append(tags, Tag(line))
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		name := fields[0]
+		commitID := fields[1]
+		commitMsg := strings.Join(fields[2:], " ")
+		tags = append(tags, &Tag{
+			Name:          name,
+			CommitID:      commitID,
+			CommitMessage: commitMsg,
+		})
 	}
 
 	return tags, nil
 }
 
-func GetTag(path, name string) (Tag, error) {
+func GetTag(path, name string) (*Tag, error) {
 	tags, err := ListTags(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	for _, tag := range tags {
-		if string(tag) == name {
+		if tag.Name == name {
 			return tag, nil
 		}
 	}
-	return "", fmt.Errorf("tag %q not found", name)
+	return nil, fmt.Errorf("tag %q not found", name)
 }
 
-func GetLatestTag(path string) (Tag, error) {
+func GetLatestTag(path string) (*Tag, error) {
 	gitCmd := WithPath(path)
 	gitCmd.Info("Get latest git tag")
 
 	out, err := gitCmd.Output("describe", "--tags", "--abbrev=0")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if out == "" {
-		return "", errors.New("no latest tag")
+		return nil, errors.New("no latest tag")
 	}
 
-	return Tag(out), nil
+	return GetTag(path, out)
 }
 
 var (
@@ -71,8 +91,8 @@ var (
 	rulePlaceholderRegex = regexp.MustCompile(`\{(\d+|%[yYmMdD])(\+)*}`)
 )
 
-func (t Tag) ApplyRule(rule string) (Tag, error) {
-	matches := ruleNumberRegex.FindAllStringSubmatch(string(t), -1)
+func (t *Tag) ApplyRule(rule string) (string, error) {
+	matches := ruleNumberRegex.FindAllStringSubmatch(t.Name, -1)
 
 	nums := make([]int, 0, len(matches))
 	for _, match := range matches {
@@ -130,5 +150,5 @@ func (t Tag) ApplyRule(rule string) (Tag, error) {
 		return strconv.Itoa(resultNum)
 	})
 
-	return Tag(result), applyErr
+	return result, applyErr
 }

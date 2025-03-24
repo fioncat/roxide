@@ -37,11 +37,6 @@ type Branch struct {
 	CommitMessage string `json:"commit_message"`
 }
 
-const (
-	maxCommitIDLength      = 8
-	maxCommitMessageLength = 40
-)
-
 func (b *Branch) GetFields(_ uint64) map[string]any {
 	name := b.Name
 	if b.Current {
@@ -49,15 +44,13 @@ func (b *Branch) GetFields(_ uint64) map[string]any {
 	}
 	status := b.StatusString()
 
-	msg := b.CommitMessage
-	if len(msg) > maxCommitMessageLength {
-		msg = fmt.Sprintf("%s...", msg[:maxCommitMessageLength])
-	}
+	msg := truncateCommitMessage(b.CommitMessage)
 
 	return map[string]any{
-		"Name":   name,
-		"Status": status,
-		"Commit": msg,
+		"Name":     name,
+		"Status":   status,
+		"CommitID": b.CommitID,
+		"Commit":   msg,
 	}
 }
 

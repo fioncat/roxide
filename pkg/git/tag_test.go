@@ -49,7 +49,9 @@ func TestApplyTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tag := Tag(tt.tag)
+			tag := &Tag{
+				Name: tt.tag,
+			}
 			newTag, err := tag.ApplyRule(tt.rule)
 			if tt.want == "" {
 				assert.NotNil(t, err)

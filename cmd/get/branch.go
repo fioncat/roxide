@@ -20,18 +20,13 @@ func newBranch() *cobra.Command {
 		ValidArgsFunction: cmd.NoneCompletion,
 	}
 
-	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
-	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of repositories per page")
-	c.Flags().BoolVarP(&opts.json, "json", "", false, "output as json")
+	setListFlags(c, &opts.listOptions)
 
 	return cmd.Build(c, &opts)
 }
 
 type branchOptions struct {
-	page  int
-	limit int
-
-	json bool
+	listOptions
 }
 
 func (o *branchOptions) Complete(c *cobra.Command, args []string) error {
@@ -63,6 +58,7 @@ func (o *branchOptions) Run(ctx *context.Context) error {
 	titles := []string{
 		"Name",
 		"Status",
+		"CommitID",
 		"Commit",
 	}
 

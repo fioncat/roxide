@@ -27,23 +27,19 @@ func newRepo() *cobra.Command {
 	}
 
 	c.Flags().StringVarP(&opts.language, "language", "l", "", "list repositories with the specified language")
-	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
-	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of repositories per page")
-	c.Flags().BoolVarP(&opts.json, "json", "", false, "output as json")
 	c.Flags().BoolVarP(&opts.size, "size", "s", false, "list and sort repositories with size")
+
+	setListFlags(c, &opts.listOptions)
 
 	return cmd.Build(c, &opts)
 }
 
 type repoOptions struct {
+	listOptions
+
 	args []string
 
 	language string
-
-	page  int
-	limit int
-
-	json bool
 
 	size bool
 }

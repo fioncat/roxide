@@ -1,8 +1,6 @@
 package get
 
 import (
-	"fmt"
-
 	"github.com/fioncat/roxide/cmd"
 	"github.com/fioncat/roxide/pkg/context"
 	"github.com/fioncat/roxide/pkg/git"
@@ -17,28 +15,21 @@ func newTag() *cobra.Command {
 		Use:   "tag [NAME]",
 		Short: "List tags",
 
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.NoArgs,
 
-		ValidArgsFunction: cmd.BuildCompletion(cmd.TagCompletion),
+		ValidArgsFunction: cmd.NoneCompletion,
 	}
 
-	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
-	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of repositories per page")
+	setListFlags(c, &opts.listOptions)
 
 	return cmd.Build(c, &opts)
 }
 
 type tagOptions struct {
-	name string
-
-	page  int
-	limit int
+	listOptions
 }
 
 func (o *tagOptions) Complete(c *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		o.name = args[0]
-	}
 	return nil
 }
 
@@ -53,23 +44,21 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 	}
 
 	term.Mute = true
-	if o.name != "" {
-		tag, err := git.GetTag(ctx.GetRepoPath(), o.name)
-		if err != nil {
-			return err
-		}
-		fmt.Println(tag)
-		return nil
-	}
-
 	tags, err := git.ListTags(ctx.GetRepoPath())
 	if err != nil {
 		return err
 	}
 
+	if o.json {
+		return term.PrintJson(tags)
+	}
+
 	total := len(tags)
 	items := paginate(tags, o.page, o.limit)
+	titles := []string{
+		"Tag", "CommitID", "Commit",
+	}
 
-	showTable([]string{"Tag"}, items, total, o.page, o.limit)
+	showTable(titles, items, total, o.page, o.limit)
 	return nil
 }

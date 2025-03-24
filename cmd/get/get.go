@@ -23,6 +23,19 @@ func New() *cobra.Command {
 	return c
 }
 
+type listOptions struct {
+	page  int
+	limit int
+
+	json bool
+}
+
+func setListFlags(c *cobra.Command, opts *listOptions) {
+	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
+	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of items per page")
+	c.Flags().BoolVarP(&opts.json, "json", "", false, "output as json")
+}
+
 type rowObject interface {
 	GetFields(now uint64) map[string]any
 }
