@@ -9,7 +9,6 @@ import (
 	"github.com/fioncat/roxide/cmd"
 	"github.com/fioncat/roxide/pkg/choice"
 	"github.com/fioncat/roxide/pkg/context"
-	"github.com/fioncat/roxide/pkg/db"
 	"github.com/fioncat/roxide/pkg/term"
 	"github.com/spf13/cobra"
 )
@@ -132,8 +131,7 @@ func (o *repoOptions) getBySize(ctx *context.Context) (*choice.RepositoryList, e
 
 	total := len(list.Items)
 
-	offset := o.limit * (o.page - 1)
-	newItems := paginate(list.Items, offset, o.limit)
+	newItems := paginate(list.Items, o.page, o.limit)
 
 	return &choice.RepositoryList{
 		Items: newItems,
@@ -165,19 +163,4 @@ func getDirSize(dir string) (int64, error) {
 		return 0, err
 	}
 	return size, nil
-}
-
-func paginate(repos []*db.Repository, offset int, limit int) []*db.Repository {
-	total := len(repos)
-	start := offset
-	if start < 0 || start > total {
-		return make([]*db.Repository, 0)
-	}
-
-	end := offset + limit
-	if end < 0 || end > total {
-		end = total
-	}
-
-	return repos[start:end]
 }

@@ -9,6 +9,12 @@ import (
 
 type Tag string
 
+func (t Tag) GetFields(_ uint64) map[string]any {
+	return map[string]any{
+		"Tag": string(t),
+	}
+}
+
 func ListTags(path string) ([]Tag, error) {
 	gitCmd := WithPath(path)
 	gitCmd.Info("List git tags")

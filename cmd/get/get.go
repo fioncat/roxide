@@ -28,13 +28,12 @@ type rowObject interface {
 }
 
 func showTable[T rowObject](titles []string, list []T, total, page, limit int) {
-	totalPage := (total + limit - 1) / limit
-	fmt.Printf("Page: %d/%d, Total: %d\n", page, totalPage, total)
-
-	if len(list) == 0 {
+	if limit == 0 || len(list) == 0 || page == 0 {
 		fmt.Println("<empty list>")
 		return
 	}
+	totalPage := (total + limit - 1) / limit
+	fmt.Printf("Page: %d/%d, Total: %d\n", page, totalPage, total)
 
 	t := table.NewWriter()
 	titleRow := make(table.Row, 0, len(titles))
@@ -55,4 +54,21 @@ func showTable[T rowObject](titles []string, list []T, total, page, limit int) {
 	}
 
 	fmt.Println(t.Render())
+}
+
+func paginate[T any](items []T, page, limit int) []T {
+	offset := limit * (page - 1)
+
+	total := len(items)
+	start := offset
+	if start < 0 || start > total {
+		return make([]T, 0)
+	}
+
+	end := offset + limit
+	if end < 0 || end > total {
+		end = total
+	}
+
+	return items[start:end]
 }

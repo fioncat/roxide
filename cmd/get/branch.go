@@ -1,14 +1,11 @@
 package get
 
 import (
-	"fmt"
-
 	"github.com/fioncat/roxide/cmd"
 	"github.com/fioncat/roxide/pkg/context"
 	"github.com/fioncat/roxide/pkg/git"
 	"github.com/fioncat/roxide/pkg/repoutils"
 	"github.com/fioncat/roxide/pkg/term"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 )
 
@@ -23,12 +20,17 @@ func newBranch() *cobra.Command {
 		ValidArgsFunction: cmd.NoneCompletion,
 	}
 
+	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
+	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of repositories per page")
 	c.Flags().BoolVarP(&opts.json, "json", "", false, "output as json")
 
 	return cmd.Build(c, &opts)
 }
 
 type branchOptions struct {
+	page  int
+	limit int
+
 	json bool
 }
 
@@ -56,23 +58,14 @@ func (o *branchOptions) Run(ctx *context.Context) error {
 		return term.PrintJson(branches)
 	}
 
-	if len(branches) == 0 {
-		fmt.Println("<empty list>")
-		return nil
+	total := len(branches)
+	items := paginate(branches, o.page, o.limit)
+	titles := []string{
+		"Name",
+		"Status",
+		"Commit",
 	}
 
-	t := table.NewWriter()
-	t.AppendHeader(table.Row{"Name", "Status"})
-
-	for _, branch := range branches {
-		name := branch.Name
-		if branch.Current {
-			name = fmt.Sprintf("* %s", name)
-		}
-		row := table.Row{name, branch.StatusString()}
-		t.AppendRow(row)
-	}
-
-	fmt.Println(t.Render())
+	showTable(titles, items, total, o.page, o.limit)
 	return nil
 }
