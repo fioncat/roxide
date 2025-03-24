@@ -281,7 +281,7 @@ func (t *tracker[R]) renderBar(current, total, termWidth int) string {
 		currentCount = barWidth
 	} else {
 		percent := float64(current) / float64(total)
-		currentFloat := float64(termWidth) * percent
+		currentFloat := float64(barWidth) * percent
 		currentFixed := int(currentFloat)
 		currentCount = min(currentFixed, barWidth)
 	}
