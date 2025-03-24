@@ -82,7 +82,7 @@ func (r *Remote) GetTarget(branch string) (string, error) {
 	return target, err
 }
 
-func (r *Remote) CommitsBetween(branch string) ([]string, error) {
+func (r *Remote) CommitsBetween(branch string, withID bool) ([]string, error) {
 	target, err := r.GetTarget(branch)
 	if err != nil {
 		return nil, err
@@ -112,6 +112,14 @@ func (r *Remote) CommitsBetween(branch string) ([]string, error) {
 		}
 		line = strings.TrimPrefix(line, "<")
 		line = strings.TrimSpace(line)
+
+		if !withID {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			line = strings.Join(fields[1:], " ")
+		}
 
 		commits = append(commits, line)
 	}
