@@ -22,11 +22,17 @@ func newTag() *cobra.Command {
 		ValidArgsFunction: cmd.BuildCompletion(cmd.TagCompletion),
 	}
 
+	c.Flags().IntVarP(&opts.page, "page", "p", 1, "the page number")
+	c.Flags().IntVarP(&opts.limit, "limit", "", 10, "the number of repositories per page")
+
 	return cmd.Build(c, &opts)
 }
 
 type tagOptions struct {
 	name string
+
+	page  int
+	limit int
 }
 
 func (o *tagOptions) Complete(c *cobra.Command, args []string) error {
@@ -61,9 +67,9 @@ func (o *tagOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	for _, tag := range tags {
-		fmt.Println(tag)
-	}
+	total := len(tags)
+	items := paginate(tags, o.page, o.limit)
 
+	showTable([]string{"Tag"}, items, total, o.page, o.limit)
 	return nil
 }
