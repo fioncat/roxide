@@ -6,6 +6,7 @@ import (
 	"github.com/fioncat/roxide/pkg/context"
 	"github.com/fioncat/roxide/pkg/db"
 	"github.com/fioncat/roxide/pkg/repoutils"
+	"github.com/fioncat/roxide/pkg/term"
 	"github.com/spf13/cobra"
 )
 
@@ -68,5 +69,5 @@ func (o *repoOptions) Run(ctx *context.Context) error {
 		return err
 	}
 
-	return openURL(apiRepo.WebURL)
+	return term.OpenURL(apiRepo.WebURL)
 }

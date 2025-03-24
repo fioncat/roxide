@@ -8,6 +8,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/google/go-github/v69 v69.2.0
 	github.com/jedib0t/go-pretty/v6 v6.6.7
+	github.com/manifoldco/promptui v0.9.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
@@ -19,6 +20,7 @@ require (
 )
 
 require (
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
