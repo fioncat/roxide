@@ -241,6 +241,9 @@ func (g *GitHub) GetAction(req *ActionRequest) (*Action, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(rawRuns.WorkflowRuns) == 0 {
+		return nil, nil
+	}
 
 	var commit *ActionCommit
 	var runs []ActionRun
@@ -326,7 +329,15 @@ func (g *GitHub) JobLogs(owner string, name string, id int64) (string, error) {
 	ctx, cancel := g.newContext()
 	defer cancel()
 
-	_, resp, err := g.client.Actions.GetWorkflowJobLogs(ctx, owner, name, id, 3)
+	url, _, err := g.client.Actions.GetWorkflowJobLogs(ctx, owner, name, id, 3)
+	if err != nil {
+		return "", err
+	}
+
+	client := http.Client{
+		Timeout: time.Second * 10,
+	}
+	resp, err := client.Get(url.String())
 	if err != nil {
 		return "", err
 	}
@@ -334,7 +345,7 @@ func (g *GitHub) JobLogs(owner string, name string, id int64) (string, error) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read job logs: %w", err)
 	}
 
 	return string(data), nil

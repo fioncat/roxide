@@ -14,6 +14,7 @@ func New() *cobra.Command {
 		Short: "Get commands",
 	}
 
+	c.AddCommand(newAction())
 	c.AddCommand(newBranch())
 	c.AddCommand(newOwner())
 	c.AddCommand(newRepo())

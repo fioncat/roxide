@@ -10,6 +10,7 @@ import (
 	"github.com/fioncat/roxide/cmd"
 	"github.com/fioncat/roxide/cmd/create"
 	"github.com/fioncat/roxide/cmd/get"
+	"github.com/fioncat/roxide/cmd/logs"
 	"github.com/fioncat/roxide/cmd/open"
 	"github.com/fioncat/roxide/cmd/remove"
 	"github.com/fioncat/roxide/cmd/switchcmd"
@@ -46,6 +47,7 @@ func newCmd() *cobra.Command {
 	c.AddCommand(cmd.NewSync())
 	c.AddCommand(create.New())
 	c.AddCommand(get.New())
+	c.AddCommand(logs.New())
 	c.AddCommand(open.New())
 	c.AddCommand(remove.New())
 	c.AddCommand(switchcmd.New())

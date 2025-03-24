@@ -1,5 +1,7 @@
 package remoteapi
 
+import "github.com/fatih/color"
+
 type RemoteInfo struct {
 	Name   string
 	Auth   bool
@@ -77,6 +79,54 @@ const (
 	ActionJobSkipped
 	ActionJobWaitingForConfirm
 )
+
+func (s ActionJobStatus) IsComplete() bool {
+	switch s {
+	case ActionJobSuccess, ActionJobCanceled, ActionJobSkipped, ActionJobWaitingForConfirm:
+		return true
+	}
+	return false
+}
+
+func (s ActionJobStatus) String() string {
+	switch s {
+	case ActionJobPending:
+		return "pending"
+	case ActionJobRunning:
+		return "running"
+	case ActionJobSuccess:
+		return "success"
+	case ActionJobFailed:
+		return "failed"
+	case ActionJobCanceled:
+		return "canceled"
+	case ActionJobSkipped:
+		return "skipped"
+	case ActionJobWaitingForConfirm:
+		return "manual"
+	}
+	return ""
+}
+
+func (s ActionJobStatus) ColoredString() string {
+	switch s {
+	case ActionJobPending:
+		return color.YellowString("pending")
+	case ActionJobRunning:
+		return color.CyanString("running")
+	case ActionJobSuccess:
+		return color.GreenString("success")
+	case ActionJobFailed:
+		return color.RedString("failed")
+	case ActionJobCanceled:
+		return color.YellowString("canceled")
+	case ActionJobSkipped:
+		return color.YellowString("skipped")
+	case ActionJobWaitingForConfirm:
+		return color.MagentaString("manual")
+	}
+	return ""
+}
 
 type ActionJob struct {
 	ID int64
