@@ -2,6 +2,7 @@ package repoutils
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 
 	"github.com/fioncat/roxide/pkg/choice"
@@ -22,10 +23,25 @@ func MustGetCurrentRepo(ctx *context.Context) (*db.Repository, error) {
 }
 
 func GetCurrentRepo(ctx *context.Context) (*db.Repository, error) {
-	id := ParseWorkspacePath(ctx, ctx.WorkDir)
+	dir := ctx.WorkDir
+	for dir != "" {
+		repo, err := getCurrentRepo(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
+		if repo != nil {
+			return repo, nil
+		}
+		dir = filepath.Dir(dir)
+	}
+	return nil, nil
+}
+
+func getCurrentRepo(ctx *context.Context, dir string) (*db.Repository, error) {
+	id := ParseWorkspacePath(ctx, dir)
 	if id == "" {
 		repos, err := ctx.Database.QueryRepos(db.QueryRepositoryOptions{
-			Path: &ctx.WorkDir,
+			Path: &dir,
 		})
 		if err != nil {
 			return nil, err
