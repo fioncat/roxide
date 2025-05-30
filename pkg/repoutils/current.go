@@ -24,7 +24,7 @@ func MustGetCurrentRepo(ctx *context.Context) (*db.Repository, error) {
 
 func GetCurrentRepo(ctx *context.Context) (*db.Repository, error) {
 	dir := ctx.WorkDir
-	for dir != "" {
+	for dir != "/" {
 		repo, err := getCurrentRepo(ctx, dir)
 		if err != nil {
 			return nil, err
