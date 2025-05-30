@@ -176,6 +176,10 @@ func (q *QueryRepositoryOptions) OrderByScore() {
 	q.OrderBy = []string{"score DESC"}
 }
 
+func (q *QueryRepositoryOptions) OrderByVisitTime() {
+	q.OrderBy = []string{"visit_time DESC"}
+}
+
 func (q *QueryRepositoryOptions) setupSql(query *querySql) {
 	if q.ID != nil {
 		query.where("id", *q.ID)

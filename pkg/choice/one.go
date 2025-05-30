@@ -17,6 +17,11 @@ const (
 	ModeSelect
 )
 
+const (
+	latestQueryLimit   = 5
+	latestQueryKeyword = "-"
+)
+
 type OneOptions struct {
 	Mode Mode
 
@@ -157,7 +162,7 @@ func (c *Choice) oneFromHead(opts OneOptions) (*db.Repository, error) {
 	// Treating `head` as a remote (with higher priority) or fuzzy matching
 	// keyword, we will call different functions from the database to retrieve
 	// the information.
-	if c.ctx.HasRemote(c.head) {
+	if c.ctx.HasRemote(c.head) || c.head == latestQueryKeyword {
 		return c.chooseOne(&c.head, nil, opts)
 	}
 
@@ -182,7 +187,7 @@ func (c *Choice) oneFromOwner(opts OneOptions) (*db.Repository, error) {
 		}
 
 		if selectLocal {
-			return c.selectOne(&remoteConfig.Name, &owner)
+			return c.selectOne(&remoteConfig.Name, &owner, false)
 		}
 
 		api, err := c.ctx.RemoteAPI(remoteConfig.Name)
@@ -272,9 +277,22 @@ func (c *Choice) oneFromID(remote, owner, name string, opts OneOptions) (*db.Rep
 }
 
 func (c *Choice) chooseOne(remote, query *string, opts OneOptions) (*db.Repository, error) {
+	var latest bool
+	if remote != nil && *remote == latestQueryKeyword {
+		remote = nil
+		latest = true
+	}
+	if query != nil && *query == latestQueryKeyword {
+		query = nil
+		latest = true
+	}
+	if latest {
+		return c.selectOne(remote, query, true)
+	}
+
 	switch opts.Mode {
 	case ModeSelect:
-		return c.selectOne(remote, query)
+		return c.selectOne(remote, query, false)
 	default:
 		return c.fuzzyOne(remote, query)
 	}
@@ -323,12 +341,18 @@ func (c *Choice) fuzzyOne(remote, nameSearch *string) (*db.Repository, error) {
 	return filtered[0], nil
 }
 
-func (c *Choice) selectOne(remote, owner *string) (*db.Repository, error) {
+func (c *Choice) selectOne(remote, owner *string, latest bool) (*db.Repository, error) {
 	query := db.QueryRepositoryOptions{
 		Remote: remote,
 		Owner:  owner,
 	}
-	query.OrderByScore()
+	if latest {
+		query.OrderByVisitTime()
+		limit := latestQueryLimit
+		query.Limit = &limit
+	} else {
+		query.OrderByScore()
+	}
 
 	repos, err := c.ctx.Database.QueryRepos(query)
 	if err != nil {
