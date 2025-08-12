@@ -77,7 +77,7 @@ func (o *attachOptions) Run(ctx *context.Context) error {
 	}
 
 	if !repo.NewCreated {
-		return fmt.Errorf("repository %q has already been bound to %q, please detach it first", repo.String(), ctx.GetRepoPath())
+		return fmt.Errorf("repository %q has already been bound, please detach it first", repo.String())
 	}
 
 	err = term.Confirm("Do you want to attach current directory to %q", repo.String())
