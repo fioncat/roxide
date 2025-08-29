@@ -104,9 +104,7 @@ impl RemoteAPI for GitHub {
             let Some(u_owner) = s.owner else {
                 bail!("github repo {owner}/{name} upstream owner is empty");
             };
-            let Some(u_owner) = u_owner.name else {
-                bail!("github repo {owner}/{name} upstream owner name is empty");
-            };
+            let u_owner = u_owner.login;
 
             let Some(u_default_branch) = s.default_branch else {
                 bail!("github repo {owner}/{name} upstream default branch is empty");
@@ -131,5 +129,87 @@ impl RemoteAPI for GitHub {
         };
         debug!("[github] Result: {remote_repo:?}");
         Ok(remote_repo)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::*;
+
+    fn new() -> Option<GitHub> {
+        let token = env::var("TEST_GITHUB_TOKEN").ok()?;
+        Some(GitHub::new(&token).unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_info() {
+        let Some(github) = new() else {
+            return;
+        };
+        let info = github.info().await.unwrap();
+        assert_eq!(
+            info,
+            RemoteInfo {
+                name: Cow::Borrowed("GitHub API"),
+                auth_user: Some("fioncat".to_string()),
+                ping: true,
+                cache: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_repos() {
+        let Some(github) = new() else {
+            return;
+        };
+        let repos = github.list_repos("github", "fioncat").await.unwrap();
+        assert!(repos.contains(&"roxide".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_repo() {
+        let Some(github) = new() else {
+            return;
+        };
+        let repo = github
+            .get_repo("github", "fioncat", "roxide")
+            .await
+            .unwrap();
+        assert_eq!(
+            repo,
+            RemoteRepository {
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("fioncat".to_string()),
+                name: Cow::Owned("roxide".to_string()),
+                default_branch: "main".to_string(),
+                web_url: "https://github.com/fioncat/roxide".to_string(),
+                upstream: None,
+                expire_at: 0,
+            }
+        );
+
+        let repo = github
+            .get_repo("github", "fioncat", "kubernetes")
+            .await
+            .unwrap();
+        assert_eq!(
+            repo,
+            RemoteRepository {
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("fioncat".to_string()),
+                name: Cow::Owned("kubernetes".to_string()),
+                default_branch: "master".to_string(),
+                web_url: "https://github.com/fioncat/kubernetes".to_string(),
+                upstream: Some(RemoteUpstream {
+                    owner: "kubernetes".to_string(),
+                    name: "kubernetes".to_string(),
+                    default_branch: "master".to_string(),
+                }),
+                expire_at: 0,
+            }
+        );
     }
 }

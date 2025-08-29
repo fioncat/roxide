@@ -31,12 +31,10 @@ impl<'a> RemoteOwner<'a> {
     }
 }
 
-#[allow(dead_code)] // TODO: remove this
 pub struct RemoteOwnerHandle<'a> {
     tx: &'a Transaction<'a>,
 }
 
-#[allow(dead_code)] // TODO: remove this
 impl<'a> RemoteOwnerHandle<'a> {
     pub fn new(tx: &'a Transaction<'a>) -> Self {
         Self { tx }

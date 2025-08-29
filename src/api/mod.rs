@@ -24,7 +24,7 @@ pub trait RemoteAPI: Send + Sync {
     ) -> Result<RemoteRepository<'static>>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteInfo {
     name: Cow<'static, str>,
     auth_user: Option<String>,

@@ -52,12 +52,10 @@ impl<'a> RemoteRepository<'a> {
     }
 }
 
-#[allow(dead_code)] // TODO: remove this
 pub struct RemoteRepositoryHandle<'a> {
     tx: &'a Transaction<'a>,
 }
 
-#[allow(dead_code)] // TODO: remove this
 impl<'a> RemoteRepositoryHandle<'a> {
     pub fn new(tx: &'a Transaction) -> Self {
         Self { tx }
