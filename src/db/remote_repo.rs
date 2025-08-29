@@ -1,13 +1,15 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteRepository {
-    pub remote: String,
-    pub owner: String,
-    pub name: String,
+pub struct RemoteRepository<'a> {
+    pub remote: Cow<'a, str>,
+    pub owner: Cow<'a, str>,
+    pub name: Cow<'a, str>,
 
     pub default_branch: String,
 
@@ -25,7 +27,7 @@ pub struct RemoteUpstream {
     pub default_branch: String,
 }
 
-impl RemoteRepository {
+impl<'a> RemoteRepository<'a> {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
         let upstream_owner: Option<String> = row.get(5)?;
         let upstream_name: Option<String> = row.get(6)?;
@@ -74,7 +76,7 @@ impl<'a> RemoteRepositoryHandle<'a> {
         remote: &str,
         owner: &str,
         name: &str,
-    ) -> Result<Option<RemoteRepository>> {
+    ) -> Result<Option<RemoteRepository<'static>>> {
         get_optional(self.conn, remote, owner, name)
     }
 
@@ -150,7 +152,7 @@ fn get_optional(
     remote: &str,
     owner: &str,
     name: &str,
-) -> Result<Option<RemoteRepository>> {
+) -> Result<Option<RemoteRepository<'static>>> {
     debug!("[db] Get remote_repo: {remote}:{owner}:{name}");
     let mut stmt = conn.prepare(GET_SQL)?;
     let repo = stmt
@@ -185,21 +187,21 @@ mod tests {
         conn
     }
 
-    fn test_remote_repos() -> Vec<RemoteRepository> {
+    fn test_remote_repos() -> Vec<RemoteRepository<'static>> {
         vec![
             RemoteRepository {
-                remote: "github".to_string(),
-                owner: "fioncat".to_string(),
-                name: "roxide".to_string(),
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("fioncat".to_string()),
+                name: Cow::Owned("roxide".to_string()),
                 default_branch: "main".to_string(),
                 web_url: "https://github.com/fioncat/roxide".to_string(),
                 upstream: None,
                 expire_at: 1234567890,
             },
             RemoteRepository {
-                remote: "github".to_string(),
-                owner: "alice".to_string(),
-                name: "myproject".to_string(),
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("alice".to_string()),
+                name: Cow::Owned("myproject".to_string()),
                 default_branch: "master".to_string(),
                 web_url: "https://github.com/alice/myproject".to_string(),
                 upstream: Some(RemoteUpstream {
@@ -210,18 +212,18 @@ mod tests {
                 expire_at: 1234567800,
             },
             RemoteRepository {
-                remote: "gitlab".to_string(),
-                owner: "bob".to_string(),
-                name: "project1".to_string(),
+                remote: Cow::Owned("gitlab".to_string()),
+                owner: Cow::Owned("bob".to_string()),
+                name: Cow::Owned("project1".to_string()),
                 default_branch: "develop".to_string(),
                 web_url: "https://gitlab.com/bob/project1".to_string(),
                 upstream: None,
                 expire_at: 1234567700,
             },
             RemoteRepository {
-                remote: "github".to_string(),
-                owner: "contributor".to_string(),
-                name: "kubernetes".to_string(),
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("contributor".to_string()),
+                name: Cow::Owned("kubernetes".to_string()),
                 default_branch: "master".to_string(),
                 web_url: "https://github.com/contributor/kubernetes".to_string(),
                 upstream: Some(RemoteUpstream {

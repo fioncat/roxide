@@ -14,7 +14,10 @@ description = "A simple and fast tool to manage your git repositories"
 anyhow = "^1"
 clap = { version = "^4", features = ["derive"] }
 clap_complete = { version = "^4", features = ["unstable-dynamic"] }
+console = "^0"
+octocrab = "^0"
 rusqlite = { version = "^0", features = ["bundled"] }
+tokio = { version = "^1", features = ["full"] }
 
 [build-dependencies]
 simple-error = "^0"
