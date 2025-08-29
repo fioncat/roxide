@@ -54,7 +54,8 @@ pub fn write_debug_logs(msg: String) {
     if !matches!(get_level(), Level::Debug) {
         return;
     }
-    eprintln!("DEBUG {msg}");
+    let styled = style("DEBUG").blue().bold();
+    eprintln!("{styled} {msg}");
 }
 
 pub fn write_info_logs(msg: String) {

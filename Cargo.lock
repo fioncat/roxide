@@ -1254,6 +1254,7 @@ name = "roxide"
 version = "0.19.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "clap_complete",
  "console",

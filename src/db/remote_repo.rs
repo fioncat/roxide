@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, Transaction, params};
 
 use crate::debug;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RemoteRepository<'a> {
     pub remote: Cow<'a, str>,
     pub owner: Cow<'a, str>,
@@ -54,21 +54,21 @@ impl<'a> RemoteRepository<'a> {
 
 #[allow(dead_code)] // TODO: remove this
 pub struct RemoteRepositoryHandle<'a> {
-    conn: &'a Connection,
+    tx: &'a Transaction<'a>,
 }
 
 #[allow(dead_code)] // TODO: remove this
 impl<'a> RemoteRepositoryHandle<'a> {
-    pub fn new(conn: &'a Connection) -> Self {
-        Self { conn }
+    pub fn new(tx: &'a Transaction) -> Self {
+        Self { tx }
     }
 
     pub fn ensure_table(&self) -> Result<()> {
-        ensure_table(self.conn)
+        ensure_table(self.tx)
     }
 
     pub fn insert(&self, repo: &RemoteRepository) -> Result<()> {
-        insert(self.conn, repo)
+        insert(self.tx, repo)
     }
 
     pub fn get_optional(
@@ -77,11 +77,11 @@ impl<'a> RemoteRepositoryHandle<'a> {
         owner: &str,
         name: &str,
     ) -> Result<Option<RemoteRepository<'static>>> {
-        get_optional(self.conn, remote, owner, name)
+        get_optional(self.tx, remote, owner, name)
     }
 
     pub fn delete(&self, repo: &RemoteRepository) -> Result<()> {
-        delete(self.conn, repo)
+        delete(self.tx, repo)
     }
 }
 
@@ -100,9 +100,9 @@ CREATE TABLE IF NOT EXISTS remote_repo (
 );
 "#;
 
-fn ensure_table(conn: &Connection) -> Result<()> {
+fn ensure_table(tx: &Transaction) -> Result<()> {
     debug!("[db] Ensure remote_repo table exists");
-    conn.execute(TABLE_SQL, params![])?;
+    tx.execute(TABLE_SQL, params![])?;
     Ok(())
 }
 
@@ -122,9 +122,9 @@ INSERT INTO remote_repo (
 )
 "#;
 
-fn insert(conn: &Connection, repo: &RemoteRepository) -> Result<()> {
+fn insert(tx: &Transaction, repo: &RemoteRepository) -> Result<()> {
     debug!("[db] Insert remote_repo: {repo:?}");
-    conn.execute(
+    tx.execute(
         INSERT_SQL,
         params![
             repo.remote,
@@ -148,13 +148,13 @@ WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
 fn get_optional(
-    conn: &Connection,
+    tx: &Transaction,
     remote: &str,
     owner: &str,
     name: &str,
 ) -> Result<Option<RemoteRepository<'static>>> {
     debug!("[db] Get remote_repo: {remote}:{owner}:{name}");
-    let mut stmt = conn.prepare(GET_SQL)?;
+    let mut stmt = tx.prepare(GET_SQL)?;
     let repo = stmt
         .query_row(params![remote, owner, name], RemoteRepository::from_row)
         .optional()?;
@@ -167,23 +167,27 @@ DELETE FROM remote_repo
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
-fn delete(conn: &Connection, repo: &RemoteRepository) -> Result<()> {
+fn delete(tx: &Transaction, repo: &RemoteRepository) -> Result<()> {
     debug!("[db] Delete remote_repo: {repo:?}");
-    conn.execute(DELETE_SQL, params![repo.remote, repo.owner, repo.name])?;
+    tx.execute(DELETE_SQL, params![repo.remote, repo.owner, repo.name])?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::*;
 
     fn build_conn() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        ensure_table(&conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
         let repos = test_remote_repos();
         for repo in repos {
-            insert(&conn, &repo).unwrap();
+            insert(&tx, &repo).unwrap();
         }
+        tx.commit().unwrap();
         conn
     }
 
@@ -238,28 +242,33 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let conn = build_conn();
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
         let repos = test_remote_repos();
         for repo in repos {
-            let result = get_optional(&conn, &repo.remote, &repo.owner, &repo.name).unwrap();
+            let result = get_optional(&tx, &repo.remote, &repo.owner, &repo.name).unwrap();
             assert_eq!(result, Some(repo));
         }
     }
 
     #[test]
     fn test_get_not_found() {
-        let conn = build_conn();
-        let result = get_optional(&conn, "not_exist", "not_exist", "not_exist").unwrap();
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let result = get_optional(&tx, "not_exist", "not_exist", "not_exist").unwrap();
         assert_eq!(result, None);
     }
 
     #[test]
     fn test_delete() {
-        let conn = build_conn();
+        let mut conn = build_conn();
         let repos = test_remote_repos();
         for repo in repos {
-            delete(&conn, &repo).unwrap();
-            let result = get_optional(&conn, &repo.remote, &repo.owner, &repo.name).unwrap();
+            let tx = conn.transaction().unwrap();
+            delete(&tx, &repo).unwrap();
+            tx.commit().unwrap();
+            let tx = conn.transaction().unwrap();
+            let result = get_optional(&tx, &repo.remote, &repo.owner, &repo.name).unwrap();
             assert_eq!(result, None);
         }
     }

@@ -1,24 +1,27 @@
+mod cache;
 mod github;
 
 use std::borrow::Cow;
 use std::time::Duration;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
 use crate::db::remote_repo::RemoteRepository;
 
-pub trait RemoteAPI {
+#[async_trait]
+pub trait RemoteAPI: Send + Sync {
     async fn info(&self) -> Result<RemoteInfo>;
 
     async fn list_repos(&self, remote: &str, owner: &str) -> Result<Vec<String>>;
-    async fn get_repo<'a>(
+    async fn get_repo(
         &self,
-        remote: &'a str,
-        owner: &'a str,
-        name: &'a str,
-    ) -> Result<RemoteRepository<'a>>;
+        remote: &str,
+        owner: &str,
+        name: &str,
+    ) -> Result<RemoteRepository<'static>>;
 }
 
 #[derive(Debug, Clone)]

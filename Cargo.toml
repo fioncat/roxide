@@ -12,6 +12,7 @@ description = "A simple and fast tool to manage your git repositories"
 
 [dependencies]
 anyhow = "^1"
+async-trait = "^0"
 clap = { version = "^4", features = ["derive"] }
 clap_complete = { version = "^4", features = ["unstable-dynamic"] }
 console = "^0"

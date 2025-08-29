@@ -2,33 +2,69 @@ pub mod remote_owner;
 pub mod remote_repo;
 pub mod repo;
 
+use std::cell::RefCell;
 use std::path::Path;
 
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
+use tokio::sync::Mutex;
 
-#[allow(dead_code)] // TODO: remove this
 pub struct Database {
-    conn: Connection,
+    conn: Mutex<RefCell<Connection>>,
 }
 
-#[allow(dead_code)] // TODO: remove this
 impl Database {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
-        Ok(Self { conn })
+        let db = Self {
+            conn: Mutex::new(RefCell::new(conn)),
+        };
+        db.with_transaction(|tx| {
+            tx.repo().ensure_table()?;
+            tx.remote_owner().ensure_table()?;
+            tx.remote_repo().ensure_table()?;
+            Ok(())
+        })
+        .await?;
+        Ok(db)
     }
 
+    pub async fn with_transaction<T, F>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&DatabaseHandle) -> Result<T>,
+    {
+        let conn = self.conn.lock().await;
+        let mut conn = conn.borrow_mut();
+        let tx = conn.transaction()?;
+        let handle = DatabaseHandle { tx };
+
+        let result = f(&handle);
+
+        if result.is_ok() {
+            handle.tx.commit()
+        } else {
+            handle.tx.rollback()
+        }?;
+
+        result
+    }
+}
+
+pub struct DatabaseHandle<'a> {
+    tx: Transaction<'a>,
+}
+
+impl DatabaseHandle<'_> {
     pub fn repo<'a>(&'a self) -> repo::RepositoryHandle<'a> {
-        repo::RepositoryHandle::new(&self.conn)
+        repo::RepositoryHandle::new(&self.tx)
     }
 
     pub fn remote_owner<'a>(&'a self) -> remote_owner::RemoteOwnerHandle<'a> {
-        remote_owner::RemoteOwnerHandle::new(&self.conn)
+        remote_owner::RemoteOwnerHandle::new(&self.tx)
     }
 
     pub fn remote_repo<'a>(&'a self) -> remote_repo::RemoteRepositoryHandle<'a> {
-        remote_repo::RemoteRepositoryHandle::new(&self.conn)
+        remote_repo::RemoteRepositoryHandle::new(&self.tx)
     }
 }
 
@@ -44,5 +80,69 @@ impl Default for LimitOptions {
             offset: 0,
             limit: 100,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{borrow::Cow, fs};
+
+    use anyhow::bail;
+
+    use super::*;
+
+    async fn build_db(name: &str) -> Database {
+        // remove the existing file
+        let _ = fs::remove_file(name);
+        Database::open(name).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_commit() {
+        let repo = repo::Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "roxide".to_string(),
+            path: None,
+            last_visited_at: 2234,
+            visited_count: 20,
+        };
+        let db = build_db("tests/commit.db").await;
+        db.with_transaction(|tx| {
+            tx.repo().insert(&repo)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let result = db
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .await
+            .unwrap();
+        assert_eq!(result, repo);
+    }
+
+    #[tokio::test]
+    async fn test_rollback() {
+        let db = build_db("tests/rollback.db").await;
+        let owner = remote_owner::RemoteOwner {
+            remote: Cow::Owned("github".to_string()),
+            owner: Cow::Owned("alice".to_string()),
+            repos: vec!["repo1".to_string(), "repo2".to_string()],
+            expire_at: 12345,
+        };
+        let result: Result<()> = db
+            .with_transaction(|tx| {
+                tx.remote_owner().insert(&owner).unwrap();
+                bail!("force rollback");
+            })
+            .await;
+        assert_eq!(result.err().unwrap().to_string(), "force rollback");
+
+        let result = db
+            .with_transaction(|tx| tx.remote_owner().get_optional("github", "alice"))
+            .await
+            .unwrap();
+        assert_eq!(result, None);
     }
 }

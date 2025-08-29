@@ -1,19 +1,21 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, Transaction, params};
 
 use crate::debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteOwner {
-    pub remote: String,
-    pub owner: String,
+pub struct RemoteOwner<'a> {
+    pub remote: Cow<'a, str>,
+    pub owner: Cow<'a, str>,
 
     pub repos: Vec<String>,
 
     pub expire_at: u64,
 }
 
-impl RemoteOwner {
+impl<'a> RemoteOwner<'a> {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
         let repos = row
             .get::<_, String>(2)?
@@ -31,29 +33,29 @@ impl RemoteOwner {
 
 #[allow(dead_code)] // TODO: remove this
 pub struct RemoteOwnerHandle<'a> {
-    conn: &'a Connection,
+    tx: &'a Transaction<'a>,
 }
 
 #[allow(dead_code)] // TODO: remove this
 impl<'a> RemoteOwnerHandle<'a> {
-    pub fn new(conn: &'a Connection) -> Self {
-        Self { conn }
+    pub fn new(tx: &'a Transaction<'a>) -> Self {
+        Self { tx }
     }
 
     pub fn ensure_table(&self) -> Result<()> {
-        ensure_table(self.conn)
+        ensure_table(self.tx)
     }
 
     pub fn insert(&self, owner: &RemoteOwner) -> Result<()> {
-        insert(self.conn, owner)
+        insert(self.tx, owner)
     }
 
-    pub fn get_optional(&self, remote: &str, owner: &str) -> Result<Option<RemoteOwner>> {
-        get_optional(self.conn, remote, owner)
+    pub fn get_optional(&self, remote: &str, owner: &str) -> Result<Option<RemoteOwner<'static>>> {
+        get_optional(self.tx, remote, owner)
     }
 
     pub fn delete(&self, owner: &RemoteOwner) -> Result<()> {
-        delete(self.conn, owner)
+        delete(self.tx, owner)
     }
 }
 
@@ -67,9 +69,9 @@ CREATE TABLE IF NOT EXISTS remote_owner (
 );
 "#;
 
-fn ensure_table(conn: &rusqlite::Connection) -> Result<()> {
+fn ensure_table(tx: &Transaction) -> Result<()> {
     debug!("[db] Ensure remote_owner table exists");
-    conn.execute_batch(TABLE_SQL)?;
+    tx.execute_batch(TABLE_SQL)?;
     Ok(())
 }
 
@@ -78,9 +80,9 @@ INSERT INTO remote_owner (remote, owner, repos, expire_at)
 VALUES (?1, ?2, ?3, ?4)
 "#;
 
-fn insert(conn: &Connection, owner: &RemoteOwner) -> Result<()> {
+fn insert(tx: &Transaction, owner: &RemoteOwner) -> Result<()> {
     debug!("[db] Insert remote_owner: {owner:?}");
-    conn.execute(
+    tx.execute(
         INSERT_SQL,
         params![
             owner.remote,
@@ -98,9 +100,13 @@ FROM remote_owner
 WHERE remote = ?1 AND owner = ?2
 "#;
 
-fn get_optional(conn: &Connection, remote: &str, owner: &str) -> Result<Option<RemoteOwner>> {
+fn get_optional(
+    tx: &Transaction,
+    remote: &str,
+    owner: &str,
+) -> Result<Option<RemoteOwner<'static>>> {
     debug!("[db] Get remote_owner: {remote}:{owner}");
-    let mut stmt = conn.prepare(GET_SQL)?;
+    let mut stmt = tx.prepare(GET_SQL)?;
     let remote_owner = stmt
         .query_row(params![remote, owner], RemoteOwner::from_row)
         .optional()?;
@@ -113,37 +119,41 @@ DELETE FROM remote_owner
 WHERE remote = ?1 AND owner = ?2
 "#;
 
-fn delete(conn: &Connection, remote_owner: &RemoteOwner) -> Result<()> {
+fn delete(tx: &Transaction, remote_owner: &RemoteOwner) -> Result<()> {
     debug!("[db] Delete remote_owner: {remote_owner:?}");
-    conn.execute(DELETE_SQL, params![remote_owner.remote, remote_owner.owner])?;
+    tx.execute(DELETE_SQL, params![remote_owner.remote, remote_owner.owner])?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::*;
 
     fn build_conn() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        ensure_table(&conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
         let owners = test_remote_owners();
         for owner in owners {
-            insert(&conn, &owner).unwrap();
+            insert(&tx, &owner).unwrap();
         }
+        tx.commit().unwrap();
         conn
     }
 
-    fn test_remote_owners() -> Vec<RemoteOwner> {
+    fn test_remote_owners() -> Vec<RemoteOwner<'static>> {
         vec![
             RemoteOwner {
-                remote: "github".to_string(),
-                owner: "alice".to_string(),
+                remote: Cow::Owned("github".to_string()),
+                owner: Cow::Owned("alice".to_string()),
                 repos: vec!["repo1".to_string(), "repo2".to_string()],
                 expire_at: 12345,
             },
             RemoteOwner {
-                remote: "gitlab".to_string(),
-                owner: "bob".to_string(),
+                remote: Cow::Owned("gitlab".to_string()),
+                owner: Cow::Owned("bob".to_string()),
                 repos: vec!["project1".to_string()],
                 expire_at: 6789,
             },
@@ -152,28 +162,33 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let conn = build_conn();
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
         let owners = test_remote_owners();
         for owner in owners {
-            let result = get_optional(&conn, &owner.remote, &owner.owner).unwrap();
+            let result = get_optional(&tx, &owner.remote, &owner.owner).unwrap();
             assert_eq!(result, Some(owner));
         }
     }
 
     #[test]
     fn test_get_not_found() {
-        let conn = build_conn();
-        let owner = get_optional(&conn, "unknown", "nobody").unwrap();
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let owner = get_optional(&tx, "unknown", "nobody").unwrap();
         assert_eq!(owner, None);
     }
 
     #[test]
     fn test_delete() {
-        let conn = build_conn();
+        let mut conn = build_conn();
         let owners = test_remote_owners();
         for owner in owners {
-            delete(&conn, &owner).unwrap();
-            let owner = get_optional(&conn, &owner.remote, &owner.owner).unwrap();
+            let tx = conn.transaction().unwrap();
+            delete(&tx, &owner).unwrap();
+            tx.commit().unwrap();
+            let tx = conn.transaction().unwrap();
+            let owner = get_optional(&tx, &owner.remote, &owner.owner).unwrap();
             assert_eq!(owner, None);
         }
     }

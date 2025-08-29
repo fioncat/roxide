@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use anyhow::{Context, Result, bail};
+use async_trait::async_trait;
 use octocrab::Octocrab;
 
 use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
@@ -31,6 +32,7 @@ impl GitHub {
     }
 }
 
+#[async_trait]
 impl RemoteAPI for GitHub {
     async fn info(&self) -> Result<RemoteInfo> {
         debug!("[github] Get GitHub API info");
@@ -76,12 +78,12 @@ impl RemoteAPI for GitHub {
         Ok(names)
     }
 
-    async fn get_repo<'a>(
+    async fn get_repo(
         &self,
-        remote: &'a str,
-        owner: &'a str,
-        name: &'a str,
-    ) -> Result<RemoteRepository<'a>> {
+        remote: &str,
+        owner: &str,
+        name: &str,
+    ) -> Result<RemoteRepository<'static>> {
         debug!("[github] Get repo for: {owner}/{name}");
         let repo = self
             .client
@@ -119,9 +121,9 @@ impl RemoteAPI for GitHub {
             None
         };
         let remote_repo = RemoteRepository {
-            remote: Cow::Borrowed(remote),
-            owner: Cow::Borrowed(owner),
-            name: Cow::Borrowed(name),
+            remote: Cow::Owned(remote.to_string()),
+            owner: Cow::Owned(owner.to_string()),
+            name: Cow::Owned(name.to_string()),
             default_branch,
             web_url,
             upstream,
