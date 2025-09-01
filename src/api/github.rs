@@ -140,6 +140,9 @@ mod tests {
 
     fn new() -> Option<GitHub> {
         let token = env::var("TEST_GITHUB_TOKEN").ok()?;
+        if token.is_empty() {
+            return None;
+        }
         Some(GitHub::new(&token).unwrap())
     }
 
