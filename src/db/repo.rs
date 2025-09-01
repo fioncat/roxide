@@ -3,13 +3,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
+use serde::{Deserialize, Serialize};
 
 use crate::debug;
+use crate::format::format_time;
+use crate::term::list::ListItem;
 
 use super::LimitOptions;
 
 /// The database model for a repository.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Repository {
     /// Remote name, e.g. "github"
     pub remote: String,
@@ -64,6 +67,22 @@ impl Repository {
             last_visited_at: row.get(4)?,
             visited_count: row.get(5)?,
         })
+    }
+}
+
+impl ListItem for Repository {
+    fn titles() -> Vec<&'static str> {
+        vec!["Remote", "Owner", "Name", "LastVisited", "Visited"]
+    }
+
+    fn row(self) -> Vec<String> {
+        vec![
+            self.remote,
+            self.owner,
+            self.name,
+            format!("{}", format_time(self.last_visited_at)),
+            format!("{}", self.visited_count),
+        ]
     }
 }
 

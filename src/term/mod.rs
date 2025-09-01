@@ -1,6 +1,8 @@
 pub mod confirm;
 pub mod output;
+pub mod table;
 pub mod track;
+pub mod list;
 
 use console::Term;
 

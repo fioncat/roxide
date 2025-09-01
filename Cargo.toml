@@ -19,9 +19,12 @@ clap_complete = { version = "^4", features = ["unstable-dynamic"] }
 console = "^0"
 num_cpus = "^1"
 octocrab = "^0"
+pad = "^0"
 regex = "^1"
 rusqlite = { version = "^0", features = ["bundled"] }
 scanf = "^2"
+serde = {version = "^1", features = ["derive"] }
+serde_json = "^1"
 tokio = { version = "^1", features = ["full"] }
 
 [build-dependencies]
