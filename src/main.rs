@@ -2,7 +2,7 @@
 
 mod api;
 mod db;
-mod debug;
+mod term;
 
 fn main() {
     println!("Hello, world!");
