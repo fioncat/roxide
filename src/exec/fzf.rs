@@ -9,7 +9,7 @@ use super::{Cmd, SilentExit};
 
 static FZF_COMMAND_CONFIG: OnceLock<CmdConfig> = OnceLock::new();
 
-pub fn set_command(cfg: CmdConfig) {
+pub fn set_cmd(cfg: CmdConfig) {
     let _ = FZF_COMMAND_CONFIG.set(cfg);
 }
 
