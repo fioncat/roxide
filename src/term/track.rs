@@ -142,7 +142,7 @@ impl<R> Tracker<R> {
 
     /// Print running task on terminal.
     fn trace_running(&mut self, idx: usize, name: String) {
-        debug!("[tracker] Trace running {idx}: {name} ");
+        debug!("[tracker] Trace running {idx}: {name}");
         self.running.push((idx, name));
         let line = self.render();
         cursor_up!();
