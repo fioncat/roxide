@@ -3,9 +3,11 @@
 use crate::exec::Cmd;
 
 mod api;
+mod batch;
 mod config;
 mod db;
 mod exec;
+mod format;
 mod term;
 
 fn main() {

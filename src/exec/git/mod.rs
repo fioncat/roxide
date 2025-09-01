@@ -40,11 +40,15 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::fs;
+    use std::{env, fs};
 
     use super::*;
 
     pub fn setup() -> Option<&'static str> {
+        if !env::var("TEST_GIT").is_ok_and(|v| v == "true") {
+            return None;
+        }
+
         let repo_path = "tests/roxide_git";
         if fs::metadata(repo_path).is_ok() {
             return Some(repo_path);

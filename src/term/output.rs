@@ -25,7 +25,16 @@ macro_rules! info {
 }
 
 #[macro_export]
-macro_rules! print {
+macro_rules! output {
+    ($($arg:tt)*) => {
+        if !cfg!(test) {
+            eprint!($($arg)*);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! outputln {
     ($($arg:tt)*) => {
         if !cfg!(test) {
             eprintln!($($arg)*);
@@ -39,6 +48,15 @@ macro_rules! warn {
         if !cfg!(test) {
             $crate::term::output::print_hint("WARNING", "yellow");
             eprintln!($($arg)*);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! cursor_up {
+    () => {
+        if !cfg!(test) {
+            eprintln!("\x1b[A\x1b[K");
         }
     };
 }

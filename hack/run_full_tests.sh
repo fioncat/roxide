@@ -13,4 +13,4 @@ if [[ ! -d "$TEST_GIT_REPO_PATH" ]]; then
 	git clone https://github.com/fioncat/roxide.git "$TEST_GIT_REPO_PATH"
 fi
 
-cargo test
+TEST_GIT="true" cargo test
