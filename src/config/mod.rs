@@ -97,6 +97,10 @@ impl Config {
         Ok(cfg)
     }
 
+    pub fn contains_remote(&self, name: &str) -> bool {
+        self.remotes.iter().any(|r| r.name == name)
+    }
+
     pub fn get_remote(&self, name: &str) -> Result<&remote::RemoteConfig> {
         match self.remotes.iter().find(|r| r.name == name) {
             Some(r) => Ok(r),

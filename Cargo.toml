@@ -22,6 +22,7 @@ num_cpus = "^1"
 octocrab = "^0"
 pad = "^0"
 regex = "^1"
+reqwest = "^0"
 rusqlite = { version = "^0", features = ["bundled"] }
 scanf = "^2"
 serde = {version = "^1", features = ["derive"] }

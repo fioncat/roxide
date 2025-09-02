@@ -114,6 +114,7 @@ impl RemoteConfig {
                 .with_context(|| format!("failed to validate remote config {name}"))?;
             remotes.push(remote);
         }
+        remotes.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
         Ok(remotes)
     }

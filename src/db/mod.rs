@@ -108,6 +108,7 @@ mod tests {
             path: None,
             last_visited_at: 2234,
             visited_count: 20,
+            new_created: false,
         };
         let db = build_db("tests/commit.db");
         db.with_transaction(|tx| {

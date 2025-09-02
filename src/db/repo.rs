@@ -13,7 +13,7 @@ use crate::term::list::ListItem;
 use super::LimitOptions;
 
 /// The database model for a repository.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Repository {
     /// Remote name, e.g. "github"
     pub remote: String,
@@ -30,6 +30,8 @@ pub struct Repository {
 
     /// The number of times the repository has been visited.
     pub visited_count: u32,
+
+    pub new_created: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +86,7 @@ impl Repository {
             path: row.get(3)?,
             last_visited_at: row.get(4)?,
             visited_count: row.get(5)?,
+            new_created: false,
         })
     }
 }
@@ -216,6 +219,16 @@ impl<'a> RepositoryHandle<'a> {
     /// Count distinct owners for a remote.
     pub fn count_owners(&self, remote: &str) -> Result<u32> {
         count_owners(self.tx, remote)
+    }
+
+    pub fn query_fuzzy(
+        &self,
+        remote: &str,
+        owner: &str,
+        name: &str,
+        limit: LimitOptions,
+    ) -> Result<Vec<Repository>> {
+        query_fuzzy(self.tx, remote, owner, name, limit)
     }
 }
 
@@ -566,7 +579,7 @@ fn query_fuzzy(
     debug!("[db] Query fuzzy, remote: {remote}, owner: {owner}, name: {name}, limit: {limit:?}");
     let mut cond = String::new();
     let mut params = vec![
-        Value::Text(format!("%{}%", name)),
+        Value::Text(format!("%{name}%")),
         Value::Integer(limit.offset as i64),
         Value::Integer(limit.limit as i64),
     ];
@@ -631,6 +644,7 @@ mod tests {
                 path: case.3.map(String::from),
                 last_visited_at: 0,
                 visited_count: 0,
+                new_created: false,
             };
             let path = repo.get_path("/dev");
             assert_eq!(path, PathBuf::from(case.4));
@@ -658,6 +672,7 @@ mod tests {
                 path: None,
                 last_visited_at: 2234,
                 visited_count: 20,
+                new_created: false,
             },
             Repository {
                 remote: "github".to_string(),
@@ -666,6 +681,7 @@ mod tests {
                 path: None,
                 last_visited_at: 0,
                 visited_count: 0,
+                new_created: false,
             },
             Repository {
                 remote: "github".to_string(),
@@ -674,6 +690,7 @@ mod tests {
                 path: Some("/path/to/nvimdots".to_string()),
                 last_visited_at: 3333,
                 visited_count: 0,
+                new_created: false,
             },
             Repository {
                 remote: "github".to_string(),
@@ -682,6 +699,7 @@ mod tests {
                 path: None,
                 last_visited_at: 7777,
                 visited_count: 100,
+                new_created: false,
             },
             Repository {
                 remote: "gitlab".to_string(),
@@ -690,6 +708,7 @@ mod tests {
                 path: None,
                 last_visited_at: 1234,
                 visited_count: 10,
+                new_created: false,
             },
             Repository {
                 remote: "gitlab".to_string(),
@@ -698,6 +717,7 @@ mod tests {
                 path: None,
                 last_visited_at: 2222,
                 visited_count: 20,
+                new_created: false,
             },
         ]
     }
