@@ -1,0 +1,20 @@
+clone = "github.com"
+icon = "G"
+
+[api]
+provider = "github"
+token = "${TEST_GITHUB_TOKEN}"
+
+[default]
+user = "fioncat"
+email = "lazycat7706@gmail.com"
+
+[owners."fioncat"]
+sync = true
+pin = true
+ssh = true
+
+[owners."catus"]
+sync = true
+pin = true
+ssh = true

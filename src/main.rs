@@ -8,6 +8,7 @@ mod config;
 mod db;
 mod exec;
 mod format;
+mod repo;
 mod term;
 
 fn main() {

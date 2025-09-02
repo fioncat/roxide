@@ -14,6 +14,11 @@ pub fn set_cmd(cfg: CmdConfig) {
     let _ = BASH_COMMAND_CONFIG.set(cfg);
 }
 
+#[cfg(test)]
+pub fn get_cmd() -> &'static CmdConfig {
+    BASH_COMMAND_CONFIG.get().unwrap()
+}
+
 pub fn run<S>(path: &str, files: &[S], envs: &[(&str, String)], mute: bool) -> Result<()>
 where
     S: AsRef<Path>,

@@ -1,0 +1,16 @@
+clone = "git.mydomain.com"
+icon = "M"
+
+[api]
+provider = "gitlab"
+token = "${TEST_GITLAB_TOKEN}"
+cache_hours = 50
+host = "api.git.mydomain.com"
+url = "https://git.mydomain.com"
+
+[default]
+user = "wenqian"
+email = "wenqian@mydomain.com"
+sync = true
+pin = true
+ssh = true

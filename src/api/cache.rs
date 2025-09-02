@@ -29,24 +29,21 @@ impl RemoteAPI for Cache {
 
     async fn list_repos(&self, remote: &str, owner: &str) -> Result<Vec<String>> {
         debug!("[cache] List repos for {remote}:{owner}");
-        let cache = self
-            .db
-            .with_transaction(|tx| {
-                let cache = tx.remote_owner().get_optional(remote, owner)?;
-                let Some(cache) = cache else {
-                    debug!("[cache] No cache found");
-                    return Ok(None);
-                };
-                if !self.force && cache.expire_at > self.now {
-                    debug!("[cache] Hit cache");
-                    return Ok(Some(cache));
-                }
+        let cache = self.db.with_transaction(|tx| {
+            let cache = tx.remote_owner().get_optional(remote, owner)?;
+            let Some(cache) = cache else {
+                debug!("[cache] No cache found");
+                return Ok(None);
+            };
+            if !self.force && cache.expire_at > self.now {
+                debug!("[cache] Hit cache");
+                return Ok(Some(cache));
+            }
 
-                debug!("[cache] Owner cache expired or force mode enabled, remove it");
-                tx.remote_owner().delete(&cache)?;
-                Ok(None)
-            })
-            .await?;
+            debug!("[cache] Owner cache expired or force mode enabled, remove it");
+            tx.remote_owner().delete(&cache)?;
+            Ok(None)
+        })?;
 
         if let Some(cache) = cache {
             debug!("[cache] Cache result: {cache:?}");
@@ -63,8 +60,7 @@ impl RemoteAPI for Cache {
 
         debug!("[cache] Save owner cache: {cache:?}");
         self.db
-            .with_transaction(|tx| tx.remote_owner().insert(&cache))
-            .await?;
+            .with_transaction(|tx| tx.remote_owner().insert(&cache))?;
         Ok(cache.repos)
     }
 
@@ -75,23 +71,20 @@ impl RemoteAPI for Cache {
         name: &str,
     ) -> Result<RemoteRepository<'static>> {
         debug!("[cache] Get repo for {remote}:{owner}:{name}");
-        let cache = self
-            .db
-            .with_transaction(|tx| {
-                let cache = tx.remote_repo().get_optional(remote, owner, name)?;
-                let Some(cache) = cache else {
-                    debug!("[cache] No cache found");
-                    return Ok(None);
-                };
-                if !self.force && cache.expire_at > self.now {
-                    debug!("[cache] Hit cache");
-                    return Ok(Some(cache));
-                }
-                debug!("[cache] Repo cache expired or force mode enabled, remove it");
-                tx.remote_repo().delete(&cache)?;
-                Ok(None)
-            })
-            .await?;
+        let cache = self.db.with_transaction(|tx| {
+            let cache = tx.remote_repo().get_optional(remote, owner, name)?;
+            let Some(cache) = cache else {
+                debug!("[cache] No cache found");
+                return Ok(None);
+            };
+            if !self.force && cache.expire_at > self.now {
+                debug!("[cache] Hit cache");
+                return Ok(Some(cache));
+            }
+            debug!("[cache] Repo cache expired or force mode enabled, remove it");
+            tx.remote_repo().delete(&cache)?;
+            Ok(None)
+        })?;
 
         if let Some(cache) = cache {
             debug!("[cache] Cache result: {cache:?}");
@@ -102,8 +95,7 @@ impl RemoteAPI for Cache {
         repo.expire_at = self.now + self.expire;
         debug!("[cache] Save repo cache: {repo:?}");
         self.db
-            .with_transaction(|tx| tx.remote_repo().insert(&repo))
-            .await?;
+            .with_transaction(|tx| tx.remote_repo().insert(&repo))?;
         Ok(repo)
     }
 }
@@ -224,7 +216,7 @@ mod tests {
             update_repo.clone(),
         ));
         let _ = fs::remove_file("tests/cache.db");
-        let db = Arc::new(Database::open("tests/cache.db").await.unwrap());
+        let db = Arc::new(Database::open("tests/cache.db").unwrap());
         let mut cache = Cache {
             upstream: mock.clone(),
             db: db.clone(),

@@ -17,6 +17,7 @@ chrono = "^0"
 clap = { version = "^4", features = ["derive"] }
 clap_complete = { version = "^4", features = ["unstable-dynamic"] }
 console = "^0"
+dirs = "^6"
 num_cpus = "^1"
 octocrab = "^0"
 pad = "^0"
@@ -25,7 +26,9 @@ rusqlite = { version = "^0", features = ["bundled"] }
 scanf = "^2"
 serde = {version = "^1", features = ["derive"] }
 serde_json = "^1"
+shellexpand = "^3"
 tokio = { version = "^1", features = ["full"] }
+toml = "^0"
 
 [build-dependencies]
 simple-error = "^0"

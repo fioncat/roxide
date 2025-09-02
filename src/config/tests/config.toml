@@ -1,0 +1,6 @@
+[git]
+name = "/usr/bin/git"
+
+[bash]
+name = "/bin/bash"
+args = ["-e"]

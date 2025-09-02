@@ -4,17 +4,17 @@ pub mod repo;
 
 use std::cell::RefCell;
 use std::path::Path;
+use std::sync::Mutex;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use rusqlite::{Connection, Transaction};
-use tokio::sync::Mutex;
 
 pub struct Database {
     conn: Mutex<RefCell<Connection>>,
 }
 
 impl Database {
-    pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
         let db = Self {
             conn: Mutex::new(RefCell::new(conn)),
@@ -24,16 +24,18 @@ impl Database {
             tx.remote_owner().ensure_table()?;
             tx.remote_repo().ensure_table()?;
             Ok(())
-        })
-        .await?;
+        })?;
         Ok(db)
     }
 
-    pub async fn with_transaction<T, F>(&self, f: F) -> Result<T>
+    pub fn with_transaction<T, F>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&DatabaseHandle) -> Result<T>,
     {
-        let conn = self.conn.lock().await;
+        let conn = match self.conn.lock() {
+            Ok(conn) => conn,
+            Err(e) => bail!("failed to lock connection: {:#}", e),
+        };
         let mut conn = conn.borrow_mut();
         let tx = conn.transaction()?;
         let handle = DatabaseHandle { tx };
@@ -91,14 +93,14 @@ mod tests {
 
     use super::*;
 
-    async fn build_db(name: &str) -> Database {
+    fn build_db(name: &str) -> Database {
         // remove the existing file
         let _ = fs::remove_file(name);
-        Database::open(name).await.unwrap()
+        Database::open(name).unwrap()
     }
 
-    #[tokio::test]
-    async fn test_commit() {
+    #[test]
+    fn test_commit() {
         let repo = repo::Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
@@ -107,41 +109,36 @@ mod tests {
             last_visited_at: 2234,
             visited_count: 20,
         };
-        let db = build_db("tests/commit.db").await;
+        let db = build_db("tests/commit.db");
         db.with_transaction(|tx| {
             tx.repo().insert(&repo)?;
             Ok(())
         })
-        .await
         .unwrap();
 
         let result = db
             .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
-            .await
             .unwrap();
         assert_eq!(result, repo);
     }
 
-    #[tokio::test]
-    async fn test_rollback() {
-        let db = build_db("tests/rollback.db").await;
+    #[test]
+    fn test_rollback() {
+        let db = build_db("tests/rollback.db");
         let owner = remote_owner::RemoteOwner {
             remote: Cow::Owned("github".to_string()),
             owner: Cow::Owned("alice".to_string()),
             repos: vec!["repo1".to_string(), "repo2".to_string()],
             expire_at: 12345,
         };
-        let result: Result<()> = db
-            .with_transaction(|tx| {
-                tx.remote_owner().insert(&owner).unwrap();
-                bail!("force rollback");
-            })
-            .await;
+        let result: Result<()> = db.with_transaction(|tx| {
+            tx.remote_owner().insert(&owner).unwrap();
+            bail!("force rollback");
+        });
         assert_eq!(result.err().unwrap().to_string(), "force rollback");
 
         let result = db
             .with_transaction(|tx| tx.remote_owner().get_optional("github", "alice"))
-            .await
             .unwrap();
         assert_eq!(result, None);
     }
