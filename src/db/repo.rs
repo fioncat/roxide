@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-use rusqlite::{OptionalExtension, Row, Transaction, params};
+use rusqlite::types::Value;
+use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::debug;
@@ -31,6 +32,13 @@ pub struct Repository {
     pub visited_count: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchLevel {
+    Remote,
+    Owner,
+    Name,
+}
+
 impl Repository {
     pub fn get_path<P: AsRef<Path>>(&self, workspace: P) -> PathBuf {
         if let Some(ref path) = self.path {
@@ -41,6 +49,16 @@ impl Repository {
             .join(Self::escaped_path(&self.remote).as_ref())
             .join(Self::escaped_path(&self.owner).as_ref())
             .join(Self::escaped_path(&self.name).as_ref())
+    }
+
+    pub fn search_item<'a>(&'a self, level: SearchLevel) -> Cow<'a, str> {
+        match level {
+            SearchLevel::Name => Cow::Borrowed(&self.name),
+            SearchLevel::Owner => Cow::Owned(format!("{}/{}", self.owner, self.name)),
+            SearchLevel::Remote => {
+                Cow::Owned(format!("{}/{}/{}", self.remote, self.owner, self.name))
+            }
+        }
     }
 
     #[inline]
@@ -530,6 +548,50 @@ fn count_owners(tx: &Transaction, remote: &str) -> Result<u32> {
     Ok(count)
 }
 
+const QUERY_FUZZY_SQL: &str = r#"
+SELECT remote, owner, name, path, last_visited_at, visited_count
+FROM repo
+WHERE name LIKE ?1{{cond}}
+ORDER BY last_visited_at DESC
+LIMIT ?3 OFFSET ?2
+"#;
+
+fn query_fuzzy(
+    tx: &Transaction,
+    remote: &str,
+    owner: &str,
+    name: &str,
+    limit: LimitOptions,
+) -> Result<Vec<Repository>> {
+    debug!("[db] Query fuzzy, remote: {remote}, owner: {owner}, name: {name}, limit: {limit:?}");
+    let mut cond = String::new();
+    let mut params = vec![
+        Value::Text(format!("%{}%", name)),
+        Value::Integer(limit.offset as i64),
+        Value::Integer(limit.limit as i64),
+    ];
+    if !remote.is_empty() {
+        cond.push_str(" AND remote = ?4");
+        params.push(Value::Text(remote.to_string()));
+    }
+    if !owner.is_empty() {
+        cond.push_str(" AND owner = ?5");
+        params.push(Value::Text(owner.to_string()));
+    }
+
+    let sql = QUERY_FUZZY_SQL.replace("{{cond}}", &cond);
+    debug!("[db] Fuzzy SQL: {sql}, params: {params:?}");
+    let mut stmt = tx.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(params), Repository::from_row)?;
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(row?);
+    }
+
+    debug!("[db] Results: {results:?}");
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
@@ -871,5 +933,22 @@ mod tests {
         assert_eq!(count, 2);
         let count = count_owners(&tx, "gitlab").unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_fuzzy_repos() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = query_fuzzy(&tx, "", "", "o", LimitOptions::default()).unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["nvimdots", "roxide", "someproject", "otree"]);
+
+        let repos = query_fuzzy(&tx, "github", "", "s", LimitOptions::default()).unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["kubernetes", "nvimdots"]);
+
+        let repos = query_fuzzy(&tx, "github", "fioncat", "nvim", LimitOptions::default()).unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["nvimdots"]);
     }
 }
