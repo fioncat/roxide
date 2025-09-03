@@ -50,21 +50,39 @@ impl Repository {
         PathBuf::from(workspace.as_ref())
             .join(Self::escaped_path(&self.remote).as_ref())
             .join(Self::escaped_path(&self.owner).as_ref())
-            .join(Self::escaped_path(&self.name).as_ref())
+            .join(&self.name)
+    }
+
+    pub fn get_clone_url(&self, domain: &str, ssh: bool) -> String {
+        if ssh {
+            format!("git@{domain}:{}/{}.git", self.owner, self.name)
+        } else {
+            format!("https://{domain}/{}/{}.git", self.owner, self.name)
+        }
     }
 
     pub fn search_item<'a>(&'a self, level: DisplayLevel) -> Cow<'a, str> {
         match level {
             DisplayLevel::Name => Cow::Borrowed(&self.name),
-            DisplayLevel::Owner => Cow::Owned(format!("{}/{}", self.owner, self.name)),
-            DisplayLevel::Remote => {
-                Cow::Owned(format!("{}/{}/{}", self.remote, self.owner, self.name))
+            DisplayLevel::Owner => {
+                Cow::Owned(format!("{}/{}", Self::escaped_path(&self.owner), self.name))
             }
+            DisplayLevel::Remote => Cow::Owned(format!(
+                "{}/{}/{}",
+                Self::escaped_path(&self.remote),
+                Self::escaped_path(&self.owner),
+                self.name
+            )),
         }
     }
 
     pub fn full_name(&self) -> String {
-        format!("{}/{}/{}", self.remote, self.owner, self.name)
+        format!(
+            "{}:{}/{}",
+            Self::escaped_path(&self.remote),
+            Self::escaped_path(&self.owner),
+            self.name,
+        )
     }
 
     #[inline]

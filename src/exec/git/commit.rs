@@ -44,7 +44,7 @@ mod tests {
         assert!(ensure_no_uncommitted_changes(Some(repo_path), true).is_ok());
 
         // Try to add a new file, which should cause uncommitted changes
-        let path = format!("{}/new_file.txt", repo_path);
+        let path = format!("{repo_path}/new_file.txt");
         fs::write(&path, "Hello, world!").unwrap();
 
         assert_eq!(count_uncommitted_changes(Some(repo_path), true).unwrap(), 1);
@@ -61,4 +61,3 @@ mod tests {
         assert!(ensure_no_uncommitted_changes(Some(repo_path), true).is_ok());
     }
 }
-

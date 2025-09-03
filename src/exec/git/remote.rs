@@ -14,6 +14,14 @@ pub struct Remote<'a> {
 }
 
 impl<'a> Remote<'a> {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            path: None,
+            mute: false,
+        }
+    }
+
     pub fn origin<P>(path: Option<&'a P>, mute: bool) -> Result<Option<Self>>
     where
         P: AsRef<Path> + std::fmt::Debug + ?Sized,

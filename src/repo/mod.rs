@@ -1,40 +1,21 @@
-pub mod create;
 pub mod current;
+pub mod operate;
 pub mod select;
 
 use std::fs;
-use std::io;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::config::remote::RemoteConfig;
 use crate::db::repo::Repository;
 
-/// If the file directory doesn't exist, create it; if it exists, take no action.
+/// If the directory doesn't exist, create it; if it exists, take no action.
 pub fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
-    match fs::read_dir(dir.as_ref()) {
-        Ok(_) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            fs::create_dir_all(dir.as_ref())
-                .with_context(|| format!("create directory '{}'", dir.as_ref().display()))?;
-            Ok(())
-        }
-        Err(err) => {
-            Err(err).with_context(|| format!("read directory '{}'", dir.as_ref().display()))
-        }
+    if dir.as_ref().exists() {
+        return Ok(());
     }
-}
-
-pub fn get_repo_clone_url(remote: &RemoteConfig, repo: &Repository) -> Option<String> {
-    let domain = remote.clone.as_ref()?;
-    let owner = remote.get_owner(&repo.owner);
-
-    if owner.ssh {
-        Some(format!("git@{domain}:{}/{}.git", repo.owner, repo.name))
-    } else {
-        Some(format!("https://{domain}/{}/{}.git", repo.owner, repo.name))
-    }
+    fs::create_dir_all(dir.as_ref())
+        .with_context(|| format!("create directory {:?}", dir.as_ref().display()))
 }
 
 pub fn parse_workspace_path<W, P>(workspace: W, path: P) -> Option<(String, String, String)>
@@ -56,6 +37,54 @@ where
     Some((
         Repository::parse_escaped_path(remote),
         Repository::parse_escaped_path(owner),
-        Repository::parse_escaped_path(name),
+        name.to_string(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_worspace_path() {
+        let workspace = "/home/user/dev";
+        let cases = [
+            (
+                "/home/user/dev/github/owner/repo",
+                Some(("github", "owner", "repo")),
+            ),
+            (
+                "/home/user/dev/gitlab/owner/repo/src/config",
+                Some(("gitlab", "owner", "repo")),
+            ),
+            (
+                "/home/user/dev/gitlab/owner/repo",
+                Some(("gitlab", "owner", "repo")),
+            ),
+            (
+                "/home/user/dev/github/owner/repo/subdir/",
+                Some(("github", "owner", "repo")),
+            ),
+            (
+                "/home/user/dev/gitlab/group.subgroup/repo",
+                Some(("gitlab", "group/subgroup", "repo")),
+            ),
+            (
+                "/home/user/dev/gitlab/group.subgroup/repo.subrepo",
+                Some(("gitlab", "group/subgroup", "repo.subrepo")),
+            ),
+            ("/home/user/dev/github/owner", None),
+            ("/home/user/dev/github", None),
+            ("/home/user/dev/", None),
+            ("/home/user/other/github/owner/repo", None),
+            ("/usr/bin", None),
+            ("", None),
+            ("/", None),
+        ];
+        for (path, expect) in cases {
+            let result = parse_workspace_path(workspace, path);
+            let expect = expect.map(|(r, o, n)| (r.to_string(), o.to_string(), n.to_string()));
+            assert_eq!(result, expect);
+        }
+    }
 }

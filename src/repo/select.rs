@@ -671,25 +671,25 @@ mod tests {
         let cases = [
             Case {
                 url: "https://github.com/fioncat/roxide",
-                expect: "github/fioncat/roxide",
+                expect: "github:fioncat/roxide",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "https://github.com/fioncat/roxide.git",
-                expect: "github/fioncat/roxide",
+                expect: "github:fioncat/roxide",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "https://github.com/fioncat/nvimdots/tree/custom/lua/modules",
-                expect: "github/fioncat/nvimdots",
+                expect: "github:fioncat/nvimdots",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "https://github.com/fioncat/kubernetes",
-                expect: "github/fioncat/kubernetes",
+                expect: "github:fioncat/kubernetes",
                 new_created: true,
                 should_ok: true,
             },
@@ -710,31 +710,31 @@ mod tests {
             },
             Case {
                 url: "https://git.mydomain.com/fioncat/someproject/-/tree/master/deploy",
-                expect: "gitlab/fioncat/someproject",
+                expect: "gitlab:fioncat/someproject",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "https://git.mydomain.com/fioncat/template",
-                expect: "gitlab/fioncat/template",
+                expect: "gitlab:fioncat/template",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "https://git.mydomain.com/group/subgroup/someproject/-/tree/main/src",
-                expect: "gitlab/group/subgroup/someproject",
+                expect: "gitlab:group.subgroup/someproject",
                 new_created: true,
                 should_ok: true,
             },
             Case {
                 url: "git@github.com:fioncat/nvimdots.git",
-                expect: "github/fioncat/nvimdots",
+                expect: "github:fioncat/nvimdots",
                 new_created: false,
                 should_ok: true,
             },
             Case {
                 url: "git@git.mydomain.com:fioncat/someproject.git",
-                expect: "gitlab/fioncat/someproject",
+                expect: "gitlab:fioncat/someproject",
                 new_created: false,
                 should_ok: true,
             },
@@ -1012,12 +1012,12 @@ mod tests {
                 expect_total: 6,
                 expect_level: DisplayLevel::Remote,
                 expect_repos: vec![
-                    "github/kubernetes/kubernetes",
-                    "github/fioncat/nvimdots",
-                    "github/fioncat/roxide",
-                    "gitlab/fioncat/template",
-                    "gitlab/fioncat/someproject",
-                    "github/fioncat/otree",
+                    "github:kubernetes/kubernetes",
+                    "github:fioncat/nvimdots",
+                    "github:fioncat/roxide",
+                    "gitlab:fioncat/template",
+                    "gitlab:fioncat/someproject",
+                    "github:fioncat/otree",
                 ],
             },
             Case {
@@ -1029,9 +1029,9 @@ mod tests {
                 expect_total: 3,
                 expect_level: DisplayLevel::Remote,
                 expect_repos: vec![
-                    "github/fioncat/nvimdots",
-                    "github/fioncat/roxide",
-                    "github/fioncat/otree",
+                    "github:fioncat/nvimdots",
+                    "github:fioncat/roxide",
+                    "github:fioncat/otree",
                 ],
             },
             Case {
@@ -1042,7 +1042,7 @@ mod tests {
                 },
                 expect_total: 1,
                 expect_level: DisplayLevel::Owner,
-                expect_repos: vec!["github/kubernetes/kubernetes"],
+                expect_repos: vec!["github:kubernetes/kubernetes"],
             },
             Case {
                 args: vec![],
@@ -1052,7 +1052,7 @@ mod tests {
                 },
                 expect_total: 2,
                 expect_level: DisplayLevel::Remote,
-                expect_repos: vec!["gitlab/fioncat/template", "gitlab/fioncat/someproject"],
+                expect_repos: vec!["gitlab:fioncat/template", "gitlab:fioncat/someproject"],
             },
             Case {
                 args: vec!["github"],
@@ -1062,7 +1062,7 @@ mod tests {
                 },
                 expect_total: 4,
                 expect_level: DisplayLevel::Owner,
-                expect_repos: vec!["github/kubernetes/kubernetes", "github/fioncat/nvimdots"],
+                expect_repos: vec!["github:kubernetes/kubernetes", "github:fioncat/nvimdots"],
             },
             Case {
                 args: vec!["github"],
@@ -1073,7 +1073,7 @@ mod tests {
                 },
                 expect_total: 4,
                 expect_level: DisplayLevel::Owner,
-                expect_repos: vec!["github/fioncat/nvimdots", "github/fioncat/roxide"],
+                expect_repos: vec!["github:fioncat/nvimdots", "github:fioncat/roxide"],
             },
             Case {
                 args: vec!["github", "fioncat"],
@@ -1081,9 +1081,9 @@ mod tests {
                 expect_total: 3,
                 expect_level: DisplayLevel::Name,
                 expect_repos: vec![
-                    "github/fioncat/nvimdots",
-                    "github/fioncat/roxide",
-                    "github/fioncat/otree",
+                    "github:fioncat/nvimdots",
+                    "github:fioncat/roxide",
+                    "github:fioncat/otree",
                 ],
             },
             Case {
