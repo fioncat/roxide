@@ -4,9 +4,11 @@ use crate::exec::Cmd;
 
 mod api;
 mod batch;
+mod cmd;
 mod config;
 mod db;
 mod exec;
+mod filelock;
 mod format;
 mod repo;
 mod term;

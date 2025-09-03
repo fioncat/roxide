@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail};
 use crate::api::{self, RemoteAPI};
 use crate::db::Database;
 use crate::debug;
+use crate::filelock::FileLock;
 
 use super::Config;
 
@@ -20,6 +21,8 @@ pub struct ConfigContext {
     db: OnceLock<Result<Arc<Database>>>,
 
     apis: Mutex<RefCell<HashMap<String, Arc<dyn RemoteAPI>>>>,
+
+    file_lock: OnceLock<Result<FileLock>>,
 }
 
 impl ConfigContext {
@@ -30,6 +33,7 @@ impl ConfigContext {
             current_dir,
             db: OnceLock::new(),
             apis: Mutex::new(RefCell::new(HashMap::new())),
+            file_lock: OnceLock::new(),
         }))
     }
 
@@ -47,6 +51,7 @@ impl ConfigContext {
             current_dir,
             db: OnceLock::new(),
             apis: Mutex::new(RefCell::new(apis)),
+            file_lock: OnceLock::new(),
         })
     }
 
@@ -86,6 +91,20 @@ impl ConfigContext {
         apis.borrow_mut()
             .insert(remote_name.to_string(), api.clone());
         Ok(api)
+    }
+
+    pub fn lock(&self) -> Result<()> {
+        if let Err(e) = self.file_lock.get_or_init(|| {
+            let path = PathBuf::from(&self.cfg.data_dir).join("lock");
+            debug!(
+                "[context] Acquire global file lock, path: {}",
+                path.display()
+            );
+            FileLock::acquire(path)
+        }) {
+            bail!("failed to acquire global file lock: {e:#}");
+        }
+        Ok(())
     }
 }
 
