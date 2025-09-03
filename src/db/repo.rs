@@ -7,10 +7,6 @@ use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::debug;
-use crate::format::format_time;
-use crate::term::list::ListItem;
-
-use super::LimitOptions;
 
 /// The database model for a repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -25,6 +21,10 @@ pub struct Repository {
     /// This is optional, if none, the repository is in the workspace.
     pub path: Option<String>,
 
+    pub pin: bool,
+
+    pub sync: bool,
+
     /// The last time the repository was visited, as a unix timestamp.
     pub last_visited_at: u64,
 
@@ -35,7 +35,7 @@ pub struct Repository {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SearchLevel {
+pub enum DisplayLevel {
     Remote,
     Owner,
     Name,
@@ -53,14 +53,19 @@ impl Repository {
             .join(Self::escaped_path(&self.name).as_ref())
     }
 
-    pub fn search_item<'a>(&'a self, level: SearchLevel) -> Cow<'a, str> {
+    pub fn search_item<'a>(&'a self, level: DisplayLevel) -> Cow<'a, str> {
         match level {
-            SearchLevel::Name => Cow::Borrowed(&self.name),
-            SearchLevel::Owner => Cow::Owned(format!("{}/{}", self.owner, self.name)),
-            SearchLevel::Remote => {
+            DisplayLevel::Name => Cow::Borrowed(&self.name),
+            DisplayLevel::Owner => Cow::Owned(format!("{}/{}", self.owner, self.name)),
+            DisplayLevel::Remote => {
                 Cow::Owned(format!("{}/{}/{}", self.remote, self.owner, self.name))
             }
         }
+    }
+
+    #[cfg(test)]
+    pub fn full_name(&self) -> String {
+        format!("{}/{}/{}", self.remote, self.owner, self.name)
     }
 
     #[inline]
@@ -84,26 +89,12 @@ impl Repository {
             owner: row.get(1)?,
             name: row.get(2)?,
             path: row.get(3)?,
-            last_visited_at: row.get(4)?,
-            visited_count: row.get(5)?,
+            pin: row.get(4)?,
+            sync: row.get(5)?,
+            last_visited_at: row.get(6)?,
+            visited_count: row.get(7)?,
             new_created: false,
         })
-    }
-}
-
-impl ListItem for Repository {
-    fn titles() -> Vec<&'static str> {
-        vec!["Remote", "Owner", "Name", "LastVisited", "Visited"]
-    }
-
-    fn row(self) -> Vec<String> {
-        vec![
-            self.remote,
-            self.owner,
-            self.name,
-            format!("{}", format_time(self.last_visited_at)),
-            format!("{}", self.visited_count),
-        ]
     }
 }
 
@@ -164,39 +155,12 @@ impl<'a> RepositoryHandle<'a> {
         delete(self.tx, repo)
     }
 
-    /// Query all repositories, ordered by `last_visited_at` desc.
-    pub fn query_all(&self, limit: LimitOptions) -> Result<Vec<Repository>> {
-        query_all(self.tx, limit)
+    pub fn query(&self, opts: QueryOptions) -> Result<Vec<Repository>> {
+        query(self.tx, opts)
     }
 
-    /// Count all repositories.
-    pub fn count_all(&self) -> Result<u32> {
-        count_all(self.tx)
-    }
-
-    /// Query repositories by remote, ordered by `last_visited_at` desc.
-    pub fn query_by_remote(&self, remote: &str, limit: LimitOptions) -> Result<Vec<Repository>> {
-        query_by_remote(self.tx, remote, limit)
-    }
-
-    /// Count repositories by remote.
-    pub fn count_by_remote(&self, remote: &str) -> Result<u32> {
-        count_by_remote(self.tx, remote)
-    }
-
-    /// Query repositories by remote and owner, ordered by `last_visited_at` desc.
-    pub fn query_by_owner(
-        &self,
-        remote: &str,
-        owner: &str,
-        limit: LimitOptions,
-    ) -> Result<Vec<Repository>> {
-        query_by_owner(self.tx, remote, owner, limit)
-    }
-
-    /// Count repositories by remote and owner.
-    pub fn count_by_owner(&self, remote: &str, owner: &str) -> Result<u32> {
-        count_by_owner(self.tx, remote, owner)
+    pub fn count(&self, opts: QueryOptions) -> Result<u32> {
+        count(self.tx, opts)
     }
 
     /// Query distinct remotes with owner and repo counts, ordered by
@@ -220,16 +184,6 @@ impl<'a> RepositoryHandle<'a> {
     pub fn count_owners(&self, remote: &str) -> Result<u32> {
         count_owners(self.tx, remote)
     }
-
-    pub fn query_fuzzy(
-        &self,
-        remote: &str,
-        owner: &str,
-        name: &str,
-        limit: LimitOptions,
-    ) -> Result<Vec<Repository>> {
-        query_fuzzy(self.tx, remote, owner, name, limit)
-    }
 }
 
 const TABLE_SQL: &str = r#"
@@ -238,6 +192,8 @@ CREATE TABLE IF NOT EXISTS repo (
     owner TEXT NOT NULL,
     name TEXT NOT NULL,
     path TEXT,
+    pin INTEGER NOT NULL,
+    sync INTEGER NOT NULL,
     last_visited_at INTEGER NOT NULL,
     visited_count INTEGER NOT NULL,
     PRIMARY KEY (remote, owner, name)
@@ -264,10 +220,12 @@ INSERT INTO repo (
     owner,
     name,
     path,
+    pin,
+    sync,
     last_visited_at,
     visited_count
 ) VALUES (
-    ?1, ?2, ?3, ?4, ?5, ?6
+    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
 )
 "#;
 
@@ -280,6 +238,8 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<()> {
             repo.owner,
             repo.name,
             repo.path,
+            repo.pin,
+            repo.sync,
             repo.last_visited_at,
             repo.visited_count,
         ],
@@ -288,7 +248,7 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<()> {
 }
 
 const GET_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
+SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
@@ -317,7 +277,7 @@ fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Reposi
 }
 
 const GET_BY_PATH_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
+SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 WHERE path = ?1
 "#;
@@ -339,7 +299,7 @@ fn get_by_path(tx: &Transaction, path: &str) -> Result<Repository> {
 }
 
 const UPDATE_SQL: &str = r#"
-UPDATE repo SET last_visited_at = ?4, visited_count = ?5
+UPDATE repo SET last_visited_at = ?4, visited_count = ?5, pin = ?6, sync = ?7
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
@@ -353,6 +313,8 @@ fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
             repo.name,
             repo.last_visited_at,
             repo.visited_count,
+            repo.pin,
+            repo.sync,
         ],
     )?;
     Ok(())
@@ -369,106 +331,133 @@ fn delete(tx: &Transaction, repo: &Repository) -> Result<()> {
     Ok(())
 }
 
-const QUERY_ALL_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct QueryOptions<'a> {
+    pub remote: Option<&'a str>,
+    pub owner: Option<&'a str>,
+    pub name: Option<&'a str>,
+
+    pub sync: Option<bool>,
+    pub pin: Option<bool>,
+
+    pub fuzzy: bool,
+
+    pub limit: Option<LimitOptions>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LimitOptions {
+    pub offset: u32,
+    pub limit: u32,
+}
+
+impl Default for LimitOptions {
+    fn default() -> Self {
+        Self {
+            offset: 0,
+            limit: 100,
+        }
+    }
+}
+
+impl<'a> QueryOptions<'a> {
+    fn build(&self, sql: &str) -> (String, Vec<Value>) {
+        let mut conds = vec![];
+        let mut limit = "";
+        let mut idx = 0;
+        let mut params = Vec::new();
+
+        if let Some(limit_opts) = self.limit {
+            idx += 2;
+            limit = "LIMIT ?2 OFFSET ?1";
+            params.push(Value::Integer(limit_opts.offset as i64));
+            params.push(Value::Integer(limit_opts.limit as i64));
+        }
+
+        if let Some(remote) = self.remote {
+            idx += 1;
+            conds.push(format!("remote = ?{idx}"));
+            params.push(Value::Text(remote.to_string()));
+        }
+
+        if let Some(owner) = self.owner {
+            idx += 1;
+            conds.push(format!("owner = ?{idx}"));
+            params.push(Value::Text(owner.to_string()));
+        }
+
+        if let Some(name) = self.name {
+            idx += 1;
+            if self.fuzzy {
+                conds.push(format!("name LIKE ?{idx}"));
+                params.push(Value::Text(format!("%{name}%")));
+            } else {
+                conds.push(format!("name = ?{idx}"));
+                params.push(Value::Text(name.to_string()));
+            }
+        }
+
+        if let Some(sync) = self.sync {
+            idx += 1;
+            conds.push(format!("sync = ?{idx}"));
+            params.push(Value::Integer(if sync { 1 } else { 0 }));
+        }
+
+        if let Some(pin) = self.pin {
+            idx += 1;
+            conds.push(format!("pin = ?{idx}"));
+            params.push(Value::Integer(if pin { 1 } else { 0 }));
+        }
+
+        let wh = if conds.is_empty() {
+            Cow::Borrowed("")
+        } else {
+            Cow::Owned(format!("WHERE {}", conds.join(" AND ")))
+        };
+
+        let sql = sql
+            .replace("{{where}}", wh.as_ref())
+            .replace("{{limit}}", limit)
+            .replace('\n', " ");
+
+        (sql, params)
+    }
+}
+
+const QUERY_SQL: &str = r#"
+SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
+{{where}}
 ORDER BY last_visited_at DESC
-LIMIT ?2 OFFSET ?1
+{{limit}}
 "#;
 
-fn query_all(tx: &Transaction, limit: LimitOptions) -> Result<Vec<Repository>> {
-    debug!("[db] Query all repos, limit: {limit:?}");
-    let mut stmt = tx.prepare(QUERY_ALL_SQL)?;
-    let rows = stmt.query_map(params![limit.offset, limit.limit], |row| {
-        Repository::from_row(row)
-    })?;
+fn query(tx: &Transaction, opts: QueryOptions) -> Result<Vec<Repository>> {
+    debug!("[db] Query repos, options: {opts:?}");
+    let (sql, params) = opts.build(QUERY_SQL);
+    debug!("[db] Query SQL: {sql:?}, params: {params:?}");
+    let mut stmt = tx.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(params), Repository::from_row)?;
     let mut results = Vec::new();
     for row in rows {
         results.push(row?);
     }
-    debug!("[db] Results: {results:?}");
+
+    debug!("[db] Query results: {results:?}");
     Ok(results)
 }
 
-const COUNT_ALL_SQL: &str = r#"
-SELECT COUNT(*) FROM repo
+const COUNT_SQL: &str = r#"
+SELECT COUNT(*) FROM repo {{where}}
 "#;
 
-fn count_all(tx: &Transaction) -> Result<u32> {
-    debug!("[db] Count all repos");
-    let count: u32 = tx.query_row(COUNT_ALL_SQL, [], |row| row.get(0))?;
-    debug!("[db] Result: {count}");
-    Ok(count)
-}
+fn count(tx: &Transaction, opts: QueryOptions) -> Result<u32> {
+    debug!("[db] Count repos, options: {opts:?}");
+    let (sql, params) = opts.build(COUNT_SQL);
+    debug!("[db] Count SQL: {sql}, params: {params:?}");
+    let count: u32 = tx.query_row(&sql, params_from_iter(params), |row| row.get(0))?;
 
-const QUERY_BY_REMOTE_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
-FROM repo
-WHERE remote = ?1
-ORDER BY last_visited_at DESC
-LIMIT ?3 OFFSET ?2
-"#;
-
-fn query_by_remote(tx: &Transaction, remote: &str, limit: LimitOptions) -> Result<Vec<Repository>> {
-    debug!("[db] Query repos by remote: {remote}, limit: {limit:?}");
-    let mut stmt = tx.prepare(QUERY_BY_REMOTE_SQL)?;
-    let rows = stmt.query_map(params![remote, limit.offset, limit.limit], |row| {
-        Repository::from_row(row)
-    })?;
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row?);
-    }
-    debug!("[db] Results: {results:?}");
-    Ok(results)
-}
-
-const COUNT_BY_REMOTE_SQL: &str = r#"
-SELECT COUNT(*) FROM repo WHERE remote = ?1
-"#;
-
-fn count_by_remote(tx: &Transaction, remote: &str) -> Result<u32> {
-    debug!("[db] Count repos by remote: {remote}");
-    let count: u32 = tx.query_row(COUNT_BY_REMOTE_SQL, [remote], |row| row.get(0))?;
-    debug!("[db] Result: {count}");
-    Ok(count)
-}
-
-const QUERY_BY_OWNER_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
-FROM repo
-WHERE remote = ?1 AND owner = ?2
-ORDER BY last_visited_at DESC
-LIMIT ?4 OFFSET ?3
-"#;
-
-fn query_by_owner(
-    tx: &Transaction,
-    remote: &str,
-    owner: &str,
-    limit: LimitOptions,
-) -> Result<Vec<Repository>> {
-    debug!("[db] Query repos by remote: {remote}, owner: {owner}, limit: {limit:?}");
-    let mut stmt = tx.prepare(QUERY_BY_OWNER_SQL)?;
-    let rows = stmt.query_map(params![remote, owner, limit.offset, limit.limit], |row| {
-        Repository::from_row(row)
-    })?;
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row?);
-    }
-    debug!("[db] Results: {results:?}");
-    Ok(results)
-}
-
-const COUNT_BY_OWNER_SQL: &str = r#"
-SELECT COUNT(*) FROM repo WHERE remote = ?1 AND owner = ?2
-"#;
-
-fn count_by_owner(tx: &Transaction, remote: &str, owner: &str) -> Result<u32> {
-    debug!("[db] Count repos by remote: {remote}, owner: {owner}");
-    let count: u32 = tx.query_row(COUNT_BY_OWNER_SQL, params![remote, owner], |row| row.get(0))?;
-    debug!("[db] Result: {count}");
+    debug!("[db] Count result: {count}");
     Ok(count)
 }
 
@@ -561,93 +550,56 @@ fn count_owners(tx: &Transaction, remote: &str) -> Result<u32> {
     Ok(count)
 }
 
-const QUERY_FUZZY_SQL: &str = r#"
-SELECT remote, owner, name, path, last_visited_at, visited_count
-FROM repo
-WHERE name LIKE ?1{{cond}}
-ORDER BY last_visited_at DESC
-LIMIT ?3 OFFSET ?2
-"#;
-
-fn query_fuzzy(
-    tx: &Transaction,
-    remote: &str,
-    owner: &str,
-    name: &str,
-    limit: LimitOptions,
-) -> Result<Vec<Repository>> {
-    debug!("[db] Query fuzzy, remote: {remote}, owner: {owner}, name: {name}, limit: {limit:?}");
-    let mut cond = String::new();
-    let mut params = vec![
-        Value::Text(format!("%{name}%")),
-        Value::Integer(limit.offset as i64),
-        Value::Integer(limit.limit as i64),
-    ];
-    if !remote.is_empty() {
-        cond.push_str(" AND remote = ?4");
-        params.push(Value::Text(remote.to_string()));
-    }
-    if !owner.is_empty() {
-        cond.push_str(" AND owner = ?5");
-        params.push(Value::Text(owner.to_string()));
-    }
-
-    let sql = QUERY_FUZZY_SQL.replace("{{cond}}", &cond);
-    debug!("[db] Fuzzy SQL: {sql}, params: {params:?}");
-    let mut stmt = tx.prepare(&sql)?;
-    let rows = stmt.query_map(params_from_iter(params), Repository::from_row)?;
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row?);
-    }
-
-    debug!("[db] Results: {results:?}");
-    Ok(results)
-}
-
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use rusqlite::Connection;
 
     use super::*;
 
     #[test]
     fn test_get_path() {
-        let test_cases = vec![
-            (
-                "github",
-                "fioncat",
-                "roxide",
-                None,
-                "/dev/github/fioncat/roxide",
-            ),
-            (
-                "github",
-                "fioncat",
-                "roxide",
-                Some("/myproject"),
-                "/myproject",
-            ),
-            (
-                "gitlab",
-                "some/one",
-                "otree",
-                None,
-                "/dev/gitlab/some.one/otree",
-            ),
+        struct Case {
+            remote: &'static str,
+            owner: &'static str,
+            name: &'static str,
+            path: Option<&'static str>,
+            expect: &'static str,
+        }
+
+        let cases = [
+            Case {
+                remote: "github",
+                owner: "fioncat",
+                name: "roxide",
+                path: None,
+                expect: "/dev/github/fioncat/roxide",
+            },
+            Case {
+                remote: "github",
+                owner: "fioncat",
+                name: "roxide",
+                path: Some("/myproject"),
+                expect: "/myproject",
+            },
+            Case {
+                remote: "gitlab",
+                owner: "some/one",
+                name: "otree",
+                path: None,
+                expect: "/dev/gitlab/some.one/otree",
+            },
         ];
-        for case in test_cases {
+
+        for case in cases {
             let repo = Repository {
-                remote: case.0.to_string(),
-                owner: case.1.to_string(),
-                name: case.2.to_string(),
-                path: case.3.map(String::from),
-                last_visited_at: 0,
-                visited_count: 0,
-                new_created: false,
+                remote: case.remote.to_string(),
+                owner: case.owner.to_string(),
+                name: case.name.to_string(),
+                path: case.path.map(String::from),
+                ..Default::default()
             };
             let path = repo.get_path("/dev");
-            assert_eq!(path, PathBuf::from(case.4));
+            assert_eq!(path, PathBuf::from(case.expect));
         }
     }
 
@@ -663,13 +615,15 @@ mod tests {
         conn
     }
 
-    fn test_repos() -> Vec<Repository> {
+    pub fn test_repos() -> Vec<Repository> {
         vec![
             Repository {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
                 path: None,
+                sync: true,
+                pin: true,
                 last_visited_at: 2234,
                 visited_count: 20,
                 new_created: false,
@@ -679,6 +633,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "otree".to_string(),
                 path: None,
+                sync: true,
+                pin: true,
                 last_visited_at: 0,
                 visited_count: 0,
                 new_created: false,
@@ -688,6 +644,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "nvimdots".to_string(),
                 path: Some("/path/to/nvimdots".to_string()),
+                sync: true,
+                pin: true,
                 last_visited_at: 3333,
                 visited_count: 0,
                 new_created: false,
@@ -697,6 +655,8 @@ mod tests {
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
                 path: None,
+                sync: false,
+                pin: true,
                 last_visited_at: 7777,
                 visited_count: 100,
                 new_created: false,
@@ -706,6 +666,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "someproject".to_string(),
                 path: None,
+                sync: false,
+                pin: false,
                 last_visited_at: 1234,
                 visited_count: 10,
                 new_created: false,
@@ -715,6 +677,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "template".to_string(),
                 path: None,
+                sync: false,
+                pin: false,
                 last_visited_at: 2222,
                 visited_count: 20,
                 new_created: false,
@@ -770,30 +734,22 @@ mod tests {
     }
 
     #[test]
-    fn test_get_by_path() {
+    fn test_query_all() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repo = get_by_path_optional(&tx, "/path/to/nvimdots").unwrap();
-        let expect = get(&tx, "github", "fioncat", "nvimdots").unwrap();
-        assert_eq!(repo, Some(expect));
-        let repo = get_by_path_optional(&tx, "/path/to/nonexist").unwrap();
-        assert_eq!(repo, None);
-    }
-
-    #[test]
-    fn test_get_all() {
-        let mut conn = build_conn();
-        let tx = conn.transaction().unwrap();
-        let repos = query_all(&tx, LimitOptions::default()).unwrap();
+        let repos = query(&tx, QueryOptions::default()).unwrap();
         let mut expects = test_repos();
         expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
         assert_eq!(repos, expects);
 
-        let repos_limit = query_all(
+        let repos_limit = query(
             &tx,
-            LimitOptions {
-                offset: 1,
-                limit: 2,
+            QueryOptions {
+                limit: Some(LimitOptions {
+                    offset: 1,
+                    limit: 2,
+                }),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -807,28 +763,38 @@ mod tests {
     fn test_count_all() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let count = count_all(&tx).unwrap();
+        let count = count(&tx, QueryOptions::default()).unwrap();
         let repos = test_repos();
         assert_eq!(count, repos.len() as u32);
     }
 
     #[test]
-    fn test_get_by_remote() {
+    fn test_query_by_remote() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repos = query_by_remote(&tx, "github", LimitOptions::default()).unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let mut expects: Vec<Repository> = test_repos()
             .into_iter()
             .filter(|r| r.remote == "github")
             .collect();
         expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
         assert_eq!(repos, expects);
-        let repos_limit = query_by_remote(
+        let repos_limit = query(
             &tx,
-            "github",
-            LimitOptions {
-                offset: 1,
-                limit: 1,
+            QueryOptions {
+                remote: Some("github"),
+                limit: Some(LimitOptions {
+                    offset: 1,
+                    limit: 1,
+                }),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -842,33 +808,59 @@ mod tests {
     fn test_count_by_remote() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let count = count_by_remote(&tx, "github").unwrap();
+        let result = count(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let repos = test_repos();
         let expect = repos.iter().filter(|r| r.remote == "github").count() as u32;
-        assert_eq!(count, expect);
-        let count = count_by_remote(&tx, "gitlab").unwrap();
+        assert_eq!(result, expect);
+
+        let result = count(
+            &tx,
+            QueryOptions {
+                remote: Some("gitlab"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let expect = repos.iter().filter(|r| r.remote == "gitlab").count() as u32;
-        assert_eq!(count, expect);
+        assert_eq!(result, expect);
     }
 
     #[test]
-    fn test_get_by_owner() {
+    fn test_query_by_owner() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repos = query_by_owner(&tx, "github", "fioncat", LimitOptions::default()).unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                owner: Some("fioncat"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let mut expects: Vec<Repository> = test_repos()
             .into_iter()
             .filter(|r| r.remote == "github" && r.owner == "fioncat")
             .collect();
         expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
         assert_eq!(repos, expects);
-        let repos_limit = query_by_owner(
+        let repos_limit = query(
             &tx,
-            "github",
-            "fioncat",
-            LimitOptions {
-                offset: 1,
-                limit: 1,
+            QueryOptions {
+                remote: Some("github"),
+                owner: Some("fioncat"),
+                limit: Some(LimitOptions {
+                    offset: 1,
+                    limit: 1,
+                }),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -882,19 +874,159 @@ mod tests {
     fn test_count_by_owner() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let count = count_by_owner(&tx, "github", "fioncat").unwrap();
+        let result = count(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                owner: Some("fioncat"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let repos = test_repos();
         let expect = repos
             .iter()
             .filter(|r| r.remote == "github" && r.owner == "fioncat")
             .count() as u32;
-        assert_eq!(count, expect);
-        let count = count_by_owner(&tx, "gitlab", "fioncat").unwrap();
+        assert_eq!(result, expect);
+
+        let result = count(
+            &tx,
+            QueryOptions {
+                remote: Some("gitlab"),
+                owner: Some("fioncat"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let expect = repos
             .iter()
             .filter(|r| r.remote == "gitlab" && r.owner == "fioncat")
             .count() as u32;
-        assert_eq!(count, expect);
+        assert_eq!(result, expect);
+    }
+
+    #[test]
+    fn test_query_by_pin() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                pin: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut expects: Vec<Repository> = test_repos().into_iter().filter(|r| r.pin).collect();
+        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        assert_eq!(repos, expects);
+    }
+
+    #[test]
+    fn test_count_by_pin() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let result = count(
+            &tx,
+            QueryOptions {
+                pin: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let repos = test_repos();
+        let expect = repos.iter().filter(|r| r.pin).count() as u32;
+        assert_eq!(result, expect);
+    }
+
+    #[test]
+    fn test_query_by_sync() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                sync: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut expects: Vec<Repository> = test_repos().into_iter().filter(|r| r.sync).collect();
+        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        assert_eq!(repos, expects);
+    }
+
+    #[test]
+    fn test_count_by_sync() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let result = count(
+            &tx,
+            QueryOptions {
+                sync: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let repos = test_repos();
+        let expect = repos.iter().filter(|r| r.sync).count() as u32;
+        assert_eq!(result, expect);
+    }
+
+    #[test]
+    fn test_query_fuzzy() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                name: Some("o"),
+                fuzzy: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["nvimdots", "roxide", "someproject", "otree"]);
+
+        let repos = query(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                name: Some("s"),
+                fuzzy: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["kubernetes", "nvimdots"]);
+
+        let repos = query(
+            &tx,
+            QueryOptions {
+                remote: Some("github"),
+                owner: Some("fioncat"),
+                name: Some("nvim"),
+                fuzzy: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
+        assert_eq!(names, vec!["nvimdots"]);
+    }
+
+    #[test]
+    fn test_get_by_path() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repo = get_by_path_optional(&tx, "/path/to/nvimdots").unwrap();
+        let expect = get(&tx, "github", "fioncat", "nvimdots").unwrap();
+        assert_eq!(repo, Some(expect));
+        let repo = get_by_path_optional(&tx, "/path/to/nonexist").unwrap();
+        assert_eq!(repo, None);
     }
 
     #[test]
@@ -953,22 +1085,5 @@ mod tests {
         assert_eq!(count, 2);
         let count = count_owners(&tx, "gitlab").unwrap();
         assert_eq!(count, 1);
-    }
-
-    #[test]
-    fn test_fuzzy_repos() {
-        let mut conn = build_conn();
-        let tx = conn.transaction().unwrap();
-        let repos = query_fuzzy(&tx, "", "", "o", LimitOptions::default()).unwrap();
-        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
-        assert_eq!(names, vec!["nvimdots", "roxide", "someproject", "otree"]);
-
-        let repos = query_fuzzy(&tx, "github", "", "s", LimitOptions::default()).unwrap();
-        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
-        assert_eq!(names, vec!["kubernetes", "nvimdots"]);
-
-        let repos = query_fuzzy(&tx, "github", "fioncat", "nvim", LimitOptions::default()).unwrap();
-        let names = repos.iter().map(|r| r.name.as_str()).collect::<Vec<&str>>();
-        assert_eq!(names, vec!["nvimdots"]);
     }
 }

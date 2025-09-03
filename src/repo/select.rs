@@ -6,8 +6,7 @@ use anyhow::{Context, Result, bail};
 use reqwest::Url;
 
 use crate::config::context::ConfigContext;
-use crate::db::LimitOptions;
-use crate::db::repo::{Repository, SearchLevel};
+use crate::db::repo::{DisplayLevel, LimitOptions, QueryOptions, Repository};
 use crate::debug;
 use crate::exec::fzf;
 
@@ -18,9 +17,23 @@ pub struct RepoSelector<'a> {
     owner: &'a str,
     name: &'a str,
 
-    limit: LimitOptions,
-
     fzf_filter: Option<&'static str>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ManyOptions {
+    pub sync: Option<bool>,
+    pub pin: Option<bool>,
+
+    pub offset: u32,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoList {
+    pub items: Vec<Repository>,
+    pub total: u32,
+    pub level: DisplayLevel,
 }
 
 #[derive(Debug)]
@@ -37,7 +50,6 @@ impl<'a> RepoSelector<'a> {
             head: args.first().map(|s| s.as_str()).unwrap_or_default(),
             owner: args.get(1).map(|s| s.as_str()).unwrap_or_default(),
             name: args.get(2).map(|s| s.as_str()).unwrap_or_default(),
-            limit: LimitOptions::default(),
             fzf_filter: None,
         }
     }
@@ -266,8 +278,13 @@ impl<'a> RepoSelector<'a> {
         let db = self.ctx.get_db()?;
         if local {
             debug!("[select] Local mode, select from db");
-            let count =
-                db.with_transaction(|tx| tx.repo().count_by_owner(&remote.name, self.owner))?;
+            let count = db.with_transaction(|tx| {
+                tx.repo().count(QueryOptions {
+                    remote: Some(&remote.name),
+                    owner: Some(self.owner),
+                    ..Default::default()
+                })
+            })?;
             if count > 0 {
                 debug!("[select] {:?} is an owner, select from db", self.owner);
                 return self.select_one_from_db(self.head, self.owner, false);
@@ -291,8 +308,11 @@ impl<'a> RepoSelector<'a> {
 
         let locals = db
             .with_transaction(|tx| {
-                tx.repo()
-                    .query_by_owner(&remote.name, self.owner, self.limit)
+                tx.repo().query(QueryOptions {
+                    remote: Some(&remote.name),
+                    owner: Some(self.owner),
+                    ..Default::default()
+                })
             })?
             .into_iter()
             .map(|r| r.name)
@@ -315,17 +335,24 @@ impl<'a> RepoSelector<'a> {
             return self.select_one_from_db(self.head, self.owner, true);
         }
 
-        let db = self.ctx.get_db()?;
         let remote = self.ctx.cfg.get_remote(self.head)?;
-        let count = db.with_transaction(|tx| tx.repo().count_by_owner(&remote.name, self.owner))?;
-        if count == 0 {
-            bail!("no repo found in owner {:?}", self.owner);
-        }
 
         if local {
+            let db = self.ctx.get_db()?;
+            let count = db.with_transaction(|tx| {
+                tx.repo().count(QueryOptions {
+                    remote: Some(&remote.name),
+                    owner: Some(self.owner),
+                    ..Default::default()
+                })
+            })?;
+            if count == 0 {
+                bail!("no repo found in owner {:?}", self.owner);
+            }
             debug!("[select] Local mode, fuzzy select from db");
             return self.select_one_fuzzy(&remote.name, self.owner, self.name);
         }
+
         debug!("[select] No local mode, get or create from db");
         self.get_or_create(&remote.name, self.owner, self.name)
     }
@@ -334,8 +361,19 @@ impl<'a> RepoSelector<'a> {
         debug!("[select] Select one fuzzy, remote: {remote:?}, owner: {owner:?}, name: {name:?}");
         let db = self.ctx.get_db()?;
 
-        let repos =
-            db.with_transaction(|tx| tx.repo().query_fuzzy(remote, owner, name, self.limit))?;
+        let repos = db.with_transaction(|tx| {
+            tx.repo().query(QueryOptions {
+                remote: if remote.is_empty() {
+                    None
+                } else {
+                    Some(remote)
+                },
+                owner: if owner.is_empty() { None } else { Some(owner) },
+                name: Some(name),
+                fuzzy: true,
+                ..Default::default()
+            })
+        })?;
 
         for repo in repos {
             let path = repo.get_path(&self.ctx.cfg.workspace);
@@ -356,17 +394,20 @@ impl<'a> RepoSelector<'a> {
             "[select] Select one from db, remote: {remote:?}, owner: {owner:?}, latest: {latest}"
         );
         let db = self.ctx.get_db()?;
-        let mut level = SearchLevel::Name;
+        let mut level = DisplayLevel::Remote;
         let repos = db.with_transaction(|tx| {
-            if remote.is_empty() {
-                level = SearchLevel::Remote;
-                tx.repo().query_all(self.limit)
-            } else if owner.is_empty() {
-                level = SearchLevel::Owner;
-                tx.repo().query_by_remote(remote, self.limit)
-            } else {
-                tx.repo().query_by_owner(remote, owner, self.limit)
+            let mut opts = QueryOptions::default();
+            if !remote.is_empty() {
+                opts.remote = Some(remote);
+                level = DisplayLevel::Owner;
             }
+
+            if !owner.is_empty() {
+                opts.owner = Some(owner);
+                level = DisplayLevel::Name;
+            }
+
+            tx.repo().query(opts)
         })?;
 
         let mut filtered = Vec::with_capacity(repos.len());
@@ -418,8 +459,56 @@ impl<'a> RepoSelector<'a> {
             remote: remote.to_string(),
             owner: owner.to_string(),
             name: name.to_string(),
+            new_created: true,
             ..Default::default()
         }
+    }
+
+    pub fn select_many(&self, opts: ManyOptions) -> Result<RepoList> {
+        debug!("[select] Select many, opts: {opts:?}");
+
+        let mut query_opts = QueryOptions {
+            sync: opts.sync,
+            pin: opts.pin,
+            ..Default::default()
+        };
+
+        if opts.limit > 0 {
+            query_opts.limit = Some(LimitOptions {
+                offset: opts.offset,
+                limit: opts.limit,
+            });
+        }
+
+        let mut level = DisplayLevel::Remote;
+        if !self.head.is_empty() {
+            query_opts.remote = Some(self.head);
+            level = DisplayLevel::Owner;
+        }
+
+        if !self.owner.is_empty() {
+            query_opts.owner = Some(self.owner);
+            level = DisplayLevel::Name;
+        }
+
+        if !self.name.is_empty() {
+            query_opts.name = Some(self.name);
+        }
+
+        debug!("[select] Query options: {query_opts:?}");
+        let (repos, total) = self.ctx.get_db()?.with_transaction(|tx| {
+            let repos = tx.repo().query(query_opts)?;
+            let total = tx.repo().count(query_opts)?;
+            Ok((repos, total))
+        })?;
+
+        let result = RepoList {
+            items: repos,
+            total,
+            level,
+        };
+        debug!("[select] Select many result: {result:?}");
+        Ok(result)
     }
 }
 
@@ -463,4 +552,548 @@ where
     result.extend(remaining);
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use crate::config::context;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_select_one_empty() {
+        let ctx = context::tests::build_test_context("select_one_empty", None);
+
+        let mut selector = RepoSelector::new(ctx, &[]);
+        selector.fzf_filter = Some("roxide");
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_empty_in_repo_root() {
+        let current_dir = env::current_dir().unwrap();
+        let repo_path = current_dir
+            .join("tests")
+            .join("select_one_empty_in_repo_root")
+            .join("workspace")
+            .join("github")
+            .join("fioncat")
+            .join("roxide");
+        let ctx =
+            context::tests::build_test_context("select_one_empty_in_repo_root", Some(repo_path));
+
+        let mut selector = RepoSelector::new(ctx, &[]);
+        selector.fzf_filter = Some("roxide");
+        // We are in roxide, it should be excluded
+        let result = selector.select_one(false, false).await;
+        assert_eq!(result.err().unwrap().to_string(), "fzf no match found");
+    }
+
+    #[tokio::test]
+    async fn test_select_one_empty_in_repo_subdir() {
+        let current_dir = env::current_dir().unwrap();
+        let repo_path = current_dir
+            .join("tests")
+            .join("select_one_empty_in_repo_subdir")
+            .join("workspace")
+            .join("github")
+            .join("fioncat")
+            .join("roxide")
+            .join("src")
+            .join("subdir");
+        let ctx =
+            context::tests::build_test_context("select_one_empty_in_repo_subdir", Some(repo_path));
+
+        let mut selector = RepoSelector::new(ctx, &[]);
+        // This should be ignored, because we are in a subdir of roxide
+        // The selector should select it directly
+        selector.fzf_filter = Some("non-exists");
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_url_ssh() {
+        let ctx = context::tests::build_test_context("select_one_url_ssh", None);
+
+        #[derive(Default)]
+        struct Case {
+            url: &'static str,
+            expect: &'static str,
+            new_created: bool,
+            should_ok: bool,
+        }
+
+        let cases = [
+            Case {
+                url: "https://github.com/fioncat/roxide",
+                expect: "github/fioncat/roxide",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "https://github.com/fioncat/roxide.git",
+                expect: "github/fioncat/roxide",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "https://github.com/fioncat/nvimdots/tree/custom/lua/modules",
+                expect: "github/fioncat/nvimdots",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "https://github.com/fioncat/kubernetes",
+                expect: "github/fioncat/kubernetes",
+                new_created: true,
+                should_ok: true,
+            },
+            Case {
+                url: "https://github.com/fioncat",
+                should_ok: false,
+                ..Default::default()
+            },
+            Case {
+                url: "https://github.com",
+                should_ok: false,
+                ..Default::default()
+            },
+            Case {
+                url: "https://hello.com",
+                should_ok: false,
+                ..Default::default()
+            },
+            Case {
+                url: "https://git.mydomain.com/fioncat/someproject/-/tree/master/deploy",
+                expect: "gitlab/fioncat/someproject",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "https://git.mydomain.com/fioncat/template",
+                expect: "gitlab/fioncat/template",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "https://git.mydomain.com/group/subgroup/someproject/-/tree/main/src",
+                expect: "gitlab/group/subgroup/someproject",
+                new_created: true,
+                should_ok: true,
+            },
+            Case {
+                url: "git@github.com:fioncat/nvimdots.git",
+                expect: "github/fioncat/nvimdots",
+                new_created: false,
+                should_ok: true,
+            },
+            Case {
+                url: "git@git.mydomain.com:fioncat/someproject.git",
+                expect: "gitlab/fioncat/someproject",
+                new_created: false,
+                should_ok: true,
+            },
+        ];
+
+        for case in cases {
+            let url = case.url.to_string();
+            let args = vec![url];
+            let selector = RepoSelector::new(ctx.clone(), &args);
+            let result = selector.select_one(false, false).await;
+            if !case.should_ok {
+                assert!(result.is_err());
+                continue;
+            }
+            let repo = result.unwrap();
+            assert_eq!(repo.new_created, case.new_created);
+            assert_eq!(repo.full_name(), case.expect);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_select_one_remote() {
+        let ctx = context::tests::build_test_context("select_one_remote", None);
+        let args = vec!["github".to_string()];
+        let mut selector = RepoSelector::new(ctx, &args);
+        selector.fzf_filter = Some("roxide");
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_remote_latest() {
+        let ctx = context::tests::build_test_context("select_one_remote_latest", None);
+        let args = vec!["-".to_string()];
+        let selector = RepoSelector::new(ctx, &args);
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "kubernetes".to_string(),
+                name: "kubernetes".to_string(),
+                path: None,
+                sync: false,
+                pin: true,
+                last_visited_at: 7777,
+                visited_count: 100,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_remote_fuzzy() {
+        let ctx = context::tests::build_test_context("select_one_remote_fuzzy", None);
+        let args = vec!["rox".to_string()];
+        let selector = RepoSelector::new(ctx, &args);
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_owner() {
+        let ctx = context::tests::build_test_context("select_one_owner", None);
+        let args = vec!["github".to_string(), "fioncat".to_string()];
+        let mut selector = RepoSelector::new(ctx, &args);
+        selector.fzf_filter = Some("dotfiles");
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "dotfiles".to_string(),
+                new_created: true,
+                ..Default::default()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_owner_latest() {
+        let ctx = context::tests::build_test_context("select_one_owner_latest", None);
+        let args = vec!["github".to_string(), "-".to_string()];
+        let selector = RepoSelector::new(ctx, &args);
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "kubernetes".to_string(),
+                name: "kubernetes".to_string(),
+                path: None,
+                sync: false,
+                pin: true,
+                last_visited_at: 7777,
+                visited_count: 100,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_owner_local() {
+        let ctx = context::tests::build_test_context("select_one_owner_local", None);
+        let args = vec!["github".to_string(), "fioncat".to_string()];
+        let mut selector = RepoSelector::new(ctx, &args);
+        selector.fzf_filter = Some("roxide");
+        let repo = selector.select_one(false, true).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+
+        // Now the remote repository won't be selected
+        selector.fzf_filter = Some("dotfiles");
+        let result = selector.select_one(false, true).await;
+        assert_eq!(result.err().unwrap().to_string(), "fzf no match found");
+    }
+
+    #[tokio::test]
+    async fn test_select_one_owner_local_fuzzy() {
+        let ctx = context::tests::build_test_context("select_one_owner_local_fuzzy", None);
+        // `rox` is not an owner, in local mode, it should be treated as a fuzzy keyword
+        let args = vec!["github".to_string(), "rox".to_string()];
+        let selector = RepoSelector::new(ctx, &args);
+        let repo = selector.select_one(false, true).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_name() {
+        let ctx = context::tests::build_test_context("select_one_name", None);
+        let args = vec![
+            "github".to_string(),
+            "fioncat".to_string(),
+            "roxide".to_string(),
+        ];
+        let selector = RepoSelector::new(ctx.clone(), &args);
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                path: None,
+                sync: true,
+                pin: true,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+
+        // new repository
+        let args = vec![
+            "github".to_string(),
+            "fioncat".to_string(),
+            "dotfiles".to_string(),
+        ];
+        let selector = RepoSelector::new(ctx, &args);
+        let repo = selector.select_one(false, false).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "dotfiles".to_string(),
+                new_created: true,
+                ..Default::default()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_one_name_local() {
+        let ctx = context::tests::build_test_context("select_one_name_local", None);
+        let args = vec![
+            "github".to_string(),
+            "fioncat".to_string(),
+            "rox".to_string(),
+        ];
+        let selector = RepoSelector::new(ctx.clone(), &args);
+        let repo = selector.select_one(false, true).await.unwrap();
+        assert_eq!(
+            repo,
+            Repository {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                name: "roxide".to_string(),
+                sync: true,
+                pin: true,
+                path: None,
+                last_visited_at: 2234,
+                visited_count: 20,
+                new_created: false,
+            }
+        );
+
+        // In local mode, the remote repository won't be selected
+        let args = vec![
+            "github".to_string(),
+            "fioncat".to_string(),
+            "dotfiles".to_string(),
+        ];
+        let selector = RepoSelector::new(ctx, &args);
+        let result = selector.select_one(false, true).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_select_many() {
+        struct Case {
+            args: Vec<&'static str>,
+            opts: ManyOptions,
+            expect_total: u32,
+            expect_level: DisplayLevel,
+            expect_repos: Vec<&'static str>,
+        }
+
+        let cases = [
+            Case {
+                args: vec![],
+                opts: ManyOptions::default(),
+                expect_total: 6,
+                expect_level: DisplayLevel::Remote,
+                expect_repos: vec![
+                    "github/kubernetes/kubernetes",
+                    "github/fioncat/nvimdots",
+                    "github/fioncat/roxide",
+                    "gitlab/fioncat/template",
+                    "gitlab/fioncat/someproject",
+                    "github/fioncat/otree",
+                ],
+            },
+            Case {
+                args: vec![],
+                opts: ManyOptions {
+                    sync: Some(true),
+                    ..Default::default()
+                },
+                expect_total: 3,
+                expect_level: DisplayLevel::Remote,
+                expect_repos: vec![
+                    "github/fioncat/nvimdots",
+                    "github/fioncat/roxide",
+                    "github/fioncat/otree",
+                ],
+            },
+            Case {
+                args: vec!["github"],
+                opts: ManyOptions {
+                    sync: Some(false),
+                    ..Default::default()
+                },
+                expect_total: 1,
+                expect_level: DisplayLevel::Owner,
+                expect_repos: vec!["github/kubernetes/kubernetes"],
+            },
+            Case {
+                args: vec![],
+                opts: ManyOptions {
+                    pin: Some(false),
+                    ..Default::default()
+                },
+                expect_total: 2,
+                expect_level: DisplayLevel::Remote,
+                expect_repos: vec!["gitlab/fioncat/template", "gitlab/fioncat/someproject"],
+            },
+            Case {
+                args: vec!["github"],
+                opts: ManyOptions {
+                    limit: 2,
+                    ..Default::default()
+                },
+                expect_total: 4,
+                expect_level: DisplayLevel::Owner,
+                expect_repos: vec!["github/kubernetes/kubernetes", "github/fioncat/nvimdots"],
+            },
+            Case {
+                args: vec!["github"],
+                opts: ManyOptions {
+                    offset: 1,
+                    limit: 2,
+                    ..Default::default()
+                },
+                expect_total: 4,
+                expect_level: DisplayLevel::Owner,
+                expect_repos: vec!["github/fioncat/nvimdots", "github/fioncat/roxide"],
+            },
+            Case {
+                args: vec!["github", "fioncat"],
+                opts: ManyOptions::default(),
+                expect_total: 3,
+                expect_level: DisplayLevel::Name,
+                expect_repos: vec![
+                    "github/fioncat/nvimdots",
+                    "github/fioncat/roxide",
+                    "github/fioncat/otree",
+                ],
+            },
+            Case {
+                args: vec!["github", "fioncat", "non-exists"],
+                opts: ManyOptions::default(),
+                expect_total: 0,
+                expect_level: DisplayLevel::Name,
+                expect_repos: vec![],
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_many", None);
+        for case in cases {
+            let args = case.args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let selector = RepoSelector::new(ctx.clone(), &args);
+            let list = selector.select_many(case.opts).unwrap();
+            assert_eq!(list.total, case.expect_total);
+            assert_eq!(list.level, case.expect_level);
+            let names = list.items.iter().map(|r| r.full_name()).collect::<Vec<_>>();
+            let expect_names = case
+                .expect_repos
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(names, expect_names);
+        }
+    }
 }

@@ -111,22 +111,22 @@ impl Config {
     fn validate(&mut self, home_dir: &Path) -> Result<()> {
         debug!("[config] Validate config: {:?}", self);
 
-        let workspace = expandenv(take(&mut self.workspace));
-        if workspace.is_empty() {
+        self.workspace = expandenv(take(&mut self.workspace));
+        if self.workspace.is_empty() {
             let workspace = home_dir.join("dev");
             self.workspace = format!("{}", workspace.display());
         }
-        if !Path::new(&self.workspace).is_absolute() {
-            bail!("workspace path must be absolute");
+        if Path::new(&self.workspace).is_relative() {
+            bail!("workspace path {:?} must be absolute", self.workspace);
         }
 
-        let data_dir = expandenv(take(&mut self.data_dir));
-        if data_dir.is_empty() {
+        self.data_dir = expandenv(take(&mut self.data_dir));
+        if self.data_dir.is_empty() {
             let data_dir = home_dir.join(".local").join("share").join("roxide");
             self.data_dir = format!("{}", data_dir.display());
         }
-        if !Path::new(&self.data_dir).is_absolute() {
-            bail!("data_dir path must be absolute");
+        if Path::new(&self.data_dir).is_relative() {
+            bail!("data_dir path {:?} must be absolute", self.data_dir);
         }
         ensure_dir(&self.data_dir)?;
 

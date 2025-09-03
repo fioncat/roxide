@@ -70,28 +70,16 @@ impl DatabaseHandle<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LimitOptions {
-    pub offset: u32,
-    pub limit: u32,
-}
-
-impl Default for LimitOptions {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            limit: 100,
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use std::{borrow::Cow, fs};
+pub mod tests {
+    use std::borrow::Cow;
+    use std::fs;
 
     use anyhow::bail;
 
     use super::*;
+
+    pub use super::repo::tests::test_repos;
 
     fn build_db(name: &str) -> Database {
         // remove the existing file
@@ -106,6 +94,8 @@ mod tests {
             owner: "fioncat".to_string(),
             name: "roxide".to_string(),
             path: None,
+            sync: true,
+            pin: true,
             last_visited_at: 2234,
             visited_count: 20,
             new_created: false,

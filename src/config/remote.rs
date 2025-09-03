@@ -119,7 +119,7 @@ impl RemoteConfig {
         Ok(remotes)
     }
 
-    fn validate(&mut self, scripts: &ScriptsConfig) -> Result<()> {
+    pub(super) fn validate(&mut self, scripts: &ScriptsConfig) -> Result<()> {
         debug!("[config] Validate remote config: {:?}", self);
         if self.clone.is_some() {
             let clone = super::expandenv(take(&mut self.clone).unwrap());

@@ -30,10 +30,10 @@ pub trait RemoteAPI: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteInfo {
-    name: Cow<'static, str>,
-    auth_user: Option<String>,
-    ping: bool,
-    cache: bool,
+    pub name: Cow<'static, str>,
+    pub auth_user: Option<String>,
+    pub ping: bool,
+    pub cache: bool,
 }
 
 pub fn new(
