@@ -1,4 +1,5 @@
 pub mod create;
+pub mod current;
 pub mod select;
 
 use std::fs;
@@ -34,4 +35,27 @@ pub fn get_repo_clone_url(remote: &RemoteConfig, repo: &Repository) -> Option<St
     } else {
         Some(format!("https://{domain}/{}/{}.git", repo.owner, repo.name))
     }
+}
+
+pub fn parse_workspace_path<W, P>(workspace: W, path: P) -> Option<(String, String, String)>
+where
+    W: AsRef<Path>,
+    P: AsRef<Path>,
+{
+    let relative = path.as_ref().strip_prefix(workspace.as_ref()).ok()?;
+    let components = relative
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect::<Vec<_>>();
+
+    if components.len() < 3 {
+        return None;
+    }
+
+    let (remote, owner, name) = (components[0], components[1], components[2]);
+    Some((
+        Repository::parse_escaped_path(remote),
+        Repository::parse_escaped_path(owner),
+        Repository::parse_escaped_path(name),
+    ))
 }

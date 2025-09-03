@@ -82,6 +82,11 @@ impl Repository {
         Cow::Owned(raw.replace(MAIN_SEPARATOR, "."))
     }
 
+    pub fn parse_escaped_path(path: &str) -> String {
+        use std::path::MAIN_SEPARATOR;
+        path.replace('.', MAIN_SEPARATOR.to_string().as_str())
+    }
+
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
         Ok(Self {
             remote: row.get(0)?,
