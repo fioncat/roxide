@@ -1,6 +1,6 @@
 pub mod context;
+pub mod hook;
 pub mod remote;
-pub mod script;
 
 use std::io;
 use std::mem::take;
@@ -27,6 +27,9 @@ pub struct Config {
     #[serde(default)]
     pub debug: bool,
 
+    #[serde(default = "Config::default_branch")]
+    pub default_branch: String,
+
     pub fzf: Option<CmdConfig>,
 
     pub git: Option<CmdConfig>,
@@ -37,7 +40,7 @@ pub struct Config {
     pub remotes: Vec<remote::RemoteConfig>,
 
     #[serde(skip)]
-    pub scripts: script::ScriptsConfig,
+    pub hooks: hook::HooksConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -87,10 +90,10 @@ impl Config {
         cfg.validate(&home_dir)
             .context("failed to validate base config")?;
 
-        let scripts = script::ScriptsConfig::read(&path.join("scripts"))?;
-        let remotes = remote::RemoteConfig::read(&path.join("remotes"), &scripts)?;
+        let hooks = hook::HooksConfig::read(&path.join("hooks"))?;
+        let remotes = remote::RemoteConfig::read(&path.join("remotes"), &hooks)?;
 
-        cfg.scripts = scripts;
+        cfg.hooks = hooks;
         cfg.remotes = remotes;
 
         debug!("[config] Load config done");
@@ -135,6 +138,10 @@ impl Config {
             output::set_debug(format!("{}", debug_path.display()));
         }
 
+        if self.default_branch.is_empty() {
+            self.default_branch = Self::default_branch();
+        }
+
         if let Some(mut fzf) = self.fzf.take() {
             fzf.validate().context("failed to validate fzf config")?;
             fzf::set_cmd(fzf);
@@ -153,9 +160,20 @@ impl Config {
         debug!("[config] Config validated: {:?}", self);
         Ok(())
     }
+
+    fn default_branch() -> String {
+        String::from("main")
+    }
 }
 
 impl CmdConfig {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
+        Self {
+            name: format!("{}", path.as_ref().display()),
+            args: vec![],
+        }
+    }
+
     fn validate(&mut self) -> Result<()> {
         self.name = expandenv(take(&mut self.name));
         if self.name.is_empty() {
@@ -176,21 +194,25 @@ pub fn expandenv(s: String) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
     fn test_config() {
         let home_dir = dirs::home_dir().unwrap();
-        let cfg = Config::read(Some("src/config/tests")).unwrap();
+        let path = fs::canonicalize("src/config/tests").unwrap();
+        let cfg = Config::read(Some(path)).unwrap();
         let expect = Config {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
             debug: false,
+            default_branch: "main".to_string(),
             fzf: None,
             git: None,
             bash: None,
             remotes: super::remote::tests::expect_remotes(),
-            scripts: super::script::tests::expect_scripts(),
+            hooks: super::hook::tests::expect_hooks(),
         };
         assert_eq!(cfg, expect);
         assert_eq!(
@@ -198,13 +220,6 @@ mod tests {
             &CmdConfig {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],
-            }
-        );
-        assert_eq!(
-            git::get_cmd(),
-            &CmdConfig {
-                name: "/usr/bin/git".to_string(),
-                args: vec![],
             }
         );
     }

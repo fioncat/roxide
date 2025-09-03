@@ -63,7 +63,6 @@ impl Repository {
         }
     }
 
-    #[cfg(test)]
     pub fn full_name(&self) -> String {
         format!("{}/{}/{}", self.remote, self.owner, self.name)
     }

@@ -21,7 +21,7 @@ pub struct RepoSelector<'a> {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct ManyOptions {
+pub struct SelectManyReposOptions {
     pub sync: Option<bool>,
     pub pin: Option<bool>,
 
@@ -44,12 +44,27 @@ enum SelectOneType<'a> {
 }
 
 impl<'a> RepoSelector<'a> {
-    pub fn new(ctx: Arc<ConfigContext>, args: &'a [String]) -> Self {
+    pub fn from_flags(
+        ctx: Arc<ConfigContext>,
+        head: &'a Option<String>,
+        owner: &'a Option<String>,
+        name: &'a Option<String>,
+    ) -> Self {
         Self {
             ctx,
-            head: args.first().map(|s| s.as_str()).unwrap_or_default(),
-            owner: args.get(1).map(|s| s.as_str()).unwrap_or_default(),
-            name: args.get(2).map(|s| s.as_str()).unwrap_or_default(),
+            head: head.as_deref().unwrap_or(""),
+            owner: owner.as_deref().unwrap_or(""),
+            name: name.as_deref().unwrap_or(""),
+            fzf_filter: None,
+        }
+    }
+
+    pub fn from_args(ctx: Arc<ConfigContext>, args: &'a [String]) -> Self {
+        Self {
+            ctx,
+            head: args.first().map(|s| s.as_str()).unwrap_or(""),
+            owner: args.get(1).map(|s| s.as_str()).unwrap_or(""),
+            name: args.get(2).map(|s| s.as_str()).unwrap_or(""),
             fzf_filter: None,
         }
     }
@@ -464,7 +479,7 @@ impl<'a> RepoSelector<'a> {
         }
     }
 
-    pub fn select_many(&self, opts: ManyOptions) -> Result<RepoList> {
+    pub fn select_many(&self, opts: SelectManyReposOptions) -> Result<RepoList> {
         debug!("[select] Select many, opts: {opts:?}");
 
         let mut query_opts = QueryOptions {
@@ -566,7 +581,7 @@ mod tests {
     async fn test_select_one_empty() {
         let ctx = context::tests::build_test_context("select_one_empty", None);
 
-        let mut selector = RepoSelector::new(ctx, &[]);
+        let mut selector = RepoSelector::from_args(ctx, &[]);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -598,7 +613,7 @@ mod tests {
         let ctx =
             context::tests::build_test_context("select_one_empty_in_repo_root", Some(repo_path));
 
-        let mut selector = RepoSelector::new(ctx, &[]);
+        let mut selector = RepoSelector::from_args(ctx, &[]);
         selector.fzf_filter = Some("roxide");
         // We are in roxide, it should be excluded
         let result = selector.select_one(false, false).await;
@@ -620,7 +635,7 @@ mod tests {
         let ctx =
             context::tests::build_test_context("select_one_empty_in_repo_subdir", Some(repo_path));
 
-        let mut selector = RepoSelector::new(ctx, &[]);
+        let mut selector = RepoSelector::from_args(ctx, &[]);
         // This should be ignored, because we are in a subdir of roxide
         // The selector should select it directly
         selector.fzf_filter = Some("non-exists");
@@ -728,7 +743,7 @@ mod tests {
         for case in cases {
             let url = case.url.to_string();
             let args = vec![url];
-            let selector = RepoSelector::new(ctx.clone(), &args);
+            let selector = RepoSelector::from_args(ctx.clone(), &args);
             let result = selector.select_one(false, false).await;
             if !case.should_ok {
                 assert!(result.is_err());
@@ -744,7 +759,7 @@ mod tests {
     async fn test_select_one_remote() {
         let ctx = context::tests::build_test_context("select_one_remote", None);
         let args = vec!["github".to_string()];
-        let mut selector = RepoSelector::new(ctx, &args);
+        let mut selector = RepoSelector::from_args(ctx, &args);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -767,7 +782,7 @@ mod tests {
     async fn test_select_one_remote_latest() {
         let ctx = context::tests::build_test_context("select_one_remote_latest", None);
         let args = vec!["-".to_string()];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -789,7 +804,7 @@ mod tests {
     async fn test_select_one_remote_fuzzy() {
         let ctx = context::tests::build_test_context("select_one_remote_fuzzy", None);
         let args = vec!["rox".to_string()];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -811,7 +826,7 @@ mod tests {
     async fn test_select_one_owner() {
         let ctx = context::tests::build_test_context("select_one_owner", None);
         let args = vec!["github".to_string(), "fioncat".to_string()];
-        let mut selector = RepoSelector::new(ctx, &args);
+        let mut selector = RepoSelector::from_args(ctx, &args);
         selector.fzf_filter = Some("dotfiles");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -830,7 +845,7 @@ mod tests {
     async fn test_select_one_owner_latest() {
         let ctx = context::tests::build_test_context("select_one_owner_latest", None);
         let args = vec!["github".to_string(), "-".to_string()];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -852,7 +867,7 @@ mod tests {
     async fn test_select_one_owner_local() {
         let ctx = context::tests::build_test_context("select_one_owner_local", None);
         let args = vec!["github".to_string(), "fioncat".to_string()];
-        let mut selector = RepoSelector::new(ctx, &args);
+        let mut selector = RepoSelector::from_args(ctx, &args);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
@@ -881,7 +896,7 @@ mod tests {
         let ctx = context::tests::build_test_context("select_one_owner_local_fuzzy", None);
         // `rox` is not an owner, in local mode, it should be treated as a fuzzy keyword
         let args = vec!["github".to_string(), "rox".to_string()];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
             repo,
@@ -907,7 +922,7 @@ mod tests {
             "fioncat".to_string(),
             "roxide".to_string(),
         ];
-        let selector = RepoSelector::new(ctx.clone(), &args);
+        let selector = RepoSelector::from_args(ctx.clone(), &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -930,7 +945,7 @@ mod tests {
             "fioncat".to_string(),
             "dotfiles".to_string(),
         ];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -952,7 +967,7 @@ mod tests {
             "fioncat".to_string(),
             "rox".to_string(),
         ];
-        let selector = RepoSelector::new(ctx.clone(), &args);
+        let selector = RepoSelector::from_args(ctx.clone(), &args);
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
             repo,
@@ -975,7 +990,7 @@ mod tests {
             "fioncat".to_string(),
             "dotfiles".to_string(),
         ];
-        let selector = RepoSelector::new(ctx, &args);
+        let selector = RepoSelector::from_args(ctx, &args);
         let result = selector.select_one(false, true).await;
         assert!(result.is_err());
     }
@@ -984,7 +999,7 @@ mod tests {
     fn test_select_many() {
         struct Case {
             args: Vec<&'static str>,
-            opts: ManyOptions,
+            opts: SelectManyReposOptions,
             expect_total: u32,
             expect_level: DisplayLevel,
             expect_repos: Vec<&'static str>,
@@ -993,7 +1008,7 @@ mod tests {
         let cases = [
             Case {
                 args: vec![],
-                opts: ManyOptions::default(),
+                opts: SelectManyReposOptions::default(),
                 expect_total: 6,
                 expect_level: DisplayLevel::Remote,
                 expect_repos: vec![
@@ -1007,7 +1022,7 @@ mod tests {
             },
             Case {
                 args: vec![],
-                opts: ManyOptions {
+                opts: SelectManyReposOptions {
                     sync: Some(true),
                     ..Default::default()
                 },
@@ -1021,7 +1036,7 @@ mod tests {
             },
             Case {
                 args: vec!["github"],
-                opts: ManyOptions {
+                opts: SelectManyReposOptions {
                     sync: Some(false),
                     ..Default::default()
                 },
@@ -1031,7 +1046,7 @@ mod tests {
             },
             Case {
                 args: vec![],
-                opts: ManyOptions {
+                opts: SelectManyReposOptions {
                     pin: Some(false),
                     ..Default::default()
                 },
@@ -1041,7 +1056,7 @@ mod tests {
             },
             Case {
                 args: vec!["github"],
-                opts: ManyOptions {
+                opts: SelectManyReposOptions {
                     limit: 2,
                     ..Default::default()
                 },
@@ -1051,7 +1066,7 @@ mod tests {
             },
             Case {
                 args: vec!["github"],
-                opts: ManyOptions {
+                opts: SelectManyReposOptions {
                     offset: 1,
                     limit: 2,
                     ..Default::default()
@@ -1062,7 +1077,7 @@ mod tests {
             },
             Case {
                 args: vec!["github", "fioncat"],
-                opts: ManyOptions::default(),
+                opts: SelectManyReposOptions::default(),
                 expect_total: 3,
                 expect_level: DisplayLevel::Name,
                 expect_repos: vec![
@@ -1073,7 +1088,7 @@ mod tests {
             },
             Case {
                 args: vec!["github", "fioncat", "non-exists"],
-                opts: ManyOptions::default(),
+                opts: SelectManyReposOptions::default(),
                 expect_total: 0,
                 expect_level: DisplayLevel::Name,
                 expect_repos: vec![],
@@ -1083,7 +1098,7 @@ mod tests {
         let ctx = context::tests::build_test_context("select_many", None);
         for case in cases {
             let args = case.args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            let selector = RepoSelector::new(ctx.clone(), &args);
+            let selector = RepoSelector::from_args(ctx.clone(), &args);
             let list = selector.select_many(case.opts).unwrap();
             assert_eq!(list.total, case.expect_total);
             assert_eq!(list.level, case.expect_level);

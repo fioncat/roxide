@@ -49,8 +49,12 @@ pub mod tests {
 
     use super::*;
 
+    pub fn enable() -> bool {
+        env::var("TEST_GIT").is_ok_and(|v| v == "true")
+    }
+
     pub fn setup() -> Option<&'static str> {
-        if !env::var("TEST_GIT").is_ok_and(|v| v == "true") {
+        if !enable() {
             return None;
         }
 

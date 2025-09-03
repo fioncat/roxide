@@ -8,31 +8,31 @@ use anyhow::{Context, Result};
 use crate::debug;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ScriptsConfig {
-    scripts: HashMap<String, String>,
+pub struct HooksConfig {
+    hooks: HashMap<String, String>,
 }
 
-impl ScriptsConfig {
+impl HooksConfig {
     pub fn read(dir: &Path) -> Result<Self> {
-        debug!("[config] Read scripts config from {}", dir.display());
+        debug!("[config] Read hooks config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
             Ok(d) => {
-                debug!("[config] Scripts dir found");
+                debug!("[config] Hooks dir found");
                 d
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                debug!("[config] Scripts dir not found, returns empty");
+                debug!("[config] Hooks dir not found, returns empty");
                 return Ok(Self::default());
             }
             Err(e) => {
                 return Err(e)
-                    .with_context(|| format!("failed to read scripts dir {}", dir.display()));
+                    .with_context(|| format!("failed to read hooks dir {}", dir.display()));
             }
         };
 
-        let mut scripts = HashMap::new();
+        let mut hooks = HashMap::new();
         for ent in ents {
-            let ent = ent.context("read script dir entry")?;
+            let ent = ent.context("read hooks dir entry")?;
             let file_name = ent.file_name();
             let file_name = match file_name.to_str() {
                 Some(s) => s,
@@ -44,15 +44,19 @@ impl ScriptsConfig {
             let name = file_name.trim_end_matches(".sh").to_string();
             let path = PathBuf::from(dir).join(file_name);
             let path = format!("{}", path.display());
-            debug!("[config] Found script: {name}: {path}");
-            scripts.insert(name, path);
+            debug!("[config] Found hook: {name}: {path}");
+            hooks.insert(name, path);
         }
 
-        Ok(Self { scripts })
+        Ok(Self { hooks })
     }
 
     pub fn contains(&self, name: &str) -> bool {
-        self.scripts.contains_key(name)
+        self.hooks.contains_key(name)
+    }
+
+    pub fn get<'a>(&'a self, name: &str) -> Option<&'a String> {
+        self.hooks.get(name)
     }
 }
 
@@ -60,25 +64,28 @@ impl ScriptsConfig {
 pub mod tests {
     use super::*;
 
-    pub fn expect_scripts() -> ScriptsConfig {
-        let dir = "src/config/tests/scripts";
+    pub fn expect_hooks() -> HooksConfig {
+        let dir = "src/config/tests/hooks";
+        let dir = fs::canonicalize(dir).unwrap();
+        let dir = format!("{}", dir.display());
         let mut expected = HashMap::new();
         expected.insert("cargo-init".to_string(), format!("{dir}/cargo-init.sh"));
         expected.insert("gomod-init".to_string(), format!("{dir}/gomod-init.sh"));
-        ScriptsConfig { scripts: expected }
+        HooksConfig { hooks: expected }
     }
 
     #[test]
-    fn test_scripts_config() {
-        let dir = "src/config/tests/scripts";
-        let scripts = ScriptsConfig::read(Path::new(dir)).unwrap();
-        assert_eq!(scripts, expect_scripts());
+    fn test_hooks_config() {
+        let dir = "src/config/tests/hooks";
+        let dir = fs::canonicalize(dir).unwrap();
+        let hooks = HooksConfig::read(&dir).unwrap();
+        assert_eq!(hooks, expect_hooks());
     }
 
     #[test]
     fn test_default() {
         let dir = "src/config"; // no .sh files here
-        let scripts = ScriptsConfig::read(Path::new(dir)).unwrap();
-        assert_eq!(scripts, ScriptsConfig::default());
+        let hooks = HooksConfig::read(Path::new(dir)).unwrap();
+        assert_eq!(hooks, HooksConfig::default());
     }
 }

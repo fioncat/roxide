@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug;
 
-use super::script::ScriptsConfig;
+use super::hook::HooksConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RemoteConfig {
@@ -69,8 +69,22 @@ pub struct OwnerConfig {
     pub on_create: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct OwnerConfigRef<'a> {
+    pub sync: bool,
+
+    pub pin: bool,
+
+    pub ssh: bool,
+
+    pub user: Option<&'a str>,
+    pub email: Option<&'a str>,
+
+    pub on_create: &'a [String],
+}
+
 impl RemoteConfig {
-    pub fn read(dir: &Path, scripts: &ScriptsConfig) -> Result<Vec<Self>> {
+    pub fn read(dir: &Path, hooks: &HooksConfig) -> Result<Vec<Self>> {
         debug!("[config] Read remotes config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
             Ok(d) => {
@@ -110,7 +124,7 @@ impl RemoteConfig {
                 .with_context(|| format!("failed to parse remote config {name}"))?;
             remote.name = name.clone();
             remote
-                .validate(scripts)
+                .validate(hooks)
                 .with_context(|| format!("failed to validate remote config {name}"))?;
             remotes.push(remote);
         }
@@ -119,7 +133,18 @@ impl RemoteConfig {
         Ok(remotes)
     }
 
-    pub(super) fn validate(&mut self, scripts: &ScriptsConfig) -> Result<()> {
+    pub fn get_owner<'a>(&'a self, owner: &str) -> OwnerConfigRef<'a> {
+        let mut owner_ref = OwnerConfigRef::default();
+        if let Some(ref default) = self.default {
+            owner_ref.merge(default);
+        }
+        if let Some(owner) = self.owners.get(owner) {
+            owner_ref.merge(owner);
+        }
+        owner_ref
+    }
+
+    pub(super) fn validate(&mut self, hooks: &HooksConfig) -> Result<()> {
         debug!("[config] Validate remote config: {:?}", self);
         if self.clone.is_some() {
             let clone = super::expandenv(take(&mut self.clone).unwrap());
@@ -142,9 +167,7 @@ impl RemoteConfig {
         }
 
         if let Some(ref mut default) = self.default {
-            default
-                .validate(scripts)
-                .context("validate default owner")?;
+            default.validate(hooks).context("validate default owner")?;
         }
 
         for (name, owner) in &mut self.owners {
@@ -152,7 +175,7 @@ impl RemoteConfig {
                 bail!("owner name is empty");
             }
             owner
-                .validate(scripts)
+                .validate(hooks)
                 .with_context(|| format!("validate owner '{name}'"))?;
         }
 
@@ -198,7 +221,7 @@ impl RemoteAPI {
 }
 
 impl OwnerConfig {
-    fn validate(&mut self, scripts: &ScriptsConfig) -> Result<()> {
+    fn validate(&mut self, hooks: &HooksConfig) -> Result<()> {
         if self.user.is_some() {
             let user = super::expandenv(take(&mut self.user).unwrap());
             if user.is_empty() {
@@ -220,16 +243,39 @@ impl OwnerConfig {
         for (idx, name) in on_create.into_iter().enumerate() {
             let name = super::expandenv(name);
             if name.is_empty() {
-                bail!("on_create #{idx} is empty");
+                bail!("on_create hook #{idx} is empty");
             }
-            if !scripts.contains(&name) {
-                bail!("on_create script '{name}' not found");
+            if !hooks.contains(&name) {
+                bail!("on_create hook '{name}' not found");
             }
             new_on_create.push(name);
         }
         self.on_create = new_on_create;
 
         Ok(())
+    }
+}
+
+impl<'a> OwnerConfigRef<'a> {
+    pub fn merge(&mut self, owner: &'a OwnerConfig) {
+        if owner.sync {
+            self.sync = true;
+        }
+        if owner.pin {
+            self.pin = true;
+        }
+        if owner.ssh {
+            self.ssh = true;
+        }
+        if let Some(user) = owner.user.as_ref() {
+            self.user = Some(user);
+        }
+        if let Some(email) = owner.email.as_ref() {
+            self.email = Some(email);
+        }
+        if !owner.on_create.is_empty() {
+            self.on_create = &owner.on_create;
+        }
     }
 }
 
@@ -338,9 +384,9 @@ pub mod tests {
     #[test]
     fn test_remote_config() {
         let dir = "src/config/tests/remotes";
-        let scripts_dir = "src/config/tests/scripts";
-        let scripts = ScriptsConfig::read(Path::new(scripts_dir)).unwrap();
-        let remotes = RemoteConfig::read(Path::new(dir), &scripts).unwrap();
+        let hooks_dir = "src/config/tests/hooks";
+        let hooks = HooksConfig::read(Path::new(hooks_dir)).unwrap();
+        let remotes = RemoteConfig::read(Path::new(dir), &hooks).unwrap();
 
         assert_eq!(remotes, expect_remotes());
     }

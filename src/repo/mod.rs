@@ -1,4 +1,4 @@
-pub mod manage;
+pub mod create;
 pub mod select;
 
 use std::fs;
@@ -6,6 +6,9 @@ use std::io;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+
+use crate::config::remote::RemoteConfig;
+use crate::db::repo::Repository;
 
 /// If the file directory doesn't exist, create it; if it exists, take no action.
 pub fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
@@ -19,5 +22,16 @@ pub fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
         Err(err) => {
             Err(err).with_context(|| format!("read directory '{}'", dir.as_ref().display()))
         }
+    }
+}
+
+pub fn get_repo_clone_url(remote: &RemoteConfig, repo: &Repository) -> Option<String> {
+    let domain = remote.clone.as_ref()?;
+    let owner = remote.get_owner(&repo.owner);
+
+    if owner.ssh {
+        Some(format!("git@{domain}:{}/{}.git", repo.owner, repo.name))
+    } else {
+        Some(format!("https://{domain}/{}/{}.git", repo.owner, repo.name))
     }
 }
