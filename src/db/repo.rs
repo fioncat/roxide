@@ -54,10 +54,14 @@ impl Repository {
     }
 
     pub fn get_clone_url(&self, domain: &str, ssh: bool) -> String {
+        Self::get_clone_url_raw(domain, &self.owner, &self.name, ssh)
+    }
+
+    pub fn get_clone_url_raw(domain: &str, owner: &str, name: &str, ssh: bool) -> String {
         if ssh {
-            format!("git@{domain}:{}/{}.git", self.owner, self.name)
+            format!("git@{domain}:{owner}/{name}.git")
         } else {
-            format!("https://{domain}/{}/{}.git", self.owner, self.name)
+            format!("https://{domain}/{owner}/{name}.git")
         }
     }
 

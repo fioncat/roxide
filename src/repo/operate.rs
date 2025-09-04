@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
@@ -34,7 +34,7 @@ pub struct RepoOperator<'a, 'b> {
     mute: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct SyncResult {
     pub name: String,
 
@@ -117,9 +117,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                     self.ctx.cfg.default_branch
                 );
 
-                if !self.mute {
-                    info!("Create empty repository: {}", self.path.display());
-                }
+                show_info!(self, "Create empty repository: {}", self.path.display());
                 super::ensure_dir(&self.path)?;
                 self.git(
                     ["init", "-b", self.ctx.cfg.default_branch.as_str()],
@@ -157,7 +155,38 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub fn remove(&self) -> Result<()> {
-        remove_dir_recursively(&self.path)
+        if !self.path.exists() {
+            return Ok(());
+        }
+        show_info!(self, "Remove dir {}", self.path.display());
+        fs::remove_dir_all(&self.path).context("remove directory")?;
+
+        let path = PathBuf::from(&self.path);
+        let dir = path.parent();
+        if dir.is_none() {
+            return Ok(());
+        }
+        let mut dir = dir.unwrap();
+        loop {
+            match fs::read_dir(dir) {
+                Ok(dir_read) => {
+                    let count = dir_read.count();
+                    if count > 0 {
+                        return Ok(());
+                    }
+                    show_info!(self, "Remove dir {}", dir.display());
+                    fs::remove_dir(dir).context("remove directory")?;
+                    match dir.parent() {
+                        Some(parent) => dir = parent,
+                        None => return Ok(()),
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(err) => {
+                    return Err(err).with_context(|| format!("read dir '{}'", dir.display()));
+                }
+            }
+        }
     }
 
     fn ensure_remote(&self) -> Result<()> {
@@ -205,7 +234,11 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         Ok(())
     }
 
-    pub async fn get_git_remote(&self, upstream: bool, force_no_cache: bool) -> Result<Remote> {
+    pub async fn get_git_remote<'c>(
+        &'c self,
+        upstream: bool,
+        force_no_cache: bool,
+    ) -> Result<Remote<'c>> {
         debug!("[op] Get git remote, upstream: {upstream}, force_no_cache: {force_no_cache}");
         if !upstream {
             let Some(remote) = Remote::origin(Some(&self.path), self.mute)? else {
@@ -243,7 +276,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         };
 
         let upstream_owner = self.remote.get_owner(&upstream.owner);
-        let upstream_url = self.repo.get_clone_url(domain, upstream_owner.ssh);
+        let upstream_url = Repository::get_clone_url_raw(
+            domain,
+            &upstream.owner,
+            &upstream.name,
+            upstream_owner.ssh,
+        );
         debug!("[op] Upstream url: {upstream_url:?}");
 
         if !self.mute {
@@ -260,7 +298,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             format!("Set upstream to {upstream_url}"),
         )?;
 
-        let remote = Remote::new(String::from("upstream"));
+        let remote = Remote::new(String::from("upstream"), Some(&self.path), self.mute);
         debug!("[op] Add upstream remote: {remote:?}");
         Ok(remote)
     }
@@ -485,45 +523,11 @@ impl SyncResult {
     }
 }
 
-/// Remove a directory, recursively deleting until reaching a non-empty parent
-/// directory.
-fn remove_dir_recursively<P: AsRef<Path>>(path: P) -> Result<()> {
-    if !path.as_ref().exists() {
-        return Ok(());
-    }
-    info!("Remove dir {}", path.as_ref().display());
-    fs::remove_dir_all(&path).context("remove directory")?;
-
-    let path = PathBuf::from(path.as_ref());
-    let dir = path.parent();
-    if dir.is_none() {
-        return Ok(());
-    }
-    let mut dir = dir.unwrap();
-    loop {
-        match fs::read_dir(dir) {
-            Ok(dir_read) => {
-                let count = dir_read.count();
-                if count > 0 {
-                    return Ok(());
-                }
-                info!("Remove dir {}", dir.display());
-                fs::remove_dir(dir).context("remove directory")?;
-                match dir.parent() {
-                    Some(parent) => dir = parent,
-                    None => return Ok(()),
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err).with_context(|| format!("read dir '{}'", dir.display())),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use crate::config::context;
-    use crate::repo::ensure_dir;
     use crate::repo::select::RepoSelector;
 
     use super::*;
@@ -539,7 +543,6 @@ mod tests {
         let selector = RepoSelector::from_args(ctx.clone(), &args);
         let repo = selector.select_one(false, true).await.unwrap();
         let path = repo.get_path(&ctx.cfg.workspace);
-        let _ = fs::remove_dir_all(&ctx.cfg.workspace);
         let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
         op.ensure_create(false, None).unwrap();
 
@@ -566,7 +569,6 @@ mod tests {
         };
         let ctx = context::tests::build_test_context("create_empty", None);
         let path = repo.get_path(&ctx.cfg.workspace);
-        let _ = fs::remove_dir_all(&ctx.cfg.workspace);
         let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
@@ -580,17 +582,283 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_dir() {
-        let dir = "./tests/remove_dir";
-        ensure_dir(format!("{dir}/sub0/sub1/sub2/sub3")).unwrap();
-        ensure_dir(format!("{dir}/sub0/sub4")).unwrap();
+    fn test_remove() {
+        let repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+        let ctx = context::tests::build_test_context("remove", None);
+        let path = repo.get_path(&ctx.cfg.workspace);
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(true, None).unwrap();
 
-        remove_dir_recursively(format!("{dir}/sub0/sub1/sub2/sub3")).unwrap();
+        fs::write(Path::new(&ctx.cfg.workspace).join("test.txt"), "test").unwrap();
 
-        assert!(!Path::new(&format!("{dir}/sub0/sub1/sub2/sub3")).exists());
-        assert!(!Path::new(&format!("{dir}/sub0/sub1/sub2")).exists());
-        assert!(!Path::new(&format!("{dir}/sub0/sub1")).exists());
-        assert!(Path::new(&format!("{dir}/sub0/sub4")).exists());
-        assert!(Path::new(&format!("{dir}/sub0")).exists());
+        assert!(path.exists());
+        op.remove().unwrap();
+        assert!(!path.exists());
+        // The workspace should be kept, because we wrote a file in it
+        assert!(Path::new(&ctx.cfg.workspace).exists());
+    }
+
+    #[tokio::test]
+    async fn test_get_git_remote() {
+        if !git::tests::enable() {
+            return;
+        }
+
+        let ctx = context::tests::build_test_context("get_git_remote", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        let remote = op.get_git_remote(false, false).await.unwrap();
+        assert_eq!(remote.name, "origin");
+    }
+
+    #[tokio::test]
+    async fn test_get_git_remote_upstream() {
+        if !git::tests::enable() {
+            return;
+        }
+
+        let ctx = context::tests::build_test_context("get_git_remote_upstream", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "nvimdots".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        let remote = op.get_git_remote(true, true).await.unwrap();
+        assert_eq!(remote.name, "upstream");
+
+        let url = remote.get_url().unwrap();
+        assert_eq!(url, "https://github.com/ayamir/nvimdots.git");
+    }
+
+    #[test]
+    fn test_sync_branch() {
+        if !git::tests::enable() {
+            return;
+        }
+
+        let ctx = context::tests::build_test_context("sync_branch", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(false, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        // Reset a commit, to test pulling
+        op.git(["reset", "--hard", "HEAD~1"], "Reset last commit")
+            .unwrap();
+
+        // Create a new branch, to test pushing
+        op.git(["checkout", "-b", "test-push"], "Create new branch")
+            .unwrap();
+        op.git(
+            ["push", "origin", "--set-upstream", "test-push"],
+            "Push new branch",
+        )
+        .unwrap();
+        fs::write(path.join("test.txt"), "test").unwrap();
+        op.git(["add", "."], "Add file").unwrap();
+        op.git(["commit", "-m", "Add test file"], "Commit file")
+            .unwrap();
+
+        op.git(
+            ["checkout", "-b", "test-detached"],
+            "Create detached branch",
+        )
+        .unwrap();
+
+        let branches = Branch::list(Some(&path), true).unwrap();
+        let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
+        let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
+        let deatched_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
+        assert_eq!(push_branch.status, BranchStatus::Ahead);
+        assert_eq!(pull_branch.status, BranchStatus::Behind);
+        assert_eq!(deatched_branch.status, BranchStatus::Detached);
+
+        let result = op.sync().unwrap();
+        assert_eq!(
+            result,
+            SyncResult {
+                name: "github:fioncat/example".to_string(),
+                pushed: vec!["test-push".to_string()],
+                pulled: vec!["master".to_string()],
+                detached: vec!["test-detached".to_string()],
+                ..Default::default()
+            }
+        );
+
+        let branches = Branch::list(Some(&path), true).unwrap();
+        let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
+        let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
+        let deatched_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
+        assert_eq!(push_branch.status, BranchStatus::Sync);
+        assert_eq!(pull_branch.status, BranchStatus::Sync);
+        assert_eq!(deatched_branch.status, BranchStatus::Detached);
+
+        let current = branches.iter().find(|b| b.current).unwrap();
+        assert_eq!(current.name, "test-detached");
+
+        // Cleanup
+        op.git(["branch", "-D", "test-push"], "Delete test-push branch")
+            .unwrap();
+        op.git(
+            ["push", "origin", "--delete", "test-push"],
+            "Delete remote test-push branch",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_sync_uncommitted() {
+        if !git::tests::enable() {
+            return;
+        }
+
+        let ctx = context::tests::build_test_context("sync_uncomitted", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        fs::write(path.join("test0.txt"), "test").unwrap();
+        fs::write(path.join("test1.txt"), "test").unwrap();
+        fs::write(path.join("test2.txt"), "test").unwrap();
+
+        let result = op.sync().unwrap();
+        assert_eq!(
+            result,
+            SyncResult {
+                name: "github:fioncat/example".to_string(),
+                uncomitted: 3,
+                ..Default::default()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sync_create() {
+        if !git::tests::enable() {
+            return;
+        }
+
+        let ctx = context::tests::build_test_context("sync_create", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(!path.exists());
+
+        let result = op.sync().unwrap();
+        assert_eq!(
+            result,
+            SyncResult {
+                name: "github:fioncat/example".to_string(),
+                ..Default::default()
+            }
+        );
+
+        assert!(path.exists());
+
+        let remote = op.get_git_remote(false, false).await.unwrap();
+        assert_eq!(remote.name, "origin");
+    }
+
+    #[tokio::test]
+    async fn test_sync_ensure() {
+        if !git::tests::enable() {
+            return;
+        }
+        let ctx = context::tests::build_test_context("sync_ensure", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        op.git(["config", "user.name", "test-user"], "Set user name")
+            .unwrap();
+        op.git(
+            ["config", "user.email", "test-email@test.com"],
+            "Set user email",
+        )
+        .unwrap();
+        op.git(
+            [
+                "remote",
+                "set-url",
+                "origin",
+                "https://github.com/fioncat/roxide.git",
+            ],
+            "Update origin remote",
+        )
+        .unwrap();
+
+        let result = op.sync().unwrap();
+        assert_eq!(
+            result,
+            SyncResult {
+                name: "github:fioncat/example".to_string(),
+                ..Default::default()
+            }
+        );
+
+        let name = git::new(["config", "user.name"], Some(&path), "", true)
+            .output()
+            .unwrap();
+        let email = git::new(["config", "user.email"], Some(&path), "", true)
+            .output()
+            .unwrap();
+        assert_eq!(name, "fioncat");
+        assert_eq!(email, "lazycat7706@gmail.com");
+
+        let remote = op.get_git_remote(false, false).await.unwrap();
+        assert_eq!(remote.name, "origin");
+        let url = remote.get_url().unwrap();
+        assert_eq!(url, op.get_clone_url().unwrap());
     }
 }

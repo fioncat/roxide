@@ -14,11 +14,14 @@ pub struct Remote<'a> {
 }
 
 impl<'a> Remote<'a> {
-    pub fn new(name: String) -> Self {
+    pub fn new<P>(name: String, path: Option<&'a P>, mute: bool) -> Self
+    where
+        P: AsRef<Path>,
+    {
         Self {
             name,
-            path: None,
-            mute: false,
+            path: path.map(|p| p.as_ref()),
+            mute,
         }
     }
 
