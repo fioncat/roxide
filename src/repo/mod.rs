@@ -1,5 +1,5 @@
 pub mod current;
-pub mod operate;
+pub mod ops;
 pub mod select;
 
 use std::fs;
