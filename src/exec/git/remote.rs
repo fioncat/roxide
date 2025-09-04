@@ -83,19 +83,49 @@ impl<'a> Remote<'a> {
         };
 
         let target = format!("{}/{branch}", self.name);
-        let mut git = super::new(
+        super::new(
             ["fetch", &self.name, branch.as_ref()],
             self.path,
             format!("Fetch target {target}"),
             self.mute,
         )
-        .mute();
-        if let Some(p) = self.path {
-            git = git.current_dir(p);
-        }
-        git.execute()?;
+        .execute()?;
         debug!("[remote] Target: {target}");
         Ok(target)
+    }
+
+    pub fn commits_between(&self, branch: &str) -> Result<Vec<String>> {
+        let target = self.get_target(branch)?;
+
+        let compare = format!("HEAD...{target}");
+        let lines = super::new(
+            [
+                "log",
+                "--left-right",
+                "--cherry-pick",
+                "--oneline",
+                &compare,
+            ],
+            self.path,
+            format!("Get commits between {target}"),
+            self.mute,
+        )
+        .lines()?;
+        let mut commits = Vec::with_capacity(lines.len());
+        for line in lines {
+            if !line.starts_with('<') {
+                // If the commit message output by "git log xxx" does not start
+                // with "<", it means that this commit is from the target branch.
+                // Since we only list commits from current branch, ignore such
+                // commits.
+                continue;
+            }
+
+            let line = line.trim_start_matches('<').trim();
+            commits.push(line.to_string());
+        }
+
+        Ok(commits)
     }
 }
 

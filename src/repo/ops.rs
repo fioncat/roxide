@@ -9,10 +9,10 @@ use crate::config::context::ConfigContext;
 use crate::config::remote::{OwnerConfigRef, RemoteConfig};
 use crate::db::repo::Repository;
 use crate::exec::git::branch::{Branch, BranchStatus};
-use crate::exec::git::commit::count_uncommitted_changes;
+use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
 use crate::exec::git::remote::Remote;
 use crate::exec::{bash, git};
-use crate::{confirm, debug, info};
+use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
     ($self:ident, $($arg:tt)*) => {
@@ -59,6 +59,21 @@ enum BranchAction {
     Push,
     Pull,
     Delete,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RebaseOptions<'a> {
+    target: &'a str,
+    upstream: bool,
+    force_no_cache: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SquashOptions<'a> {
+    target: &'a str,
+    upstream: bool,
+    force_no_cache: bool,
+    message: &'a Option<String>,
 }
 
 impl<'a, 'b> RepoOperator<'a, 'b> {
@@ -452,6 +467,66 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
         debug!("[op] Sync branches done, result: {result:?}");
         Ok(result)
+    }
+
+    pub async fn rebase(&self, opts: RebaseOptions<'_>) -> Result<()> {
+        debug!("[op] Begin to rebase repo, options: {opts:?}");
+        ensure_no_uncommitted_changes(Some(&self.path), self.mute)?;
+
+        let remote = self
+            .get_git_remote(opts.upstream, opts.force_no_cache)
+            .await?;
+        debug!("[op] Get remote for rebase: {remote:?}");
+
+        let target = remote.get_target(opts.target)?;
+        debug!("[op] Get target for rebase: {target:?}");
+
+        self.git(["rebase", &target], format!("Rebasing from {target}"))
+    }
+
+    pub async fn squash(&self, opts: SquashOptions<'_>) -> Result<()> {
+        debug!("[op] Begin to squash repo, options: {opts:?}");
+        ensure_no_uncommitted_changes(Some(&self.path), self.mute)?;
+
+        let remote = self
+            .get_git_remote(opts.upstream, opts.force_no_cache)
+            .await?;
+        debug!("[op] Get remote for squash: {remote:?}");
+
+        let commits = remote.commits_between(opts.target)?;
+        debug!("[op] Commits between: {commits:?}");
+
+        if commits.is_empty() {
+            debug!("[op] No new commits to squash");
+            show_info!(self, "No new commits to squash");
+            return Ok(());
+        }
+
+        if commits.len() == 1 {
+            debug!("[op] Only one commit, no need to squash");
+            show_info!(self, "Only one commit, no need to squash");
+            return Ok(());
+        }
+
+        if !self.mute {
+            info!("Found {} commits to squash:", commits.len());
+            for commit in commits.iter() {
+                outputln!("  * {commit}");
+            }
+            confirm!("Continue");
+        }
+
+        debug!("[op] Soft reset to squash commits");
+        let set = format!("HEAD~{}", commits.len());
+        self.git(["reset", "--soft", &set], "Soft reset to squash")?;
+
+        debug!("[op] Commit squashed changes");
+        let args = if let Some(message) = opts.message {
+            vec!["commit", "--message", message.as_str()]
+        } else {
+            vec!["commit"]
+        };
+        self.git(args, "Commit squashed changes")
     }
 
     #[inline]
