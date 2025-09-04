@@ -1,6 +1,6 @@
 #![allow(dead_code)] // TODO: remove this
 
-use crate::exec::Cmd;
+use std::process;
 
 mod api;
 mod batch;
@@ -13,7 +13,14 @@ mod format;
 mod repo;
 mod term;
 
-fn main() {
-    let mut cmd = Cmd::new("echo").args(&["hello"]);
-    cmd.execute().unwrap();
+#[tokio::main]
+async fn main() {
+    let result = cmd::run().await;
+    if result.code == 0 {
+        return;
+    }
+    if let Some(message) = result.message {
+        eprintln!("{message}");
+    }
+    process::exit(result.code as _);
 }

@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
@@ -86,14 +86,25 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             repo.full_name(),
             path
         );
-        Ok(Self {
+        Ok(Self::new_static(ctx, remote, owner, repo, path, mute))
+    }
+
+    pub fn new_static(
+        ctx: &'a ConfigContext,
+        remote: &'a RemoteConfig,
+        owner: OwnerConfigRef<'a>,
+        repo: &'b Repository,
+        path: PathBuf,
+        mute: bool,
+    ) -> Self {
+        Self {
             ctx,
             remote,
             owner,
             repo,
             path,
             mute,
-        })
+        }
     }
 
     pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<bool> {
@@ -527,6 +538,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             vec!["commit"]
         };
         self.git(args, "Commit squashed changes")
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_ref()
     }
 
     #[inline]

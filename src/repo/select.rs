@@ -44,7 +44,7 @@ enum SelectOneType<'a> {
 }
 
 impl<'a> RepoSelector<'a> {
-    pub fn from_flags(
+    pub fn new(
         ctx: Arc<ConfigContext>,
         head: &'a Option<String>,
         owner: &'a Option<String>,

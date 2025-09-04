@@ -121,11 +121,11 @@ impl RemoteConfig {
             let data = fs::read_to_string(&path)
                 .with_context(|| format!("failed to read remote config file {}", path.display()))?;
             let mut remote: RemoteConfig = toml::from_str(&data)
-                .with_context(|| format!("failed to parse remote config {name}"))?;
+                .with_context(|| format!("failed to parse remote config {name:?}"))?;
             remote.name = name.clone();
             remote
                 .validate(hooks)
-                .with_context(|| format!("failed to validate remote config {name}"))?;
+                .with_context(|| format!("failed to validate remote config {name:?}"))?;
             remotes.push(remote);
         }
         remotes.sort_unstable_by(|a, b| a.name.cmp(&b.name));
