@@ -2,3 +2,4 @@
 /tests/*
 !/tests/.gitkeep
 secrets.sh
+.DS_Store
