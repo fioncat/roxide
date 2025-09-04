@@ -1,5 +1,6 @@
 mod cache;
 mod github;
+mod gitlab;
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -47,7 +48,7 @@ pub fn new(
 
     let mut api: Arc<dyn RemoteAPI> = match api_config.provider {
         Provider::GitHub => Arc::new(github::GitHub::new(&api_config.token)?),
-        Provider::GitLab => todo!(),
+        Provider::GitLab => Arc::new(gitlab::GitLab::new(&api_config.host, &api_config.token)),
     };
 
     if api_config.cache_hours > 0 {

@@ -84,7 +84,7 @@ impl RemoteAPI for GitHub {
         owner: &str,
         name: &str,
     ) -> Result<RemoteRepository<'static>> {
-        debug!("[github] Get repo for: {owner}/{name}");
+        debug!("[github] Get repo: {owner}/{name}");
         let repo = self
             .client
             .repos(owner, name)

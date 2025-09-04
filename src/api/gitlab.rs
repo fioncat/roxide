@@ -1,0 +1,238 @@
+use std::borrow::Cow;
+
+use anyhow::Result;
+use async_trait::async_trait;
+use gitlab::GitlabBuilder;
+use gitlab::api::{self, groups, projects, users};
+use gitlab::api::{AsyncQuery, Pagination};
+use serde::{Deserialize, Serialize};
+
+use crate::db::remote_repo::RemoteRepository;
+use crate::debug;
+
+use super::{RemoteAPI, RemoteInfo};
+
+pub struct GitLab {
+    host: String,
+    client_builder: GitlabBuilder,
+    has_token: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct User {
+    username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Project {
+    name: String,
+    default_branch: String,
+    web_url: String,
+}
+
+impl GitLab {
+    const DEFAULT_HOST: &'static str = "https://gitlab.com";
+    const DEFAULT_LIMIT: usize = 100;
+
+    pub fn new(host: &Option<String>, token: &str) -> Self {
+        debug!("[gitlab] Build GitLab API client, host: {host:?}, token: {token:?}");
+        let host = host.clone().unwrap_or(String::from(Self::DEFAULT_HOST));
+        let client_builder = GitlabBuilder::new(&host, token);
+        let has_token = !token.is_empty();
+        Self {
+            host,
+            client_builder,
+            has_token,
+        }
+    }
+}
+
+#[async_trait]
+impl RemoteAPI for GitLab {
+    async fn info(&self) -> Result<RemoteInfo> {
+        debug!("[gitlab] Get GitLab API info");
+        let client = self.client_builder.build_async().await?;
+
+        let mut auth_user = None;
+
+        let ping = if self.has_token {
+            let endpoint = users::CurrentUser::builder().build()?;
+            let user: User = endpoint.query_async(&client).await?;
+            auth_user = Some(user.username);
+            true
+        } else {
+            super::test_connection(&format!("{}:443", self.host)).await
+        };
+
+        let info = RemoteInfo {
+            name: Cow::Owned(format!("GitLab: {}", self.host)),
+            auth_user,
+            ping,
+            cache: false,
+        };
+
+        debug!("[gitlab] Result: {info:?}");
+        Ok(info)
+    }
+
+    async fn list_repos(&self, _remote: &str, owner: &str) -> Result<Vec<String>> {
+        debug!("[gitlab] List repos for: {owner}");
+        let client = self.client_builder.build_async().await?;
+
+        let endpoint = groups::projects::GroupProjects::builder()
+            .group(owner)
+            .build()?;
+        let projects: Vec<Project> = api::paged(endpoint, Pagination::Limit(Self::DEFAULT_LIMIT))
+            .query_async(&client)
+            .await?;
+        let repos: Vec<_> = projects.into_iter().map(|p| p.name).collect();
+        debug!("[gitlab] Results: {repos:?}");
+        Ok(repos)
+    }
+
+    async fn get_repo(
+        &self,
+        remote: &str,
+        owner: &str,
+        name: &str,
+    ) -> Result<RemoteRepository<'static>> {
+        debug!("[gitlab] Get repo: {owner}/{name}");
+        let id = format!("{owner}/{name}");
+        let client = self.client_builder.build_async().await?;
+
+        let endpoint = projects::Project::builder().project(id).build()?;
+        let project: Project = endpoint.query_async(&client).await?;
+
+        let remote_repo = RemoteRepository {
+            remote: Cow::Owned(remote.to_string()),
+            owner: Cow::Owned(owner.to_string()),
+            name: Cow::Owned(name.to_string()),
+            default_branch: project.default_branch,
+            web_url: project.web_url,
+            upstream: None, // TODO: Support upstream for gitlab
+            expire_at: 0,
+        };
+
+        debug!("[gitlab] Result: {remote_repo:?}");
+        Ok(remote_repo)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::*;
+
+    struct TestGitLab {
+        client: GitLab,
+
+        user: String,
+
+        group: String,
+        repo: String,
+
+        default_branch: String,
+        web_url: String,
+    }
+
+    fn new() -> Option<TestGitLab> {
+        let host = env::var("TEST_GITLAB_HOST").ok()?;
+        if host.is_empty() {
+            return None;
+        }
+
+        let token = env::var("TEST_GITLAB_TOKEN").ok()?;
+        if token.is_empty() {
+            return None;
+        }
+
+        let user = env::var("TEST_GITLAB_USER").ok()?;
+        if user.is_empty() {
+            return None;
+        }
+
+        let group = env::var("TEST_GITLAB_GROUP").ok()?;
+        if group.is_empty() {
+            return None;
+        }
+
+        let repo = env::var("TEST_GITLAB_REPO").ok()?;
+        if repo.is_empty() {
+            return None;
+        }
+
+        let default_branch = env::var("TEST_GITLAB_REPO_DEFAULT_BRANCH").ok()?;
+        if default_branch.is_empty() {
+            return None;
+        }
+
+        let web_url = env::var("TEST_GITLAB_REPO_URL").ok()?;
+        if web_url.is_empty() {
+            return None;
+        }
+
+        Some(TestGitLab {
+            client: GitLab::new(&Some(host), &token),
+            user,
+            group,
+            repo,
+            default_branch,
+            web_url,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_info() {
+        let Some(gitlab) = new() else {
+            return;
+        };
+        let info = gitlab.client.info().await.unwrap();
+        assert_eq!(
+            info,
+            RemoteInfo {
+                name: Cow::Owned(format!("GitLab: {}", gitlab.client.host)),
+                auth_user: Some(gitlab.user.clone()),
+                ping: true,
+                cache: false,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_repos() {
+        let Some(gitlab) = new() else {
+            return;
+        };
+        let repos = gitlab
+            .client
+            .list_repos("gitlab", &gitlab.group)
+            .await
+            .unwrap();
+        assert!(repos.contains(&gitlab.repo));
+    }
+
+    #[tokio::test]
+    async fn test_get_repo() {
+        let Some(gitlab) = new() else {
+            return;
+        };
+        let repo = gitlab
+            .client
+            .get_repo("gitlab", &gitlab.group, &gitlab.repo)
+            .await
+            .unwrap();
+        assert_eq!(
+            repo,
+            RemoteRepository {
+                remote: Cow::Owned("gitlab".to_string()),
+                owner: Cow::Owned(gitlab.group.clone()),
+                name: Cow::Owned(gitlab.repo.clone()),
+                default_branch: gitlab.default_branch.clone(),
+                web_url: gitlab.web_url.clone(),
+                upstream: None,
+                expire_at: 0,
+            }
+        );
+    }
+}

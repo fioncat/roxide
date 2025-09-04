@@ -19,6 +19,7 @@ clap_complete = { version = "^4", features = ["unstable-dynamic"] }
 console = "^0"
 dirs = "^6"
 file-lock = "^2"
+gitlab = "^0"
 num_cpus = "^1"
 octocrab = "^0"
 pad = "^0"
