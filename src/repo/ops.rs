@@ -493,7 +493,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             .await?;
         debug!("[op] Get remote for squash: {remote:?}");
 
-        let commits = remote.commits_between(opts.target)?;
+        let commits = remote.commits_between(opts.target, true)?;
         debug!("[op] Commits between: {commits:?}");
 
         if commits.is_empty() {
@@ -935,5 +935,142 @@ mod tests {
         assert_eq!(remote.name, "origin");
         let url = remote.get_url().unwrap();
         assert_eq!(url, op.get_clone_url().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_rebase() {
+        if !git::tests::enable() {
+            return;
+        }
+        let ctx = context::tests::build_test_context("rebase", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(false, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        op.git(
+            ["checkout", "-b", "test-rebase-target"],
+            "Create rebase target branch",
+        )
+        .unwrap();
+
+        fs::write(path.join("test_target.txt"), "content from target branch").unwrap();
+        op.git(["add", "."], "Add file").unwrap();
+        op.git(["commit", "-m", "Add test_target.txt"], "Commit file")
+            .unwrap();
+        op.git(
+            ["push", "origin", "test-rebase-target"],
+            "Push target branch",
+        )
+        .unwrap();
+
+        op.git(["checkout", "master"], "Checkout back to master")
+            .unwrap();
+
+        op.git(
+            ["checkout", "-b", "test-rebase"],
+            "Create test-rebase branch",
+        )
+        .unwrap();
+        fs::write(path.join("test_rebase.txt"), "content from rebase branch").unwrap();
+        op.git(["add", "."], "Add file").unwrap();
+        op.git(["commit", "-m", "Add test_rebase.txt"], "Commit file")
+            .unwrap();
+
+        let target_path = path.join("test_target.txt");
+        let rebase_path = path.join("test_rebase.txt");
+
+        assert!(!target_path.exists());
+        assert!(rebase_path.exists());
+
+        op.rebase(RebaseOptions {
+            target: "test-rebase-target",
+            upstream: false,
+            force_no_cache: false,
+        })
+        .await
+        .unwrap();
+
+        assert!(target_path.exists());
+        assert!(rebase_path.exists());
+
+        op.git(
+            ["branch", "-D", "test-rebase-target"],
+            "Delete test-rebase branch",
+        )
+        .unwrap();
+        op.git(
+            ["push", "origin", "--delete", "test-rebase-target"],
+            "Delete remote test-rebase branch",
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_squash() {
+        if !git::tests::enable() {
+            return;
+        }
+        let ctx = context::tests::build_test_context("squash", None);
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "example".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        op.ensure_create(false, None).unwrap();
+
+        let path = repo.get_path(&ctx.cfg.workspace);
+        assert!(path.exists());
+
+        op.git(
+            ["checkout", "-b", "test-squash-target"],
+            "Create squash target branch",
+        )
+        .unwrap();
+
+        let message = Some("Squashed commit".to_string());
+        let opts = SquashOptions {
+            target: "",
+            message: &message,
+            upstream: false,
+            force_no_cache: false,
+        };
+
+        fs::write(path.join("test1.txt"), "Test content 1").unwrap();
+        op.git(["add", "."], "Add file").unwrap();
+        op.git(["commit", "-m", "Add test1.txt"], "Commit file")
+            .unwrap();
+
+        fs::write(path.join("test2.txt"), "Test content 2").unwrap();
+        op.git(["add", "."], "Add file").unwrap();
+        op.git(["commit", "-m", "Add test2.txt"], "Commit file")
+            .unwrap();
+
+        op.squash(opts).await.unwrap();
+
+        let lines = git::new(
+            [
+                "log",
+                "--left-right",
+                "--cherry-pick",
+                "--oneline",
+                "HEAD...origin/master",
+            ],
+            Some(&path),
+            "Get commits",
+            true,
+        )
+        .lines()
+        .unwrap();
+        assert_eq!(lines.len(), 1);
     }
 }

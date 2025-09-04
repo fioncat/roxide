@@ -94,7 +94,7 @@ impl<'a> Remote<'a> {
         Ok(target)
     }
 
-    pub fn commits_between(&self, branch: &str) -> Result<Vec<String>> {
+    pub fn commits_between(&self, branch: &str, with_id: bool) -> Result<Vec<String>> {
         let target = self.get_target(branch)?;
 
         let compare = format!("HEAD...{target}");
@@ -121,7 +121,14 @@ impl<'a> Remote<'a> {
                 continue;
             }
 
-            let line = line.trim_start_matches('<').trim();
+            let mut line = line.trim_start_matches('<').trim().to_string();
+            if !with_id {
+                let fields = line.split_whitespace().collect::<Vec<_>>();
+                if fields.len() < 2 {
+                    continue;
+                }
+                line = fields[1..].join(" ");
+            }
             commits.push(line.to_string());
         }
 
