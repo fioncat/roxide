@@ -5,7 +5,7 @@ use console::style;
 use scanf::scanf;
 
 use crate::exec::SilentExit;
-use crate::{info, output, outputln};
+use crate::{debug, info, output, outputln};
 
 static NO_CONFIRM: OnceLock<bool> = OnceLock::new();
 
@@ -31,13 +31,16 @@ pub fn confirm(msg: String) -> Result<()> {
         return Ok(());
     }
 
+    debug!("[confirm] Wait user confirm");
     let msg = format!(":: {msg}");
     let styled = style(msg).bold();
-    output!("{styled}? [Y/n]");
+    output!("{styled}? [Y/n] ");
 
     let mut resp = String::new();
     scanf!("{resp}").context("confirm: scan terminal stdin failed")?;
-    if resp.to_lowercase() != "y" {
+    debug!("[confirm] User input: {resp:?}");
+    let resp = resp.trim().to_lowercase();
+    if resp != "y" {
         bail!(SilentExit { code: 130 });
     }
 

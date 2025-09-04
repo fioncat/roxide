@@ -10,11 +10,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::debug;
-use crate::exec::bash;
-use crate::exec::fzf;
-use crate::exec::git;
 use crate::repo::ensure_dir;
-use crate::term::output;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
@@ -23,9 +19,6 @@ pub struct Config {
 
     #[serde(default)]
     pub data_dir: String,
-
-    #[serde(default)]
-    pub debug: bool,
 
     #[serde(default = "Config::default_branch")]
     pub default_branch: String,
@@ -74,7 +67,7 @@ impl Config {
             Ok(data) => {
                 debug!("[config] Base config file found, parse it");
                 toml::from_str(&data).with_context(|| {
-                    format!("failed to parse config file {}", file_path.display())
+                    format!("failed to parse config file {:?}", file_path.display())
                 })?
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -83,7 +76,7 @@ impl Config {
             }
             Err(e) => {
                 return Err(e).with_context(|| {
-                    format!("failed to read config file {}", file_path.display())
+                    format!("failed to read config file {:?}", file_path.display())
                 });
             }
         };
@@ -107,7 +100,7 @@ impl Config {
     pub fn get_remote(&self, name: &str) -> Result<&remote::RemoteConfig> {
         match self.remotes.iter().find(|r| r.name == name) {
             Some(r) => Ok(r),
-            None => bail!("remote '{}' not found", name),
+            None => bail!("remote {name:?} not found"),
         }
     }
 
@@ -133,28 +126,20 @@ impl Config {
         }
         ensure_dir(&self.data_dir)?;
 
-        if self.debug {
-            let debug_path = PathBuf::from(&self.data_dir).join("debug.log");
-            output::set_debug(format!("{}", debug_path.display()));
-        }
-
         if self.default_branch.is_empty() {
             self.default_branch = Self::default_branch();
         }
 
-        if let Some(mut fzf) = self.fzf.take() {
+        if let Some(ref mut fzf) = self.fzf {
             fzf.validate().context("failed to validate fzf config")?;
-            fzf::set_cmd(fzf);
         }
 
-        if let Some(mut git) = self.git.take() {
+        if let Some(ref mut git) = self.git {
             git.validate().context("failed to validate git config")?;
-            git::set_cmd(git);
         }
 
-        if let Some(mut bash) = self.bash.take() {
+        if let Some(ref mut bash) = self.bash {
             bash.validate().context("failed to validate bash config")?;
-            bash::set_cmd(bash);
         }
 
         debug!("[config] Config validated: {:?}", self);
@@ -206,22 +191,17 @@ mod tests {
         let expect = Config {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
-            debug: false,
             default_branch: "main".to_string(),
             fzf: None,
             git: None,
-            bash: None,
+            bash: Some(CmdConfig {
+                name: "/bin/bash".to_string(),
+                args: vec!["-e".to_string()],
+            }),
             remotes: super::remote::tests::expect_remotes(),
             hooks: super::hook::tests::expect_hooks(),
         };
         assert_eq!(cfg, expect);
-        assert_eq!(
-            bash::get_cmd(),
-            &CmdConfig {
-                name: "/bin/bash".to_string(),
-                args: vec!["-e".to_string()],
-            }
-        );
     }
 
     #[test]

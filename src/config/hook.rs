@@ -4,12 +4,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::debug;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HooksConfig {
-    hooks: HashMap<String, String>,
+    pub hooks: HashMap<String, String>,
 }
 
 impl HooksConfig {

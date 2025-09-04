@@ -12,8 +12,8 @@ use clap::{Parser, Subcommand};
 use crate::config::Config;
 use crate::config::context::ConfigContext;
 use crate::debug;
-use crate::exec::SilentExit;
-use crate::term::output;
+use crate::exec::{SilentExit, bash, fzf, git};
+use crate::term::{confirm, output};
 
 #[async_trait]
 pub trait Command {
@@ -51,15 +51,34 @@ pub struct ConfigArgs {
 
     #[arg(long)]
     pub debug: Option<String>,
+
+    #[arg(long, short)]
+    pub yes: bool,
 }
 
 impl ConfigArgs {
-    pub fn build_ctx(self) -> Result<Arc<ConfigContext>> {
-        if let Some(file) = self.debug {
-            output::set_debug(file);
+    pub fn build_ctx(&self) -> Result<Arc<ConfigContext>> {
+        ConfigContext::new(self.build_config()?)
+    }
+
+    pub fn build_config(&self) -> Result<Config> {
+        if let Some(ref file) = self.debug {
+            output::set_debug(file.clone());
         }
         let cfg = Config::read(self.config_path.as_deref())?;
-        ConfigContext::new(cfg)
+        if let Some(ref fzf) = cfg.fzf {
+            fzf::set_cmd(fzf.clone());
+        }
+        if let Some(ref git) = cfg.git {
+            git::set_cmd(git.clone());
+        }
+        if let Some(ref bash) = cfg.bash {
+            bash::set_cmd(bash.clone());
+        }
+        if self.yes {
+            confirm::set_no_confirm(true);
+        }
+        Ok(cfg)
     }
 }
 

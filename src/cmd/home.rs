@@ -2,10 +2,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::confirm;
 use crate::format::now;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::RepoSelector;
+use crate::{confirm, debug};
 
 use super::{Command, ConfigArgs};
 
@@ -34,6 +34,7 @@ pub struct HomeCommand {
 impl Command for HomeCommand {
     async fn run(self) -> Result<()> {
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run home command: {:?}", self);
 
         let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
         let mut repo = selector.select_one(self.force_no_cache, self.local).await?;
@@ -57,6 +58,7 @@ impl Command for HomeCommand {
         let op = RepoOperator::new_static(ctx.as_ref(), remote, owner, &repo, path, false);
         op.ensure_create(self.thin, None)?;
 
+        debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());
         Ok(())
     }

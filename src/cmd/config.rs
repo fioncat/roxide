@@ -1,13 +1,25 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
+use serde::{Deserialize, Serialize};
+
+use crate::config::Config;
+use crate::config::hook::HooksConfig;
+use crate::config::remote::RemoteConfig;
 
 use super::{Command, ConfigArgs};
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConfigDisplay {
+    pub base: Config,
+
+    pub remotes: Vec<RemoteConfig>,
+
+    pub hooks: HooksConfig,
+}
+
 #[derive(Debug, Args)]
 pub struct ConfigCommand {
-    pub remote: Option<String>,
-
     #[clap(flatten)]
     pub config: ConfigArgs,
 }
@@ -15,16 +27,16 @@ pub struct ConfigCommand {
 #[async_trait]
 impl Command for ConfigCommand {
     async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+        let cfg = self.config.build_config()?;
 
-        let Some(remote) = self.remote else {
-            let json = serde_json::to_string_pretty(&ctx.cfg)?;
-            println!("{json}");
-            return Ok(());
+        let remotes = cfg.remotes.clone();
+        let hooks = cfg.hooks.clone();
+        let display = ConfigDisplay {
+            base: cfg,
+            remotes,
+            hooks,
         };
-
-        let remote = ctx.cfg.get_remote(&remote)?;
-        let json = serde_json::to_string_pretty(remote)?;
+        let json = serde_json::to_string_pretty(&display)?;
         println!("{json}");
         Ok(())
     }
