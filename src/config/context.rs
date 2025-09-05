@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
@@ -20,7 +19,7 @@ pub struct ConfigContext {
 
     db: OnceLock<Result<Arc<Database>>>,
 
-    apis: Mutex<RefCell<HashMap<String, Arc<dyn RemoteAPI>>>>,
+    apis: Mutex<HashMap<String, Arc<dyn RemoteAPI>>>,
 
     file_lock: OnceLock<Result<FileLock>>,
 }
@@ -32,7 +31,7 @@ impl ConfigContext {
             cfg,
             current_dir,
             db: OnceLock::new(),
-            apis: Mutex::new(RefCell::new(HashMap::new())),
+            apis: Mutex::new(HashMap::new()),
             file_lock: OnceLock::new(),
         }))
     }
@@ -50,7 +49,7 @@ impl ConfigContext {
             cfg,
             current_dir,
             db: OnceLock::new(),
-            apis: Mutex::new(RefCell::new(apis)),
+            apis: Mutex::new(apis),
             file_lock: OnceLock::new(),
         })
     }
@@ -75,12 +74,12 @@ impl ConfigContext {
 
     pub fn get_api(&self, remote_name: &str, force_no_cache: bool) -> Result<Arc<dyn RemoteAPI>> {
         debug!("[context] Get api for remote {remote_name:?}, force_no_cache: {force_no_cache}");
-        let apis = match self.apis.lock() {
+        let mut apis = match self.apis.lock() {
             Ok(apis) => apis,
             Err(e) => bail!("failed to lock apis: {e:#}"),
         };
 
-        if let Some(api) = apis.borrow().get(remote_name) {
+        if let Some(api) = apis.get(remote_name) {
             debug!("[context] Found api in cache");
             return Ok(api.clone());
         }
@@ -88,8 +87,7 @@ impl ConfigContext {
         debug!("[context] Init new api, and save it to cache");
         let remote_cfg = self.cfg.get_remote(remote_name)?;
         let api = api::new(remote_cfg, self.get_db()?, force_no_cache)?;
-        apis.borrow_mut()
-            .insert(remote_name.to_string(), api.clone());
+        apis.insert(remote_name.to_string(), api.clone());
         Ok(api)
     }
 

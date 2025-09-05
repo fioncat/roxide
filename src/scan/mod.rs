@@ -1,3 +1,7 @@
+pub mod code_stats;
+pub mod disk_usage;
+pub mod ignore;
+
 use std::fmt::Debug;
 use std::fs;
 use std::path::{Path, PathBuf};

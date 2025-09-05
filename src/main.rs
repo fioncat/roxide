@@ -10,7 +10,6 @@ mod db;
 mod exec;
 mod filelock;
 mod format;
-mod ignore;
 mod repo;
 mod scan;
 mod term;

@@ -2,7 +2,6 @@ pub mod remote_owner;
 pub mod remote_repo;
 pub mod repo;
 
-use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -10,14 +9,14 @@ use anyhow::{Result, bail};
 use rusqlite::{Connection, Transaction};
 
 pub struct Database {
-    conn: Mutex<RefCell<Connection>>,
+    conn: Mutex<Connection>,
 }
 
 impl Database {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
         let db = Self {
-            conn: Mutex::new(RefCell::new(conn)),
+            conn: Mutex::new(conn),
         };
         db.with_transaction(|tx| {
             tx.repo().ensure_table()?;
@@ -32,11 +31,10 @@ impl Database {
     where
         F: FnOnce(&DatabaseHandle) -> Result<T>,
     {
-        let conn = match self.conn.lock() {
+        let mut conn = match self.conn.lock() {
             Ok(conn) => conn,
             Err(e) => bail!("failed to lock connection: {:#}", e),
         };
-        let mut conn = conn.borrow_mut();
         let tx = conn.transaction()?;
         let handle = DatabaseHandle { tx };
 
