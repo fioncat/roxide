@@ -1,0 +1,74 @@
+use anyhow::Result;
+use async_trait::async_trait;
+use clap::Args;
+
+use crate::cmd::{Command, ConfigArgs};
+use crate::outputln;
+use crate::repo::disk_usage::{RepoDiskUsageList, repo_disk_usage};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::term::list::{ListArgs, PageArgs, pagination};
+
+#[derive(Debug, Args)]
+pub struct ListRepoCommand {
+    pub head: Option<String>,
+
+    pub owner: Option<String>,
+
+    pub name: Option<String>,
+
+    #[arg(long)]
+    pub sync: bool,
+
+    #[arg(long)]
+    pub pin: bool,
+
+    #[arg(long = "du", short)]
+    pub disk_usage: bool,
+
+    #[clap(flatten)]
+    pub list: ListArgs,
+
+    #[clap(flatten)]
+    pub page: PageArgs,
+
+    #[clap(flatten)]
+    pub config: ConfigArgs,
+}
+
+#[async_trait]
+impl Command for ListRepoCommand {
+    async fn run(self) -> Result<()> {
+        let ctx = self.config.build_ctx()?;
+
+        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+        let limit = self.page.limit();
+        let mut opts = SelectManyReposOptions::default();
+        if self.sync {
+            opts.sync = Some(true);
+        }
+        if self.pin {
+            opts.pin = Some(true);
+        }
+        if !self.disk_usage {
+            opts.limit = Some(limit);
+        }
+
+        let list = selector.select_many(opts)?;
+        let text = if self.disk_usage {
+            let level = list.level;
+            let usages = repo_disk_usage(ctx, list.items).await?;
+            let (usages, total) = pagination(usages, limit);
+            let list = RepoDiskUsageList {
+                usages,
+                total,
+                level,
+            };
+            self.list.render(list, Some(self.page))?
+        } else {
+            self.list.render(list, Some(self.page))?
+        };
+
+        outputln!("{text}");
+        Ok(())
+    }
+}

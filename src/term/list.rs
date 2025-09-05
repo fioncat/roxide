@@ -21,62 +21,83 @@ pub trait ListItem: Serialize {
 
 #[derive(Debug, Clone, Copy, Args)]
 pub struct ListArgs {
-    #[arg(long, short)]
+    #[arg(long)]
+    pub json: bool,
+
+    #[arg(long)]
+    pub headless: bool,
+}
+
+#[derive(Debug, Clone, Copy, Args)]
+pub struct PageArgs {
+    #[arg(long, short, default_value = "1")]
     pub page: u32,
 
     #[arg(long, short = 's', default_value = "20")]
     pub page_size: u32,
 }
 
-impl ListArgs {
-    fn limit_options(&self) -> LimitOptions {
+impl PageArgs {
+    pub fn limit(&self) -> LimitOptions {
         let offset = (self.page - 1) * self.page_size;
         let limit = self.page_size;
         LimitOptions { offset, limit }
     }
 }
 
-pub fn render_list<L, T>(
-    list: L,
-    json: bool,
-    headless: bool,
-    args: Option<ListArgs>,
-) -> Result<String>
-where
-    L: List<T>,
-    T: ListItem,
-{
-    let items = list.items();
-    if json {
-        let json = serde_json::to_string_pretty(items)?;
-        return Ok(json);
-    }
-    if items.is_empty() {
-        return Ok(String::from("<empty list>"));
-    }
-
-    let titles = list.titles();
-    let total = list.total();
-
-    let mut table = Table::with_capacity(items.len(), headless);
-    table.add_static(titles.clone());
-
-    for item in items {
-        let mut row = Vec::with_capacity(titles.len());
-        for title in titles.iter() {
-            let cell = item.row(title);
-            row.push(cell);
+impl ListArgs {
+    pub fn render<L, T>(&self, list: L, page: Option<PageArgs>) -> Result<String>
+    where
+        L: List<T>,
+        T: ListItem,
+    {
+        let items = list.items();
+        if self.json {
+            let json = serde_json::to_string_pretty(items)?;
+            return Ok(json);
         }
-        table.add(row);
+        if items.is_empty() {
+            return Ok(String::from("<empty list>"));
+        }
+
+        let titles = list.titles();
+        let total = list.total();
+
+        let mut table = Table::with_capacity(items.len(), self.headless);
+        table.add_static(titles.clone());
+
+        for item in items {
+            let mut row = Vec::with_capacity(titles.len());
+            for title in titles.iter() {
+                let cell = item.row(title);
+                row.push(cell);
+            }
+            table.add(row);
+        }
+
+        if let Some(opts) = page {
+            let total_pages = total.div_ceil(opts.page_size);
+            let hint = format!("Page: {}/{total_pages}, Total: {}", opts.page, total);
+            return Ok(format!("{hint}\n{}", table.render()));
+        }
+
+        Ok(table.render())
+    }
+}
+
+pub fn pagination<T>(list: Vec<T>, opts: LimitOptions) -> (Vec<T>, u32) {
+    let total = list.len() as u32;
+
+    let start = opts.offset as usize;
+    let end = (start + opts.limit as usize).min(list.len());
+
+    if start >= list.len() {
+        return (Vec::new(), total);
     }
 
-    if let Some(args) = args {
-        let total_pages = total.div_ceil(args.page_size);
-        let hint = format!("Page: {}/{total_pages}, Total: {}", args.page, total);
-        return Ok(format!("{hint}\n{}", table.render()));
-    }
+    let paginated_items = list.into_iter().skip(start).take(end - start).collect();
 
-    Ok(table.render())
+    (paginated_items, total)
 }
 
 #[cfg(test)]
@@ -85,7 +106,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     struct User {
         id: u32,
         name: String,
@@ -128,7 +149,7 @@ mod tests {
             users: Vec<User>,
             headless: bool,
             total: u32,
-            args: Option<ListArgs>,
+            args: Option<PageArgs>,
             expect: &'static str,
         }
 
@@ -160,7 +181,7 @@ mod tests {
                 ],
                 headless: false,
                 total: 30,
-                args: Some(ListArgs {
+                args: Some(PageArgs {
                     page: 2,
                     page_size: 3,
                 }),
@@ -188,7 +209,7 @@ mod tests {
                 ],
                 headless: true,
                 total: 2,
-                args: Some(ListArgs {
+                args: Some(PageArgs {
                     page: 1,
                     page_size: 2,
                 }),
@@ -205,7 +226,11 @@ mod tests {
                 users: case.users,
                 total: case.total,
             };
-            let result = render_list(list, false, case.headless, case.args).unwrap();
+            let args = ListArgs {
+                json: false,
+                headless: case.headless,
+            };
+            let result = args.render(list, case.args).unwrap();
             assert_eq!(result, case.expect);
         }
     }
@@ -227,7 +252,133 @@ mod tests {
         let expected = serde_json::to_string_pretty(&users).unwrap();
         let total = users.len() as u32;
         let list = UserList { users, total };
-        let result = render_list(list, true, false, None).unwrap();
+        let args = ListArgs {
+            json: true,
+            headless: false,
+        };
+        let result = args.render(list, None).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_pagination() {
+        struct Case {
+            users: Vec<User>,
+            limit_options: LimitOptions,
+            expect_total: u32,
+            expect_count: usize,
+            expect_ids: Vec<u32>,
+        }
+
+        let users = vec![
+            User {
+                id: 1,
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            },
+            User {
+                id: 2,
+                name: "Bob".to_string(),
+                email: "bob@example.com".to_string(),
+            },
+            User {
+                id: 3,
+                name: "Charlie".to_string(),
+                email: "charlie@example.com".to_string(),
+            },
+            User {
+                id: 4,
+                name: "David".to_string(),
+                email: "david@example.com".to_string(),
+            },
+            User {
+                id: 5,
+                name: "Eve".to_string(),
+                email: "eve@example.com".to_string(),
+            },
+        ];
+
+        let cases = [
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 0,
+                    limit: 2,
+                },
+                expect_total: 5,
+                expect_count: 2,
+                expect_ids: vec![1, 2],
+            },
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 2,
+                    limit: 2,
+                },
+                expect_total: 5,
+                expect_count: 2,
+                expect_ids: vec![3, 4],
+            },
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 4,
+                    limit: 2,
+                },
+                expect_total: 5,
+                expect_count: 1,
+                expect_ids: vec![5],
+            },
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 6,
+                    limit: 2,
+                },
+                expect_total: 5,
+                expect_count: 0,
+                expect_ids: vec![],
+            },
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 0,
+                    limit: 3,
+                },
+                expect_total: 5,
+                expect_count: 3,
+                expect_ids: vec![1, 2, 3],
+            },
+            Case {
+                users: users.clone(),
+                limit_options: LimitOptions {
+                    offset: 3,
+                    limit: 3,
+                },
+                expect_total: 5,
+                expect_count: 2,
+                expect_ids: vec![4, 5],
+            },
+            Case {
+                users: vec![],
+                limit_options: LimitOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+                expect_total: 0,
+                expect_count: 0,
+                expect_ids: vec![],
+            },
+        ];
+
+        for case in cases {
+            let (result, total) = pagination(case.users, case.limit_options);
+            assert_eq!(total, case.expect_total);
+            assert_eq!(result.len(), case.expect_count);
+
+            for (i, expected_id) in case.expect_ids.iter().enumerate() {
+                assert_eq!(result[i].id, *expected_id);
+            }
+        }
     }
 }

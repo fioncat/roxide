@@ -35,6 +35,8 @@ pub enum Commands {
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
     Home(home::HomeCommand),
+    #[command(alias = "ls")]
+    List(list::ListCommand),
 }
 
 #[async_trait]
@@ -44,6 +46,7 @@ impl Command for App {
             Commands::Config(cmd) => cmd.run().await,
             Commands::DiskUsage(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
+            Commands::List(cmd) => cmd.run().await,
         }
     }
 }

@@ -428,7 +428,9 @@ impl<'a> QueryOptions<'a> {
         let mut idx = 0;
         let mut params = Vec::new();
 
-        if let Some(limit_opts) = self.limit {
+        if let Some(limit_opts) = self.limit
+            && sql.contains("{{limit}}")
+        {
             idx += 2;
             limit = "LIMIT ?2 OFFSET ?1";
             params.push(Value::Integer(limit_opts.offset as i64));

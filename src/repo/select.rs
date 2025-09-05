@@ -25,9 +25,7 @@ pub struct RepoSelector<'a> {
 pub struct SelectManyReposOptions {
     pub sync: Option<bool>,
     pub pin: Option<bool>,
-
-    pub offset: u32,
-    pub limit: u32,
+    pub limit: Option<LimitOptions>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -486,15 +484,9 @@ impl<'a> RepoSelector<'a> {
         let mut query_opts = QueryOptions {
             sync: opts.sync,
             pin: opts.pin,
+            limit: opts.limit,
             ..Default::default()
         };
-
-        if opts.limit > 0 {
-            query_opts.limit = Some(LimitOptions {
-                offset: opts.offset,
-                limit: opts.limit,
-            });
-        }
 
         let mut level = DisplayLevel::Remote;
         if !self.head.is_empty() {
@@ -531,7 +523,7 @@ impl<'a> RepoSelector<'a> {
 impl List<Repository> for RepoList {
     fn titles(&self) -> Vec<&'static str> {
         let mut titles = self.level.titles();
-        titles.extend(vec!["Flags", "Visited", "VisitedAt"]);
+        titles.extend(vec!["Flags", "Visited", "LastVisited"]);
         titles
     }
 
@@ -1074,7 +1066,10 @@ mod tests {
             Case {
                 args: vec!["github"],
                 opts: SelectManyReposOptions {
-                    limit: 2,
+                    limit: Some(LimitOptions {
+                        limit: 2,
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 },
                 expect_total: 4,
@@ -1084,8 +1079,10 @@ mod tests {
             Case {
                 args: vec!["github"],
                 opts: SelectManyReposOptions {
-                    offset: 1,
-                    limit: 2,
+                    limit: Some(LimitOptions {
+                        offset: 1,
+                        limit: 2,
+                    }),
                     ..Default::default()
                 },
                 expect_total: 4,

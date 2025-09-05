@@ -7,10 +7,10 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::config::context::ConfigContext;
-use crate::db::repo::Repository;
+use crate::db::repo::{DisplayLevel, Repository};
 use crate::format::format_bytes;
 use crate::scan::{ScanFile, ScanHandler, Task, scan_files_with_data};
-use crate::term::list::ListItem;
+use crate::term::list::{List, ListItem};
 
 pub async fn repo_disk_usage(
     ctx: Arc<ConfigContext>,
@@ -52,6 +52,28 @@ impl ListItem for RepoDiskUsage {
             return format_bytes(self.usage).into();
         }
         self.repo.row(title)
+    }
+}
+
+pub struct RepoDiskUsageList {
+    pub usages: Vec<RepoDiskUsage>,
+    pub total: u32,
+    pub level: DisplayLevel,
+}
+
+impl List<RepoDiskUsage> for RepoDiskUsageList {
+    fn titles(&self) -> Vec<&'static str> {
+        let mut titles = self.level.titles();
+        titles.push("DiskUsage");
+        titles
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[RepoDiskUsage] {
+        &self.usages
     }
 }
 
