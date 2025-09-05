@@ -62,8 +62,29 @@ pub fn format_elapsed(d: Duration) -> String {
     }
 }
 
+/// Convert a size to a human-readable string, for example, "32KB".
+pub fn format_bytes(bytes: u64) -> String {
+    const BYTES_UNIT: f64 = 1024.0;
+    const BYTES_SUFFIX: [&str; 9] = ["", "k", "M", "G", "T", "P", "E", "Z", "Y"];
+    let size = bytes as f64;
+    if size <= 0.0 {
+        return String::from("0");
+    }
+
+    let base = size.log10() / BYTES_UNIT.log10();
+    let result = format!("{:.1}", BYTES_UNIT.powf(base - base.floor()))
+        .trim_end_matches(".0")
+        .to_owned();
+
+    [&result, BYTES_SUFFIX[base.floor() as usize]].join("")
+}
+
 pub fn now() -> u64 {
     Local::now().timestamp() as u64
+}
+
+pub fn now_millis() -> u64 {
+    Local::now().timestamp_millis() as u64
 }
 
 #[cfg(test)]
@@ -94,5 +115,28 @@ mod tests {
         assert_eq!(format_elapsed(Duration::from_secs(5)), "5.00s");
         assert_eq!(format_elapsed(Duration::from_secs(65)), "1.08min");
         assert_eq!(format_elapsed(Duration::from_secs(3665)), "1.02h");
+    }
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(0), "0");
+        assert_eq!(format_bytes(1), "1");
+        assert_eq!(format_bytes(123), "123");
+
+        assert_eq!(format_bytes(1024), "1k");
+        assert_eq!(format_bytes(1024 * 1024), "1M");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1G");
+
+        assert_eq!(format_bytes(1536), "1.5k"); // 1.5 KiB
+        assert_eq!(format_bytes(2560), "2.5k"); // 2.5 KiB
+        assert_eq!(format_bytes(1536 * 1024), "1.5M"); // 1.5 MiB
+
+        assert_eq!(format_bytes(1024 * 1024 * 1024 * 1024), "1T");
+
+        assert_eq!(format_bytes(1023), "1023");
+        assert_eq!(format_bytes(1024 * 1024 - 1), "1024k");
+
+        assert_eq!(format_bytes(1025), "1k");
+        assert_eq!(format_bytes(1024 * 1024 + 1), "1M");
     }
 }

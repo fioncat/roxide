@@ -9,15 +9,6 @@ use crate::config::remote::RemoteConfig;
 
 use super::{Command, ConfigArgs};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigDisplay {
-    pub base: Config,
-
-    pub remotes: Vec<RemoteConfig>,
-
-    pub hooks: HooksConfig,
-}
-
 #[derive(Debug, Args)]
 pub struct ConfigCommand {
     #[clap(flatten)]
@@ -40,4 +31,13 @@ impl Command for ConfigCommand {
         println!("{json}");
         Ok(())
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ConfigDisplay {
+    pub base: Config,
+
+    pub remotes: Vec<RemoteConfig>,
+
+    pub hooks: HooksConfig,
 }

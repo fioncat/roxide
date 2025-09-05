@@ -1,5 +1,6 @@
 mod config;
 mod home;
+mod scan;
 
 use std::sync::Arc;
 
@@ -31,6 +32,7 @@ pub struct App {
 pub enum Commands {
     Config(config::ConfigCommand),
     Home(home::HomeCommand),
+    Scan(scan::ScanCommand),
 }
 
 #[async_trait]
@@ -39,6 +41,7 @@ impl Command for App {
         match self.command {
             Commands::Config(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
+            Commands::Scan(cmd) => cmd.run().await,
         }
     }
 }

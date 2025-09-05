@@ -1,214 +1,376 @@
+use std::fmt::Debug;
 use std::fs;
-use std::mem::take;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use tokio::sync::{broadcast, mpsc};
+use crossbeam::channel::{self, Receiver, Sender};
+use crossbeam::select;
 
-pub struct ScanItem {
+use crate::debug;
+
+pub struct ScanFile {
     pub path: PathBuf,
     pub metadata: fs::Metadata,
 }
 
-pub trait ScanTask: Send + Sync {
-    fn run(&self, files: Vec<ScanItem>) -> Result<()>;
+pub trait ScanHandler<T: Send + Sync + Clone>: Send + Sync {
+    fn handle(&self, files: Vec<ScanFile>, data: T) -> Result<()>;
+
+    fn should_skip(&self, dir: &Path, data: T) -> Result<bool>;
 }
 
-struct Dispatcher {
-    workers_count: usize,
-
-    to_handle: Vec<PathBuf>,
-
-    notify: broadcast::Sender<bool>,
-    work_queue: Arc<Mutex<Vec<Option<PathBuf>>>>,
-
-    feedback: mpsc::Receiver<Result<Vec<PathBuf>>>,
+#[derive(Debug)]
+pub struct Task<T: Send + Sync + Clone + Debug> {
+    pub path: PathBuf,
+    pub data: T,
 }
 
-impl Dispatcher {
-    async fn wait(&mut self) -> Result<()> {
-        let mut result = Ok(());
+struct Dispatcher<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = Task<T>>> {
+    bootstrap_tasks: Option<I>,
+
+    tasks: Sender<Task<T>>,
+    stops: Vec<Sender<()>>,
+
+    results: Receiver<Result<Vec<Task<T>>>>,
+
+    dispatched: usize,
+}
+
+impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = Task<T>>> Dispatcher<T, I> {
+    fn wait(&mut self) -> Result<()> {
+        debug!("[scan] Dispatcher start");
         loop {
-            match self.dispatch().await {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(e) => {
-                    result = Err(e);
-                    break;
-                }
+            self.dispatch()?;
+            if self.dispatched == 0 {
+                debug!("[scan] Dispatcher: no more task to handle, stop");
+                return Ok(());
             }
         }
-        self.notify.send(false).unwrap();
-        result
     }
 
-    async fn dispatch(&mut self) -> Result<bool> {
-        if self.to_handle.is_empty() {
-            return Ok(false);
-        }
-
-        let mut dispatched: usize = 0;
-        {
-            let mut work_queue = self.work_queue.lock().unwrap();
-            for i in 0..self.workers_count {
-                let Some(path) = self.to_handle.pop() else {
-                    break;
-                };
-                dispatched += 1;
-                work_queue[i] = Some(path);
+    fn dispatch(&mut self) -> Result<()> {
+        if let Some(tasks) = self.bootstrap_tasks.take() {
+            for task in tasks {
+                debug!("[scan] Dispatcher: send bootstrap task {task:?} to workers");
+                self.tasks.send(task).unwrap();
+                self.dispatched += 1;
             }
         }
 
-        self.notify.send(true).unwrap();
+        let sub_tasks = self.results.recv().unwrap()?;
+        self.dispatched -= 1;
 
-        let mut err = None;
-        for _ in 0..dispatched {
-            let result = self.feedback.recv().await.unwrap();
-            match result {
-                Ok(dirs) => self.to_handle.extend(dirs),
-                Err(e) => err = Some(e),
-            }
-        }
-        if let Some(e) = err {
-            return Err(e);
+        for task in sub_tasks {
+            debug!("[scan] Dispatcher: send sub task {task:?} to workers");
+            self.tasks.send(task).unwrap();
+            self.dispatched += 1;
         }
 
-        Ok(true)
+        debug!("[scan] Dispatche done, dispatched: {}", self.dispatched);
+        Ok(())
+    }
+
+    fn stop(&self) {
+        for stop in self.stops.iter() {
+            stop.send(()).unwrap();
+        }
     }
 }
 
-struct Worker {
+struct Worker<T: Send + Sync + Clone + Debug> {
     index: usize,
 
-    task: Arc<dyn ScanTask>,
+    tasks: Receiver<Task<T>>,
+    stop: Receiver<()>,
 
-    notify: broadcast::Receiver<bool>,
-    work_queue: Arc<Mutex<Vec<Option<PathBuf>>>>,
+    handler: Arc<dyn ScanHandler<T>>,
 
-    feedback: mpsc::Sender<Result<Vec<PathBuf>>>,
+    results: Sender<Result<Vec<Task<T>>>>,
 }
 
-impl Worker {
-    async fn run(&mut self) {
+impl<T: Send + Sync + Clone + Debug> Worker<T> {
+    fn run(&mut self) {
+        debug!("[scan] Worker {} start", self.index);
         loop {
-            let shoud_continue = self.notify.recv().await.unwrap();
-            if !shoud_continue {
-                break;
-            }
-
-            let path = {
-                let mut work_queue = self.work_queue.lock().unwrap();
-                take(&mut work_queue[self.index])
-            };
-
-            if let Some(path) = path {
-                let result = self.handle(path);
-                self.feedback.send(result).await.unwrap();
+            select! {
+                recv(self.tasks) -> task => {
+                    let path = task.unwrap();
+                    let result = self.handle(path);
+                    self.results.send(result).unwrap();
+                },
+                recv(self.stop) -> _ => {
+                    debug!("[scan] Worker {} stop", self.index);
+                    return;
+                },
             }
         }
     }
 
-    fn handle(&self, path: PathBuf) -> Result<Vec<PathBuf>> {
+    fn handle(&self, task: Task<T>) -> Result<Vec<Task<T>>> {
+        debug!(
+            "[scan] Worker {} begin to handle task: {task:?}",
+            self.index
+        );
+        let Task { path, data } = task;
         if !path.exists() {
-            bail!("path {path:?} does not exist");
-        }
-        let real_path = fs::canonicalize(&path)
-            .with_context(|| format!("failed to get real path for {path:?}"))?;
-        if !real_path.exists() {
-            bail!("path {real_path:?} does not exist");
+            bail!("path does not exist: {:?}", path.display());
         }
 
-        let metadata = fs::metadata(&real_path)
-            .with_context(|| format!("failed to get metadata for {real_path:?}"))?;
+        let metadata = fs::metadata(&path)
+            .with_context(|| format!("failed to get metadata for path: {:?}", path.display()))?;
 
         if metadata.is_file() {
-            self.task.run(vec![ScanItem {
-                path: real_path,
-                metadata,
-            }])?;
+            debug!(
+                "[scan] Worker {}: task is a file, handle it directly",
+                self.index
+            );
+            self.handler
+                .handle(vec![ScanFile { path, metadata }], data.clone())?;
+            return Ok(vec![]);
+        }
+
+        if !metadata.is_dir() {
+            // TODO: Handle symlink
+            debug!("[scan] Worker {}: task is a symlink, skip it", self.index);
             return Ok(vec![]);
         }
 
         let mut sub_dirs = vec![];
-        let mut files = vec![];
-        let ents = fs::read_dir(&real_path)
-            .with_context(|| format!("failed to read directory {real_path:?}"))?;
+        let mut sub_files = vec![];
+        let ents = fs::read_dir(&path)
+            .with_context(|| format!("failed to read dir {:?}", path.display()))?;
         for ent in ents {
-            let ent = ent.with_context(|| format!("failed to read entry in {real_path:?}"))?;
-            let name = ent.file_name();
-            let sub_path = real_path.join(&name);
-            let sub_metadata = ent
-                .metadata()
-                .with_context(|| format!("failed to get metadata for {sub_path:?}"))?;
+            let ent =
+                ent.with_context(|| format!("failed to read dir entry in {:?}", path.display()))?;
+            let sub_path = path.join(ent.file_name());
+            let sub_metadata = ent.metadata().with_context(|| {
+                format!("failed to get metadata for path: {:?}", sub_path.display())
+            })?;
 
-            if sub_metadata.is_dir() {
-                sub_dirs.push(sub_path);
-            } else if sub_metadata.is_file() {
-                files.push(ScanItem {
+            if sub_metadata.is_file() {
+                debug!(
+                    "[scan] Worker {}: task sub entry {:?} is a file, add to handle list",
+                    self.index,
+                    sub_path.display()
+                );
+                sub_files.push(ScanFile {
                     path: sub_path,
                     metadata: sub_metadata,
                 });
+                continue;
             }
+
+            if !sub_metadata.is_dir() {
+                // TODO: Handle symlink
+                debug!(
+                    "[scan] Worker {}: task sub entry {:?} is a symlink, skip",
+                    self.index,
+                    sub_path.display()
+                );
+                continue;
+            }
+
+            if self.handler.should_skip(&sub_path, data.clone())? {
+                debug!(
+                    "[scan] Worker {}: task sub dir {:?} ignored by handler",
+                    self.index,
+                    sub_path.display()
+                );
+                continue;
+            }
+
+            debug!(
+                "[scan] Worker {}: task sub dir {:?} will continue to read",
+                self.index,
+                sub_path.display()
+            );
+            sub_dirs.push(Task {
+                path: sub_path,
+                data: data.clone(),
+            });
         }
 
-        if !files.is_empty() {
-            self.task.run(files)?;
+        if !sub_files.is_empty() {
+            debug!("[scan] Worker {}: handle files", self.index);
+            self.handler.handle(sub_files, data.clone())?;
         }
 
+        debug!("[scan] Worker {}: handle done", self.index);
         Ok(sub_dirs)
     }
 }
 
-pub async fn scan_files<T, I, P>(task: T, files: I) -> Result<T>
+pub async fn scan_files<I, H, S>(paths: I, handler: H) -> Result<H>
 where
-    T: ScanTask + std::fmt::Debug + 'static,
-    I: IntoIterator<Item = P>,
-    P: AsRef<Path>,
+    I: IntoIterator<Item = S>,
+    H: ScanHandler<()> + std::fmt::Debug + 'static,
+    S: AsRef<Path>,
 {
-    let files = files
+    let tasks = paths
         .into_iter()
-        .map(|p| p.as_ref().to_path_buf())
+        .map(|path| Task {
+            path: PathBuf::from(path.as_ref()),
+            data: (),
+        })
         .collect::<Vec<_>>();
-    let task = Arc::new(task);
+    scan_files_with_data(tasks, handler).await
+}
 
-    let workers_count = num_cpus::get();
-    assert!(workers_count > 0);
+pub async fn scan_files_with_data<I, H, T>(tasks: I, handler: H) -> Result<H>
+where
+    I: IntoIterator<Item = Task<T>> + Debug,
+    H: ScanHandler<T> + Debug + 'static,
+    T: Send + Sync + Clone + Debug + 'static,
+{
+    debug!("[scan] Begin to scan tasks: {tasks:?}");
+    let handler = Arc::new(handler);
 
-    let (notify_tx, _) = broadcast::channel(workers_count);
-    let (feedback_tx, feedback_rx) = mpsc::channel(workers_count);
+    let worker_count = num_cpus::get();
+    assert!(worker_count > 0);
+    debug!("[scan] Worker count: {worker_count}");
 
-    let work_queue = Arc::new(Mutex::new(vec![None; workers_count]));
+    let (tasks_tx, tasks_rx) = channel::unbounded();
+    let (stop_tx, stop_rx) = channel::unbounded();
+    let (results_tx, results_rx) = channel::unbounded();
 
-    let mut dispatcher = Dispatcher {
-        workers_count,
-        to_handle: files,
-        notify: notify_tx,
-        work_queue: work_queue.clone(),
-        feedback: feedback_rx,
-    };
-
-    let mut handlers = vec![];
-    for index in 0..workers_count {
+    let mut stops = Vec::with_capacity(worker_count);
+    let mut handlers = Vec::with_capacity(worker_count);
+    for i in 0..worker_count {
         let mut worker = Worker {
-            index,
-            task: task.clone(),
-            notify: dispatcher.notify.subscribe(),
-            work_queue: work_queue.clone(),
-            feedback: feedback_tx.clone(),
+            index: i,
+            tasks: tasks_rx.clone(),
+            stop: stop_rx.clone(),
+            handler: handler.clone(),
+            results: results_tx.clone(),
         };
+        stops.push(stop_tx.clone());
+
         let handler = tokio::spawn(async move {
-            worker.run().await;
+            worker.run();
         });
         handlers.push(handler);
     }
 
-    let result = dispatcher.wait().await;
+    let mut dispatcher = Dispatcher {
+        bootstrap_tasks: Some(tasks),
+        tasks: tasks_tx,
+        stops,
+        results: results_rx,
+        dispatched: 0,
+    };
+    let result = dispatcher.wait();
+    dispatcher.stop();
+    debug!("[scan] Dispatch done, wait workers stop");
     for handler in handlers {
         handler.await.unwrap();
     }
     result?;
 
-    let task = Arc::try_unwrap(task).expect("task should be able to unwrap");
-    Ok(task)
+    let handler = Arc::try_unwrap(handler).unwrap();
+    debug!("[scan] Workers stopped, new handler: {handler:?}");
+    Ok(handler)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct TestHandler {
+        files: Mutex<Vec<PathBuf>>,
+    }
+
+    impl ScanHandler<Arc<String>> for TestHandler {
+        fn handle(&self, files: Vec<ScanFile>, data: Arc<String>) -> Result<()> {
+            let root = PathBuf::from("tests").join(data.as_str());
+            let root = fs::canonicalize(root).unwrap();
+
+            let mut all_files = self.files.lock().unwrap();
+            for file in files {
+                assert!(file.path.starts_with(&root));
+                all_files.push(file.path);
+            }
+            Ok(())
+        }
+
+        fn should_skip(&self, _dir: &Path, data: Arc<String>) -> Result<bool> {
+            if data.as_str() == "scan_skip" {
+                return Ok(true);
+            }
+            Ok(false)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")] // We must use multi thread when using crossbeam
+    async fn test_scan() {
+        let paths = [
+            "scan_dir0",
+            "scan_dir0/subdir0",
+            "scan_dir0/subdir1",
+            "scan_dir0/subdir2",
+            "scan_dir0/empty",
+            "scan_dir0/subdir0/subdir3",
+            "scan_dir0/subdir0/file0.txt",
+            "scan_dir0/subdir0/file1.txt",
+            "scan_dir0/subdir0/subdir3/file2.txt",
+            "scan_dir0/subdir0/subdir3/file3.txt",
+            "scan_dir0/subdir1/file4.txt",
+            "scan_dir0/subdir2/file5.txt",
+            "scan_dir0/file6.txt",
+            "scan_dir0/file7.txt",
+            "scan_dir1",
+            "scan_dir1/file0.txt",
+            "scan_dir1/file1.txt",
+            "scan_dir1/file2.txt",
+            "scan_skip",
+            "scan_skip/file0.txt",
+            "scan_skip/subdir",
+            "scan_skip/subdir/file1.text",
+            "scan_skip/subdir/file2.text",
+        ];
+        let _ = fs::remove_dir_all("tests/scan_dir0");
+        let _ = fs::remove_dir_all("tests/scan_dir1");
+        let _ = fs::remove_dir_all("tests/scan_skip");
+        let mut expected = vec![];
+        for path in paths {
+            let path = PathBuf::from("tests").join(path);
+            if path.ends_with(".txt") {
+                fs::write(&path, b"test content").unwrap();
+
+                if path.starts_with("tests/scan_skip/subdir") {
+                    continue;
+                }
+
+                let path = fs::canonicalize(path).unwrap();
+                expected.push(path);
+            } else {
+                fs::create_dir_all(&path).unwrap();
+            }
+        }
+
+        let handler = TestHandler {
+            files: Mutex::new(vec![]),
+        };
+
+        let tasks = [
+            Task {
+                path: fs::canonicalize("tests/scan_dir0").unwrap(),
+                data: Arc::new("scan_dir0".to_string()),
+            },
+            Task {
+                path: fs::canonicalize("tests/scan_dir1").unwrap(),
+                data: Arc::new("scan_dir1".to_string()),
+            },
+            Task {
+                path: fs::canonicalize("tests/scan_skip").unwrap(),
+                data: Arc::new("scan_skip".to_string()),
+            },
+        ];
+        let handler = scan_files_with_data(tasks, handler).await.unwrap();
+        let results = handler.files.lock().unwrap();
+        assert_eq!(results.as_ref(), expected);
+    }
 }

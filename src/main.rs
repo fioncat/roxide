@@ -10,10 +10,12 @@ mod db;
 mod exec;
 mod filelock;
 mod format;
+mod ignore;
 mod repo;
+mod scan;
 mod term;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let result = cmd::run().await;
     if result.code == 0 {

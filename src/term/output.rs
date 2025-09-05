@@ -56,7 +56,7 @@ macro_rules! warn {
 macro_rules! cursor_up {
     () => {
         if !cfg!(test) {
-            eprintln!("\x1b[A\x1b[K");
+            eprint!("\x1b[A\x1b[K");
         }
     };
 }
