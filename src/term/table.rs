@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use pad::PadStr;
 
 /// A utility for rendering data in an ASCII table format.
@@ -7,19 +9,19 @@ use pad::PadStr;
 /// - Dynamic column widths based on content
 /// - Unicode character width handling
 /// - Automatic padding and alignment
-pub struct Table {
+pub struct Table<'a> {
     ncol: usize,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Cow<'a, str>>>,
     headless: bool,
 }
 
-impl Table {
+impl<'a> Table<'a> {
     /// Creates a new table with the specified initial capacity.
     ///
     /// # Arguments
     /// * `size` - Initial capacity for rows
     /// * `headless` - If true, first row is treated as data. If false, first row is treated as header.
-    pub fn with_capacity(size: usize, headless: bool) -> Table {
+    pub fn with_capacity(size: usize, headless: bool) -> Table<'a> {
         Table {
             ncol: 0,
             rows: Vec::with_capacity(size),
@@ -37,7 +39,7 @@ impl Table {
     ///
     /// # Panics
     /// Panics if a row has a different number of columns than the first row
-    pub fn add(&mut self, row: Vec<String>) {
+    pub fn add(&mut self, row: Vec<Cow<'a, str>>) {
         if self.ncol == 0 {
             self.ncol = row.len();
             if self.headless {
@@ -47,6 +49,11 @@ impl Table {
             panic!("unexpected row len");
         }
         self.rows.push(row);
+    }
+
+    pub fn add_static(&mut self, row: Vec<&'a str>) {
+        let cow_row: Vec<Cow<'a, str>> = row.into_iter().map(Cow::from).collect();
+        self.add(cow_row);
     }
 
     /// Renders the table to a string.
@@ -111,92 +118,64 @@ mod tests {
 
     #[test]
     fn test_table() {
-        let test_cases = [
-            // Test basic table
-            (
-                vec![
-                    vec!["Name".to_string(), "Age".to_string()],
-                    vec!["Alice".to_string(), "20".to_string()],
+        struct Case {
+            rows: Vec<Vec<&'static str>>,
+            headless: bool,
+            expect: &'static str,
+        }
+        let cases = [
+            Case {
+                rows: vec![vec!["Name", "Age"], vec!["Alice", "20"]],
+                headless: false,
+                expect: "+-------+-----+\n\
+                         | Name  | Age |\n\
+                         +-------+-----+\n\
+                         | Alice | 20  |\n\
+                         +-------+-----+\n",
+            },
+            Case {
+                rows: vec![vec!["名字", "年龄"], vec!["张三", "20"]],
+                headless: false,
+                expect: "+------+------+\n\
+                         | 名字 | 年龄 |\n\
+                         +------+------+\n\
+                         | 张三 | 20   |\n\
+                         +------+------+\n",
+            },
+            Case {
+                rows: vec![vec!["Data1", "Data2"], vec!["Value1", "Value2"]],
+                headless: true,
+                expect: "+--------+--------+\n\
+                         | Value1 | Value2 |\n\
+                         +--------+--------+\n",
+            },
+            Case {
+                rows: vec![
+                    vec!["Name", "Age", "City"],
+                    vec!["Alice", "20", "New York"],
+                    vec!["Bob", "25", "London"],
+                    vec!["Carol", "30", "Tokyo"],
+                    vec!["David", "35", "Paris"],
                 ],
-                false,
-                "+-------+-----+\n\
-                 | Name  | Age |\n\
-                 +-------+-----+\n\
-                 | Alice | 20  |\n\
-                 +-------+-----+\n",
-            ),
-            // Test unicode width
-            (
-                vec![
-                    vec!["名字".to_string(), "年龄".to_string()],
-                    vec!["张三".to_string(), "20".to_string()],
-                ],
-                false,
-                "+------+------+\n\
-                 | 名字 | 年龄 |\n\
-                 +------+------+\n\
-                 | 张三 | 20   |\n\
-                 +------+------+\n",
-            ),
-            // Test headless table
-            (
-                vec![
-                    vec!["Data1".to_string(), "Data2".to_string()],
-                    vec!["Value1".to_string(), "Value2".to_string()],
-                ],
-                true,
-                "+--------+--------+\n\
-                 | Value1 | Value2 |\n\
-                 +--------+--------+\n",
-            ),
-            // Test multi-line table
-            (
-                vec![
-                    vec![
-                        "Name".to_string(),
-                        "Age".to_string(),
-                        "City".to_string(),
-                    ],
-                    vec![
-                        "Alice".to_string(),
-                        "20".to_string(),
-                        "New York".to_string(),
-                    ],
-                    vec![
-                        "Bob".to_string(),
-                        "25".to_string(),
-                        "London".to_string(),
-                    ],
-                    vec![
-                        "Carol".to_string(),
-                        "30".to_string(),
-                        "Tokyo".to_string(),
-                    ],
-                    vec![
-                        "David".to_string(),
-                        "35".to_string(),
-                        "Paris".to_string(),
-                    ],
-                ],
-                false,
-                "+-------+-----+----------+\n\
-                 | Name  | Age | City     |\n\
-                 +-------+-----+----------+\n\
-                 | Alice | 20  | New York |\n\
-                 | Bob   | 25  | London   |\n\
-                 | Carol | 30  | Tokyo    |\n\
-                 | David | 35  | Paris    |\n\
-                 +-------+-----+----------+\n",
-            ),
+                headless: false,
+                expect: "+-------+-----+----------+\n\
+                         | Name  | Age | City     |\n\
+                         +-------+-----+----------+\n\
+                         | Alice | 20  | New York |\n\
+                         | Bob   | 25  | London   |\n\
+                         | Carol | 30  | Tokyo    |\n\
+                         | David | 35  | Paris    |\n\
+                         +-------+-----+----------+\n",
+            },
         ];
 
-        for (rows, headless, expected) in test_cases {
-            let mut table = Table::with_capacity(rows.len(), headless);
-            for row in rows {
-                table.add(row);
+        for case in cases {
+            let mut table = Table::with_capacity(case.rows.len(), case.headless);
+            for row in case.rows {
+                table.add_static(row);
             }
             let result = table.render();
-            assert_eq!(result, expected);
+            assert_eq!(result, case.expect);
         }
     }
 
@@ -204,7 +183,7 @@ mod tests {
     #[should_panic(expected = "unexpected row len")]
     fn test_invalid_column_count() {
         let mut table = Table::with_capacity(2, false);
-        table.add(vec!["Col1".to_string(), "Col2".to_string()]);
-        table.add(vec!["Value1".to_string()]); // Should panic
+        table.add_static(vec!["Col1", "Col2"]);
+        table.add_static(vec!["Value1"]); // Should panic
     }
 }

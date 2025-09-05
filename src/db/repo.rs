@@ -7,6 +7,8 @@ use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::debug;
+use crate::format::format_time;
+use crate::term::list::ListItem;
 
 /// The database model for a repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -121,6 +123,39 @@ impl Repository {
             visited_count: row.get(7)?,
             new_created: false,
         })
+    }
+}
+
+impl DisplayLevel {
+    pub fn titles(&self) -> Vec<&'static str> {
+        match self {
+            Self::Remote => vec!["Remote", "Owner", "Name"],
+            Self::Owner => vec!["Owner", "Name"],
+            Self::Name => vec!["Name"],
+        }
+    }
+}
+
+impl ListItem for Repository {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "Remote" => Cow::Borrowed(&self.remote),
+            "Owner" => Cow::Borrowed(&self.owner),
+            "Name" => Cow::Borrowed(&self.name),
+            "Flags" => {
+                let mut flags = vec![];
+                if self.sync {
+                    flags.push("sync");
+                }
+                if self.pin {
+                    flags.push("pin");
+                }
+                flags.join(",").into()
+            }
+            "LastVisited" => format_time(self.last_visited_at).into(),
+            "Visited" => self.visited_count.to_string().into(),
+            _ => Cow::Borrowed(""),
+        }
     }
 }
 

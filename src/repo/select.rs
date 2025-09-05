@@ -9,6 +9,7 @@ use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, LimitOptions, QueryOptions, Repository};
 use crate::debug;
 use crate::exec::fzf;
+use crate::term::list::List;
 
 pub struct RepoSelector<'a> {
     ctx: Arc<ConfigContext>,
@@ -524,6 +525,22 @@ impl<'a> RepoSelector<'a> {
         };
         debug!("[select] Select many result: {result:?}");
         Ok(result)
+    }
+}
+
+impl List<Repository> for RepoList {
+    fn titles(&self) -> Vec<&'static str> {
+        let mut titles = self.level.titles();
+        titles.extend(vec!["Flags", "Visited", "VisitedAt"]);
+        titles
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[Repository] {
+        self.items.as_ref()
     }
 }
 

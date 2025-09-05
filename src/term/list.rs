@@ -1,44 +1,82 @@
-use anyhow::Result;
-use serde::{Serialize, de::DeserializeOwned};
+use std::borrow::Cow;
 
+use anyhow::Result;
+use clap::Args;
+use serde::Serialize;
+
+use crate::db::repo::LimitOptions;
 use crate::term::table::Table;
 
-pub trait ListItem {
-    fn titles() -> Vec<&'static str>;
-    fn row(self) -> Vec<String>;
+pub trait List<T: ListItem> {
+    fn titles(&self) -> Vec<&'static str>;
+
+    fn total(&self) -> u32;
+
+    fn items(&self) -> &[T];
 }
 
-pub fn render_list<T>(
-    list: Vec<T>,
-    page: usize,
-    page_size: usize,
-    total: usize,
+pub trait ListItem: Serialize {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str>;
+}
+
+#[derive(Debug, Clone, Copy, Args)]
+pub struct ListArgs {
+    #[arg(long, short)]
+    pub page: u32,
+
+    #[arg(long, short = 's', default_value = "20")]
+    pub page_size: u32,
+}
+
+impl ListArgs {
+    fn limit_options(&self) -> LimitOptions {
+        let offset = (self.page - 1) * self.page_size;
+        let limit = self.page_size;
+        LimitOptions { offset, limit }
+    }
+}
+
+pub fn render_list<L, T>(
+    list: L,
     json: bool,
     headless: bool,
+    args: Option<ListArgs>,
 ) -> Result<String>
 where
-    T: Serialize + DeserializeOwned + ListItem,
+    L: List<T>,
+    T: ListItem,
 {
+    let items = list.items();
     if json {
-        let json = serde_json::to_string_pretty(&list)?;
+        let json = serde_json::to_string_pretty(items)?;
         return Ok(json);
     }
-    if list.is_empty() {
+    if items.is_empty() {
         return Ok(String::from("<empty list>"));
     }
 
-    let mut table = Table::with_capacity(list.len(), headless);
-    let titles = T::titles();
-    table.add(titles.iter().map(|s| s.to_string()).collect());
+    let titles = list.titles();
+    let total = list.total();
 
-    for item in list {
-        let row = item.row();
+    let mut table = Table::with_capacity(items.len(), headless);
+    table.add_static(titles.clone());
+
+    for item in items {
+        let mut row = Vec::with_capacity(titles.len());
+        for title in titles.iter() {
+            let cell = item.row(title);
+            row.push(cell);
+        }
         table.add(row);
     }
 
-    let total_pages = total.div_ceil(page_size);
-    let hint = format!("Page: {page}/{total_pages}, Total: {total}");
-    Ok(format!("{hint}\n{}", table.render()))
+    if let Some(args) = args {
+        let total_pages = total.div_ceil(args.page_size);
+        let hint = format!("Page: {}/{total_pages}, Total: {}", args.page, total);
+        return Ok(format!("{hint}\n{}", table.render()));
+    }
+
+    Ok(table.render())
 }
 
 #[cfg(test)]
@@ -55,21 +93,55 @@ mod tests {
     }
 
     impl ListItem for User {
-        fn titles() -> Vec<&'static str> {
+        fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+            match title {
+                "ID" => self.id.to_string().into(),
+                "Name" => Cow::Borrowed(&self.name),
+                "Email" => Cow::Borrowed(&self.email),
+                _ => Cow::Borrowed(""),
+            }
+        }
+    }
+
+    struct UserList {
+        users: Vec<User>,
+        total: u32,
+    }
+
+    impl List<User> for UserList {
+        fn titles(&self) -> Vec<&'static str> {
             vec!["ID", "Name", "Email"]
         }
 
-        fn row(self) -> Vec<String> {
-            vec![self.id.to_string(), self.name, self.email]
+        fn total(&self) -> u32 {
+            self.total
+        }
+
+        fn items(&self) -> &[User] {
+            self.users.as_ref()
         }
     }
 
     #[test]
     fn test_render() {
-        let test_cases = [
-            (vec![], 1, 5, 0, false, "<empty list>"),
-            (
-                vec![
+        struct Case {
+            users: Vec<User>,
+            headless: bool,
+            total: u32,
+            args: Option<ListArgs>,
+            expect: &'static str,
+        }
+
+        let cases = [
+            Case {
+                users: vec![],
+                headless: false,
+                total: 0,
+                args: None,
+                expect: "<empty list>",
+            },
+            Case {
+                users: vec![
                     User {
                         id: 1,
                         name: "Alice".to_string(),
@@ -86,21 +158,23 @@ mod tests {
                         email: "test3@33.com".to_string(),
                     },
                 ],
-                2,
-                3,
-                30,
-                false,
-                "Page: 2/10, Total: 30\n\
-                 +----+---------+---------------+\n\
-                 | ID | Name    | Email         |\n\
-                 +----+---------+---------------+\n\
-                 | 1  | Alice   | test1@123.com |\n\
-                 | 2  | Bob     | test2@123.com |\n\
-                 | 3  | Charlie | test3@33.com  |\n\
-                 +----+---------+---------------+\n",
-            ),
-            (
-                vec![
+                headless: false,
+                total: 30,
+                args: Some(ListArgs {
+                    page: 2,
+                    page_size: 3,
+                }),
+                expect: "Page: 2/10, Total: 30\n\
+                         +----+---------+---------------+\n\
+                         | ID | Name    | Email         |\n\
+                         +----+---------+---------------+\n\
+                         | 1  | Alice   | test1@123.com |\n\
+                         | 2  | Bob     | test2@123.com |\n\
+                         | 3  | Charlie | test3@33.com  |\n\
+                         +----+---------+---------------+\n",
+            },
+            Case {
+                users: vec![
                     User {
                         id: 1,
                         name: "Alice".to_string(),
@@ -112,21 +186,27 @@ mod tests {
                         email: "bob@example.com".to_string(),
                     },
                 ],
-                1,
-                10,
-                2,
-                true,
-                "Page: 1/1, Total: 2\n\
-                 +---+-------+-------------------+\n\
-                 | 1 | Alice | alice@example.com |\n\
-                 | 2 | Bob   | bob@example.com   |\n\
-                 +---+-------+-------------------+\n",
-            ),
+                headless: true,
+                total: 2,
+                args: Some(ListArgs {
+                    page: 1,
+                    page_size: 2,
+                }),
+                expect: "Page: 1/1, Total: 2\n\
+                         +---+-------+-------------------+\n\
+                         | 1 | Alice | alice@example.com |\n\
+                         | 2 | Bob   | bob@example.com   |\n\
+                         +---+-------+-------------------+\n",
+            },
         ];
 
-        for (list, page, page_size, total, headless, expected) in test_cases {
-            let result = render_list(list, page, page_size, total, false, headless).unwrap();
-            assert_eq!(result, expected);
+        for case in cases {
+            let list = UserList {
+                users: case.users,
+                total: case.total,
+            };
+            let result = render_list(list, false, case.headless, case.args).unwrap();
+            assert_eq!(result, case.expect);
         }
     }
 
@@ -145,7 +225,9 @@ mod tests {
             },
         ];
         let expected = serde_json::to_string_pretty(&users).unwrap();
-        let result = render_list(users, 1, 10, 2, true, false).unwrap();
+        let total = users.len() as u32;
+        let list = UserList { users, total };
+        let result = render_list(list, true, false, None).unwrap();
         assert_eq!(result, expected);
     }
 }
