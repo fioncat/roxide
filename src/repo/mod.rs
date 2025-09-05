@@ -47,7 +47,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_worspace_path() {
+    fn test_parse_workspace_path() {
         let workspace = "/home/user/dev";
         let cases = [
             (

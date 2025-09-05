@@ -213,8 +213,8 @@ mod tests {
             ("$HOME/Desktop/", format!("{home}/Desktop/")),
             ("${HOME}/Desktop/", format!("{home}/Desktop/")),
             ("NoEnvHere", "NoEnvHere".to_string()),
-            ("$NOEXISTENT_ENV", "$NOEXISTENT_ENV".to_string()),
-            ("${NOEXISTENT_ENV}", "${NOEXISTENT_ENV}".to_string()),
+            ("$NONEXISTENT_ENV", "$NONEXISTENT_ENV".to_string()),
+            ("${NONEXISTENT_ENV}", "${NONEXISTENT_ENV}".to_string()),
         ];
 
         for (input, expected) in test_cases {

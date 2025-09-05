@@ -57,17 +57,17 @@ impl DiskUsage {
         let total_formatted = format_bytes(self.files_usage);
         let mut usage_width = total_formatted.len();
 
-        let mut formated_items = Vec::with_capacity(self.items.len());
+        let mut formatted_items = Vec::with_capacity(self.items.len());
         for (path, usage) in self.items {
-            let formated = format_bytes(usage);
-            if formated.len() > usage_width {
-                usage_width = formated.len();
+            let formatted = format_bytes(usage);
+            if formatted.len() > usage_width {
+                usage_width = formatted.len();
             }
-            formated_items.push((path, formated));
+            formatted_items.push((path, formatted));
         }
 
-        let mut aligned_items = Vec::with_capacity(formated_items.len());
-        for (path, usage) in formated_items {
+        let mut aligned_items = Vec::with_capacity(formatted_items.len());
+        for (path, usage) in formatted_items {
             let aligned = usage.pad_to_width_with_alignment(usage_width, pad::Alignment::Right);
             aligned_items.push((path, aligned));
         }
@@ -135,13 +135,13 @@ impl ScanHandler<()> for DiskUsageHandler {
         }
 
         let now = now_millis();
-        let shoud_report = if usage.last_report == 0 {
+        let should_report = if usage.last_report == 0 {
             true
         } else {
             let delta = now.saturating_sub(usage.last_report);
             delta > REPORT_MILL_SECONDS
         };
-        if shoud_report {
+        if should_report {
             cursor_up!();
             outputln!("Scanning {} files", usage.files_count);
             usage.last_report = now;

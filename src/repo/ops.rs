@@ -38,7 +38,7 @@ pub struct RepoOperator<'a, 'b> {
 pub struct SyncResult {
     pub name: String,
 
-    pub uncomitted: usize,
+    pub uncommitted: usize,
 
     pub pushed: Vec<String>,
     pub pulled: Vec<String>,
@@ -348,10 +348,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             "Fetching origin remote",
         )?;
 
-        let uncomitted = count_uncommitted_changes(Some(&self.path), self.mute)?;
-        if uncomitted > 0 {
-            debug!("[op] Repo has {uncomitted} uncommitted changes, skip sync branches");
-            result.uncomitted = uncomitted;
+        let uncommitted = count_uncommitted_changes(Some(&self.path), self.mute)?;
+        if uncommitted > 0 {
+            debug!("[op] Repo has {uncommitted} uncommitted changes, skip sync branches");
+            result.uncommitted = uncommitted;
             return Ok(result);
         }
 
@@ -563,9 +563,9 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 impl SyncResult {
     pub fn render(&self, with_header: bool) -> String {
         let mut fields = vec![];
-        if self.uncomitted > 0 {
+        if self.uncommitted > 0 {
             let flag = style("*").yellow().bold();
-            let field = format!("  {flag} {} dirty", self.uncomitted);
+            let field = format!("  {flag} {} dirty", self.uncommitted);
             fields.push(field);
         }
 
@@ -787,10 +787,10 @@ mod tests {
         let branches = Branch::list(Some(&path), true).unwrap();
         let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
         let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
-        let deatched_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
+        let detached_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
         assert_eq!(push_branch.status, BranchStatus::Ahead);
         assert_eq!(pull_branch.status, BranchStatus::Behind);
-        assert_eq!(deatched_branch.status, BranchStatus::Detached);
+        assert_eq!(detached_branch.status, BranchStatus::Detached);
 
         let result = op.sync().unwrap();
         assert_eq!(
@@ -807,10 +807,10 @@ mod tests {
         let branches = Branch::list(Some(&path), true).unwrap();
         let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
         let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
-        let deatched_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
+        let detached_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
         assert_eq!(push_branch.status, BranchStatus::Sync);
         assert_eq!(pull_branch.status, BranchStatus::Sync);
-        assert_eq!(deatched_branch.status, BranchStatus::Detached);
+        assert_eq!(detached_branch.status, BranchStatus::Detached);
 
         let current = branches.iter().find(|b| b.current).unwrap();
         assert_eq!(current.name, "test-detached");
@@ -831,7 +831,7 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("sync_uncomitted", None);
+        let ctx = context::tests::build_test_context("sync_uncommitted", None);
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
@@ -853,7 +853,7 @@ mod tests {
             result,
             SyncResult {
                 name: "github:fioncat/example".to_string(),
-                uncomitted: 3,
+                uncommitted: 3,
                 ..Default::default()
             }
         );
