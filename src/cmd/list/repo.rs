@@ -36,8 +36,8 @@ pub struct ListRepoCommand {
 #[async_trait]
 impl Command for ListRepoCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run list repo command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run list repo command: {:?}", self);
 
         let selector = RepoSelector::new(ctx.clone(), &self.remote, &self.owner, &self.name);
         let limit = self.list.limit();

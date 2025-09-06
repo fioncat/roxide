@@ -28,8 +28,8 @@ pub struct AttachCommand {
 #[async_trait]
 impl Command for AttachCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run attach command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run attach command: {:?}", self);
         ctx.lock()?;
 
         if ctx.current_dir.starts_with(&ctx.cfg.workspace) {

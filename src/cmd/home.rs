@@ -33,8 +33,8 @@ pub struct HomeCommand {
 #[async_trait]
 impl Command for HomeCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run home command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
 
         let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);

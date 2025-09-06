@@ -111,6 +111,7 @@ pub mod tests {
 
         let result = db
             .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
             .unwrap();
         assert_eq!(result, repo);
     }

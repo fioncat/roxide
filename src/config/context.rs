@@ -224,6 +224,7 @@ pub mod tests {
             .get_db()
             .unwrap()
             .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
             .unwrap();
         assert_eq!(
             repo,

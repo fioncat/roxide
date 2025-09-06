@@ -38,7 +38,7 @@ impl Command for ListCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("ls")
+        clap::Command::new("list")
             .disable_help_flag(true)
             .disable_version_flag(true)
             .subcommands([

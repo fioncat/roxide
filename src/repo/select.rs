@@ -529,7 +529,7 @@ impl<'a> RepoSelector<'a> {
 
     fn get_or_create(&self, remote: &str, owner: &str, name: &str) -> Result<Repository> {
         let db = self.ctx.get_db()?;
-        let repo = db.with_transaction(|tx| tx.repo().get_optional(remote, owner, name))?;
+        let repo = db.with_transaction(|tx| tx.repo().get(remote, owner, name))?;
         Ok(match repo {
             Some(repo) => repo,
             None => self.new_repo(remote, owner, name),

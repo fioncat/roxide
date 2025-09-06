@@ -1,0 +1,84 @@
+use std::sync::Arc;
+
+use anyhow::Result;
+use async_trait::async_trait;
+use clap::Args;
+
+use crate::cmd::complete;
+use crate::cmd::{Command, ConfigArgs};
+use crate::config::context::ConfigContext;
+use crate::db::repo::Repository;
+use crate::repo::ops::RepoOperator;
+use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::term::confirm::confirm_items;
+use crate::{confirm, debug, info};
+
+#[derive(Debug, Args)]
+pub struct RemoveRepoCommand {
+    pub head: Option<String>,
+
+    pub owner: Option<String>,
+
+    pub name: Option<String>,
+
+    #[arg(long, short)]
+    pub recursive: bool,
+
+    #[arg(long, short)]
+    pub force: bool,
+
+    #[clap(flatten)]
+    pub config: ConfigArgs,
+}
+#[async_trait]
+impl Command for RemoveRepoCommand {
+    async fn run(self) -> Result<()> {
+        let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run remove repo command: {:?}", self);
+        ctx.lock()?;
+
+        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+        if !self.recursive {
+            let repo = selector.select_one(false, true).await?;
+            confirm!("Are you sure to remove repository {}", repo.full_name());
+            return self.remove(ctx, repo);
+        }
+
+        let mut opts = SelectManyReposOptions::default();
+        if !self.force {
+            opts.pin = Some(false);
+        }
+        let list = selector.select_many(opts)?;
+        if list.items.is_empty() {
+            info!("No repo to remove");
+            return Ok(());
+        }
+
+        let names = list.display_names();
+        confirm_items(&names, "remove", "removal", "Repo", "Repos")?;
+
+        for repo in list.items {
+            self.remove(ctx.clone(), repo)?;
+        }
+
+        Ok(())
+    }
+
+    fn complete_command() -> clap::Command {
+        clap::Command::new("repo").args(complete::repo_args())
+    }
+}
+
+impl RemoveRepoCommand {
+    fn remove(&self, ctx: Arc<ConfigContext>, repo: Repository) -> Result<()> {
+        let db = ctx.get_db()?;
+        let op = RepoOperator::new(ctx.as_ref(), &repo, false)?;
+        op.remove()?;
+        db.with_transaction(|tx| tx.repo().delete(&repo))?;
+        info!(
+            "Repository {} was removed from disk and database",
+            repo.full_name()
+        );
+        Ok(())
+    }
+}

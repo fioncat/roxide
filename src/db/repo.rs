@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use rusqlite::types::Value;
 use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
@@ -200,28 +200,13 @@ impl<'a> RepositoryHandle<'a> {
         insert(self.tx, repo)
     }
 
-    /// Get a repository by remote, owner and name.
-    pub fn get_optional(
-        &self,
-        remote: &str,
-        owner: &str,
-        name: &str,
-    ) -> Result<Option<Repository>> {
-        get_optional(self.tx, remote, owner, name)
-    }
-
     /// Same as `get_optional`, but returns an error if not found.
-    pub fn get(&self, remote: &str, owner: &str, name: &str) -> Result<Repository> {
+    pub fn get(&self, remote: &str, owner: &str, name: &str) -> Result<Option<Repository>> {
         get(self.tx, remote, owner, name)
     }
 
-    /// Get a repository by path.
-    pub fn get_by_path_optional(&self, path: &str) -> Result<Option<Repository>> {
-        get_by_path_optional(self.tx, path)
-    }
-
     /// Same as `get_by_path_optional`, but returns an error if not found.
-    pub fn get_by_path(&self, path: &str) -> Result<Repository> {
+    pub fn get_by_path(&self, path: &str) -> Result<Option<Repository>> {
         get_by_path(self.tx, path)
     }
 
@@ -343,12 +328,7 @@ FROM repo
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
-fn get_optional(
-    tx: &Transaction,
-    remote: &str,
-    owner: &str,
-    name: &str,
-) -> Result<Option<Repository>> {
+fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Option<Repository>> {
     debug!("[db] Get repo: {remote}:{owner}:{name}");
     let mut stmt = tx.prepare(GET_SQL)?;
     let repo = stmt
@@ -358,34 +338,18 @@ fn get_optional(
     Ok(repo)
 }
 
-fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Repository> {
-    let repo = get_optional(tx, remote, owner, name)?;
-    match repo {
-        Some(repo) => Ok(repo),
-        None => bail!("repo not found"),
-    }
-}
-
 const GET_BY_PATH_SQL: &str = r#"
 SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 WHERE path = ?1
 "#;
 
-fn get_by_path_optional(tx: &Transaction, path: &str) -> Result<Option<Repository>> {
+fn get_by_path(tx: &Transaction, path: &str) -> Result<Option<Repository>> {
     debug!("[db] Get repo by path: {path}");
     let mut stmt = tx.prepare(GET_BY_PATH_SQL)?;
     let repo = stmt.query_row([path], Repository::from_row).optional()?;
     debug!("[db] Result: {repo:?}");
     Ok(repo)
-}
-
-fn get_by_path(tx: &Transaction, path: &str) -> Result<Repository> {
-    let repo = get_by_path_optional(tx, path)?;
-    match repo {
-        Some(repo) => Ok(repo),
-        None => bail!("this path has not been attached to any repo"),
-    }
 }
 
 const UPDATE_SQL: &str = r#"
@@ -856,7 +820,9 @@ pub mod tests {
         let tx = conn.transaction().unwrap();
         let repos = test_repos();
         for repo in repos {
-            let result = get(&tx, &repo.remote, &repo.owner, &repo.name).unwrap();
+            let result = get(&tx, &repo.remote, &repo.owner, &repo.name)
+                .unwrap()
+                .unwrap();
             assert_eq!(result, repo);
         }
     }
@@ -865,7 +831,7 @@ pub mod tests {
     fn test_get_not_found() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repo = get_optional(&tx, "github", "fioncat", "nonexist").unwrap();
+        let repo = get(&tx, "github", "fioncat", "nonexist").unwrap();
         assert_eq!(repo, None);
     }
 
@@ -873,14 +839,14 @@ pub mod tests {
     fn test_update() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let mut repo = get(&tx, "github", "fioncat", "roxide").unwrap();
+        let mut repo = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
         repo.last_visited_at = 9999;
         repo.visited_count = 42;
         update(&tx, &repo).unwrap();
         tx.commit().unwrap();
 
         let tx = conn.transaction().unwrap();
-        let result = get(&tx, "github", "fioncat", "roxide").unwrap();
+        let result = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
         assert_eq!(result, repo);
     }
 
@@ -888,13 +854,13 @@ pub mod tests {
     fn test_delete() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repo = get(&tx, "github", "fioncat", "roxide").unwrap();
+        let repo = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
         delete(&tx, &repo).unwrap();
         tx.commit().unwrap();
 
         let tx = conn.transaction().unwrap();
-        let result = get(&tx, "github", "fioncat", "roxide");
-        assert!(result.err().unwrap().to_string().contains("repo not found"));
+        let result = get(&tx, "github", "fioncat", "roxide").unwrap();
+        assert_eq!(result, None);
     }
 
     #[test]
@@ -1186,10 +1152,10 @@ pub mod tests {
     fn test_get_by_path() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let repo = get_by_path_optional(&tx, "/path/to/nvimdots").unwrap();
-        let expect = get(&tx, "github", "fioncat", "nvimdots").unwrap();
-        assert_eq!(repo, Some(expect));
-        let repo = get_by_path_optional(&tx, "/path/to/nonexist").unwrap();
+        let repo = get_by_path(&tx, "/path/to/nvimdots").unwrap().unwrap();
+        let expect = get(&tx, "github", "fioncat", "nvimdots").unwrap().unwrap();
+        assert_eq!(repo, expect);
+        let repo = get_by_path(&tx, "/path/to/nonexist").unwrap();
         assert_eq!(repo, None);
     }
 

@@ -19,8 +19,8 @@ pub struct ListBranchCommand {
 #[async_trait]
 impl Command for ListBranchCommand {
     async fn run(self) -> Result<()> {
+        self.config.build_ctx()?;
         debug!("[cmd] Run list branch command: {:?}", self);
-        let _ = self.config.build_ctx()?;
 
         let branches = Branch::list(None::<&str>, true)?;
         let (branches, total) = pagination(branches, self.list.limit());

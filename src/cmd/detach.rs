@@ -16,8 +16,8 @@ pub struct DetachCommand {
 #[async_trait]
 impl Command for DetachCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run detach command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run detach command: {:?}", self);
         ctx.lock()?;
 
         if ctx.current_dir.starts_with(&ctx.cfg.workspace) {

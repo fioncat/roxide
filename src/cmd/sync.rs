@@ -38,8 +38,8 @@ pub struct SyncCommand {
 #[async_trait]
 impl Command for SyncCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run sync command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run sync command: {:?}", self);
         ctx.lock()?;
 
         if !self.recursive

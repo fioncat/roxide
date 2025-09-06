@@ -12,6 +12,8 @@ use crate::cmd::Command;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{QueryOptions, RemoteState};
 use crate::debug;
+use crate::exec::git::branch::Branch;
+use crate::exec::git::tag::Tag;
 use crate::term::output;
 
 use super::App;
@@ -44,26 +46,6 @@ pub fn repo_args() -> [Arg; 3] {
     [head_arg(), owner_arg(), name_arg()]
 }
 
-#[inline]
-pub fn head_arg() -> Arg {
-    Arg::new("head").add(ArgValueCompleter::new(head))
-}
-
-#[inline]
-pub fn remote_arg() -> Arg {
-    Arg::new("remote").add(ArgValueCompleter::new(remote))
-}
-
-#[inline]
-pub fn owner_arg() -> Arg {
-    Arg::new("owner").add(ArgValueCompleter::new(owner))
-}
-
-#[inline]
-pub fn name_arg() -> Arg {
-    Arg::new("name").add(ArgValueCompleter::new(name))
-}
-
 fn setup_complete() -> Vec<String> {
     if let Ok(debug) = env::var(COMPLETE_DEBUG_ENV) {
         output::set_debug(debug);
@@ -91,12 +73,17 @@ macro_rules! register_complete {
                         }
                     }
                 }
+
+                #[inline]
+                pub fn [<$param _arg>]() -> Arg {
+                    Arg::new(stringify!($param)).add(ArgValueCompleter::new($param))
+                }
             }
         )+
     };
 }
 
-register_complete!(head, remote, owner, name);
+register_complete!(head, remote, owner, name, branch, tag);
 
 fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete head, current: {current:?}");
@@ -188,6 +175,41 @@ fn complete_name(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionC
         .filter(|n| n.name.starts_with(current))
         .map(|n| CompletionCandidate::new(n.name))
         .collect::<Vec<_>>();
+    debug!("[complete] Results: {candidates:?}");
+    Ok(candidates)
+}
+
+fn complete_branch(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete branch, current: {current:?}");
+    build_context(&args)?;
+
+    let branches = Branch::list(None::<&str>, true)?;
+    debug!("[complete] Branches: {branches:?}");
+
+    let candidates = branches
+        .into_iter()
+        .filter(|b| b.name.starts_with(current))
+        .filter(|b| !b.current)
+        .map(|b| CompletionCandidate::new(b.name))
+        .collect::<Vec<_>>();
+
+    debug!("[complete] Results: {candidates:?}");
+    Ok(candidates)
+}
+
+fn complete_tag(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete tag, current: {current:?}");
+    build_context(&args)?;
+
+    let tags = Tag::list(None::<&str>, true)?;
+    debug!("[complete] Tags: {tags:?}");
+
+    let candidates = tags
+        .into_iter()
+        .filter(|t| t.name.starts_with(current))
+        .map(|t| CompletionCandidate::new(t.name))
+        .collect::<Vec<_>>();
+
     debug!("[complete] Results: {candidates:?}");
     Ok(candidates)
 }

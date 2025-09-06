@@ -3,8 +3,13 @@ mod complete;
 mod config;
 mod detach;
 mod disk_usage;
+mod display;
 mod home;
 mod list;
+mod rebase;
+mod remove;
+mod squash;
+mod switch;
 mod sync;
 
 use std::io;
@@ -43,9 +48,15 @@ pub enum Commands {
     Detach(detach::DetachCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
+    Display(display::DisplayCommand),
     Home(home::HomeCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
+    Rebase(rebase::RebaseCommand),
+    #[command(alias = "rm")]
+    Remove(remove::RemoveCommand),
+    Squash(squash::SquashCommand),
+    Switch(switch::SwitchCommand),
     Sync(sync::SyncCommand),
 }
 
@@ -57,8 +68,13 @@ impl Command for App {
             Commands::Config(cmd) => cmd.run().await,
             Commands::Detach(cmd) => cmd.run().await,
             Commands::DiskUsage(cmd) => cmd.run().await,
+            Commands::Display(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
             Commands::List(cmd) => cmd.run().await,
+            Commands::Rebase(cmd) => cmd.run().await,
+            Commands::Remove(cmd) => cmd.run().await,
+            Commands::Squash(cmd) => cmd.run().await,
+            Commands::Switch(cmd) => cmd.run().await,
             Commands::Sync(cmd) => cmd.run().await,
         }
     }
@@ -73,8 +89,13 @@ impl Command for App {
                 config::ConfigCommand::complete_command(),
                 detach::DetachCommand::complete_command(),
                 disk_usage::DiskUsageCommand::complete_command(),
+                display::DisplayCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 list::ListCommand::complete_command(),
+                rebase::RebaseCommand::complete_command(),
+                remove::RemoveCommand::complete_command(),
+                squash::SquashCommand::complete_command(),
+                switch::SwitchCommand::complete_command(),
                 sync::SyncCommand::complete_command(),
             ])
     }
@@ -91,6 +112,9 @@ pub struct ConfigArgs {
 
     #[arg(long, short)]
     pub yes: bool,
+
+    #[arg(long)]
+    pub no_style: bool,
 }
 
 impl ConfigArgs {
@@ -114,6 +138,9 @@ impl ConfigArgs {
         }
         if self.yes {
             confirm::set_no_confirm(true);
+        }
+        if self.no_style {
+            output::set_no_style(true);
         }
         Ok(cfg)
     }

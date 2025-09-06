@@ -63,17 +63,17 @@ enum BranchAction {
 
 #[derive(Debug, Clone, Copy)]
 pub struct RebaseOptions<'a> {
-    target: &'a str,
-    upstream: bool,
-    force_no_cache: bool,
+    pub target: &'a str,
+    pub upstream: bool,
+    pub force_no_cache: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct SquashOptions<'a> {
-    target: &'a str,
-    upstream: bool,
-    force_no_cache: bool,
-    message: &'a Option<String>,
+    pub target: &'a str,
+    pub upstream: bool,
+    pub force_no_cache: bool,
+    pub message: &'a Option<String>,
 }
 
 impl<'a, 'b> RepoOperator<'a, 'b> {

@@ -26,14 +26,14 @@ pub fn get_current_repo_optional(ctx: Arc<ConfigContext>) -> Result<Option<Repos
         debug!(
             "[current] Now in workspace repo, remote: {remote:?}, owner: {owner:?}, name: {name:?}"
         );
-        let repo = db.with_transaction(|tx| tx.repo().get_optional(&remote, &owner, &name))?;
+        let repo = db.with_transaction(|tx| tx.repo().get(&remote, &owner, &name))?;
         debug!("[current] Current workspace repo: {repo:?}");
         return Ok(repo);
     }
 
     debug!("[current] Not in workspace repo, try by path");
     let path = format!("{}", ctx.current_dir.display());
-    let repo = db.with_transaction(|tx| tx.repo().get_by_path_optional(&path))?;
+    let repo = db.with_transaction(|tx| tx.repo().get_by_path(&path))?;
     debug!("[current] Current path repo: {repo:?}");
     Ok(repo)
 }

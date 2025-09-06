@@ -24,8 +24,8 @@ pub struct ListRemoteCommand {
 #[async_trait]
 impl Command for ListRemoteCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run list remote command: {:?}", self);
         let ctx = self.config.build_ctx()?;
+        debug!("[cmd] Run list remote command: {:?}", self);
 
         let limit = self.list.limit();
         let text = if self.disk_usage {

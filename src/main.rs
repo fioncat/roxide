@@ -1,5 +1,3 @@
-#![allow(dead_code)] // TODO: remove this
-
 use std::process;
 
 mod api;
