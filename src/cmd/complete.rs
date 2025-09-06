@@ -10,7 +10,7 @@ use paste::paste;
 
 use crate::cmd::Command;
 use crate::config::context::ConfigContext;
-use crate::db::repo::{LimitOptions, QueryOptions, RemoteState};
+use crate::db::repo::{QueryOptions, RemoteState};
 use crate::debug;
 use crate::term::output;
 
@@ -47,6 +47,11 @@ pub fn repo_args() -> [Arg; 3] {
 #[inline]
 pub fn head_arg() -> Arg {
     Arg::new("head").add(ArgValueCompleter::new(head))
+}
+
+#[inline]
+pub fn remote_arg() -> Arg {
+    Arg::new("remote").add(ArgValueCompleter::new(remote))
 }
 
 #[inline]
@@ -91,7 +96,7 @@ macro_rules! register_complete {
     };
 }
 
-register_complete!(head, owner, name);
+register_complete!(head, remote, owner, name);
 
 fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete head, current: {current:?}");
@@ -102,7 +107,7 @@ fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandi
 
     let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
-    let remotes = db.with_transaction(|tx| tx.repo().query_remotes(LimitOptions::default()))?;
+    let remotes = db.with_transaction(|tx| tx.repo().query_remotes(None))?;
     debug!("[complete] Remotes: {remotes:?}");
 
     let remotes = remotes
@@ -129,7 +134,7 @@ fn complete_remote(args: Vec<String>, current: &str) -> Result<Vec<CompletionCan
     debug!("[complete] Begin to complete remote, current: {current:?}");
     let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
-    let remotes = db.with_transaction(|tx| tx.repo().query_remotes(LimitOptions::default()))?;
+    let remotes = db.with_transaction(|tx| tx.repo().query_remotes(None))?;
     debug!("[complete] Remotes: {remotes:?}");
     Ok(remotes_to_candidates(remotes, current))
 }
@@ -143,8 +148,7 @@ fn complete_owner(mut args: Vec<String>, current: &str) -> Result<Vec<Completion
 
     let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
-    let owners =
-        db.with_transaction(|tx| tx.repo().query_owners(&remote, LimitOptions::default()))?;
+    let owners = db.with_transaction(|tx| tx.repo().query_owners(Some(remote), None))?;
     debug!("[complete] Owners: {owners:?}");
     let candidates = owners
         .into_iter()

@@ -6,7 +6,9 @@ use anyhow::{Context, Result, bail};
 use reqwest::Url;
 
 use crate::config::context::ConfigContext;
-use crate::db::repo::{DisplayLevel, LimitOptions, QueryOptions, Repository};
+use crate::db::repo::{
+    DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
+};
 use crate::debug;
 use crate::exec::fzf;
 use crate::term::list::List;
@@ -588,6 +590,84 @@ where
     result
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteList {
+    pub remotes: Vec<RemoteState>,
+    pub total: u32,
+}
+
+impl List<RemoteState> for RemoteList {
+    fn titles(&self) -> Vec<&'static str> {
+        vec!["Remote", "OwnerCount", "RepoCount"]
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[RemoteState] {
+        &self.remotes
+    }
+}
+
+pub fn select_remotes(ctx: Arc<ConfigContext>, limit: LimitOptions) -> Result<RemoteList> {
+    let db = ctx.get_db()?;
+    let (remotes, total) = db.with_transaction(|tx| {
+        let total = tx.repo().count_remotes()?;
+        let remotes = tx.repo().query_remotes(Some(limit))?;
+        Ok((remotes, total))
+    })?;
+    let list = RemoteList { remotes, total };
+    Ok(list)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnerList {
+    pub show_remote: bool,
+    pub owners: Vec<OwnerState>,
+    pub total: u32,
+}
+
+impl List<OwnerState> for OwnerList {
+    fn titles(&self) -> Vec<&'static str> {
+        if self.show_remote {
+            vec!["Remote", "Owner", "RepoCount"]
+        } else {
+            vec!["Owner", "RepoCount"]
+        }
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[OwnerState] {
+        &self.owners
+    }
+}
+
+pub fn select_owners(
+    ctx: Arc<ConfigContext>,
+    remote: Option<String>,
+    limit: LimitOptions,
+) -> Result<OwnerList> {
+    let db = ctx.get_db()?;
+
+    let show_remote = remote.is_none();
+    let (owners, total) = db.with_transaction(|tx| {
+        let total = tx.repo().count_owners(remote.as_deref())?;
+        let owners = tx.repo().query_owners(remote, Some(limit))?;
+        Ok((owners, total))
+    })?;
+
+    let list = OwnerList {
+        show_remote,
+        owners,
+        total,
+    };
+    Ok(list)
+}
+
 #[cfg(test)]
 mod tests {
     use std::env;
@@ -1133,6 +1213,141 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>();
             assert_eq!(names, expect_names);
+        }
+    }
+
+    #[test]
+    fn test_select_remotes() {
+        struct Case {
+            limit: LimitOptions,
+            expect: RemoteList,
+        }
+
+        let cases = [
+            Case {
+                limit: LimitOptions::default(),
+                expect: RemoteList {
+                    remotes: vec![
+                        RemoteState {
+                            remote: "github".to_string(),
+                            owner_count: 2,
+                            repo_count: 4,
+                        },
+                        RemoteState {
+                            remote: "gitlab".to_string(),
+                            owner_count: 1,
+                            repo_count: 2,
+                        },
+                    ],
+                    total: 2,
+                },
+            },
+            Case {
+                limit: LimitOptions {
+                    limit: 1,
+                    offset: 0,
+                },
+                expect: RemoteList {
+                    remotes: vec![RemoteState {
+                        remote: "github".to_string(),
+                        owner_count: 2,
+                        repo_count: 4,
+                    }],
+                    total: 2,
+                },
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_remotes", None);
+        for case in cases {
+            let list = select_remotes(ctx.clone(), case.limit).unwrap();
+            assert_eq!(list, case.expect);
+        }
+    }
+
+    #[test]
+    fn test_select_owners() {
+        struct Case {
+            remote: Option<String>,
+            limit: LimitOptions,
+            expect: OwnerList,
+        }
+
+        let cases = [
+            Case {
+                remote: None,
+                limit: LimitOptions::default(),
+                expect: OwnerList {
+                    show_remote: true,
+                    owners: vec![
+                        OwnerState {
+                            remote: "github".to_string(),
+                            owner: "kubernetes".to_string(),
+                            repo_count: 1,
+                        },
+                        OwnerState {
+                            remote: "github".to_string(),
+                            owner: "fioncat".to_string(),
+                            repo_count: 3,
+                        },
+                        OwnerState {
+                            remote: "gitlab".to_string(),
+                            owner: "fioncat".to_string(),
+                            repo_count: 2,
+                        },
+                    ],
+                    total: 3,
+                },
+            },
+            Case {
+                remote: None,
+                limit: LimitOptions {
+                    offset: 1,
+                    limit: 2,
+                },
+                expect: OwnerList {
+                    show_remote: true,
+                    owners: vec![
+                        OwnerState {
+                            remote: "github".to_string(),
+                            owner: "fioncat".to_string(),
+                            repo_count: 3,
+                        },
+                        OwnerState {
+                            remote: "gitlab".to_string(),
+                            owner: "fioncat".to_string(),
+                            repo_count: 2,
+                        },
+                    ],
+                    total: 3,
+                },
+            },
+            Case {
+                remote: Some("github".to_string()),
+                limit: LimitOptions::default(),
+                expect: OwnerList {
+                    show_remote: false,
+                    owners: vec![
+                        OwnerState {
+                            remote: "github".to_string(),
+                            owner: "kubernetes".to_string(),
+                            repo_count: 1,
+                        },
+                        OwnerState {
+                            remote: "github".to_string(),
+                            owner: "fioncat".to_string(),
+                            repo_count: 3,
+                        },
+                    ],
+                    total: 2,
+                },
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_owners", None);
+        for case in cases {
+            let list = select_owners(ctx.clone(), case.remote, case.limit).unwrap();
+            assert_eq!(list, case.expect);
         }
     }
 }

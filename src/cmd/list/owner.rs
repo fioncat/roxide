@@ -5,23 +5,13 @@ use clap::Args;
 use crate::cmd::complete;
 use crate::cmd::{Command, ConfigArgs};
 use crate::output;
-use crate::repo::disk_usage::{RepoDiskUsageList, repo_disk_usage};
-use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::repo::disk_usage::{OwnerDiskUsage, OwnerDiskUsageList, repo_disk_usage};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_owners};
 use crate::term::list::{ListArgs, PageArgs, pagination};
 
 #[derive(Debug, Args)]
-pub struct ListRepoCommand {
+pub struct ListOwnerCommand {
     pub remote: Option<String>,
-
-    pub owner: Option<String>,
-
-    pub name: Option<String>,
-
-    #[arg(long)]
-    pub sync: bool,
-
-    #[arg(long)]
-    pub pin: bool,
 
     #[arg(long = "du", short)]
     pub disk_usage: bool,
@@ -37,35 +27,25 @@ pub struct ListRepoCommand {
 }
 
 #[async_trait]
-impl Command for ListRepoCommand {
+impl Command for ListOwnerCommand {
     async fn run(self) -> Result<()> {
         let ctx = self.config.build_ctx()?;
 
-        let selector = RepoSelector::new(ctx.clone(), &self.remote, &self.owner, &self.name);
         let limit = self.page.limit();
-        let mut opts = SelectManyReposOptions::default();
-        if self.sync {
-            opts.sync = Some(true);
-        }
-        if self.pin {
-            opts.pin = Some(true);
-        }
-        if !self.disk_usage {
-            opts.limit = Some(limit);
-        }
-
-        let list = selector.select_many(opts)?;
         let text = if self.disk_usage {
-            let level = list.level;
-            let usages = repo_disk_usage(ctx, list.items).await?;
+            let selector = RepoSelector::new(ctx.clone(), &self.remote, &None, &None);
+            let repos = selector.select_many(SelectManyReposOptions::default())?;
+            let usages = repo_disk_usage(ctx, repos.items).await?;
+            let usages = OwnerDiskUsage::group_by_repo_usages(usages);
             let (usages, total) = pagination(usages, limit);
-            let list = RepoDiskUsageList {
+            let list = OwnerDiskUsageList {
+                show_remote: self.remote.is_none(),
                 usages,
                 total,
-                level,
             };
             self.list.render(list, Some(self.page))?
         } else {
+            let list = select_owners(ctx, self.remote, limit)?;
             self.list.render(list, Some(self.page))?
         };
 
@@ -74,6 +54,6 @@ impl Command for ListRepoCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args(complete::repo_args())
+        clap::Command::new("owner").arg(complete::remote_arg())
     }
 }

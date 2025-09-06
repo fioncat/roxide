@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -7,7 +7,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::config::context::ConfigContext;
-use crate::db::repo::{DisplayLevel, Repository};
+use crate::db::repo::{DisplayLevel, OwnerState, RemoteState, Repository};
 use crate::format::format_bytes;
 use crate::scan::{ScanFile, ScanHandler, Task, scan_files_with_data};
 use crate::term::list::{List, ListItem};
@@ -95,6 +95,138 @@ impl ScanHandler<Arc<String>> for RepoDiskUsageHandler {
 
     fn should_skip(&self, _dir: &Path, _name: Arc<String>) -> Result<bool> {
         Ok(false)
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct RemoteDiskUsage {
+    pub remote: RemoteState,
+    pub usage: u64,
+}
+
+impl ListItem for RemoteDiskUsage {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        if title == "DiskUsage" {
+            return format_bytes(self.usage).into();
+        }
+        self.remote.row(title)
+    }
+}
+
+impl RemoteDiskUsage {
+    pub fn group_by_repo_usages(repos: Vec<RepoDiskUsage>) -> Vec<Self> {
+        let mut remote_usages: HashMap<&String, u64> = HashMap::new();
+        let mut remote_repo_counts: HashMap<&String, u32> = HashMap::new();
+        let mut remote_owner_counts: HashMap<&String, HashSet<&String>> = HashMap::new();
+
+        for repo_usage in &repos {
+            let remote = &repo_usage.repo.remote;
+            let owner = &repo_usage.repo.owner;
+            *remote_usages.entry(remote).or_insert(0) += repo_usage.usage;
+            *remote_repo_counts.entry(remote).or_insert(0) += 1;
+            remote_owner_counts.entry(remote).or_default().insert(owner);
+        }
+
+        let mut result: Vec<Self> = remote_usages
+            .into_iter()
+            .map(|(remote, usage)| RemoteDiskUsage {
+                remote: RemoteState {
+                    remote: remote.to_string(),
+                    owner_count: remote_owner_counts[remote].len() as u32,
+                    repo_count: remote_repo_counts[remote],
+                },
+                usage,
+            })
+            .collect();
+
+        result.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+        result
+    }
+}
+
+pub struct RemoteDiskUsageList {
+    pub usages: Vec<RemoteDiskUsage>,
+    pub total: u32,
+}
+
+impl List<RemoteDiskUsage> for RemoteDiskUsageList {
+    fn titles(&self) -> Vec<&'static str> {
+        vec!["Remote", "OwnerCount", "RepoCount", "DiskUsage"]
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[RemoteDiskUsage] {
+        &self.usages
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct OwnerDiskUsage {
+    pub owner: OwnerState,
+    pub usage: u64,
+}
+
+impl ListItem for OwnerDiskUsage {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        if title == "DiskUsage" {
+            return format_bytes(self.usage).into();
+        }
+        self.owner.row(title)
+    }
+}
+
+impl OwnerDiskUsage {
+    pub fn group_by_repo_usages(repos: Vec<RepoDiskUsage>) -> Vec<Self> {
+        let mut owner_usages: HashMap<(&String, &String), u64> = HashMap::new();
+        let mut owner_repo_counts: HashMap<(&String, &String), u32> = HashMap::new();
+
+        for repo_usage in &repos {
+            let key = (&repo_usage.repo.remote, &repo_usage.repo.owner);
+            *owner_usages.entry(key).or_insert(0) += repo_usage.usage;
+            *owner_repo_counts.entry(key).or_insert(0) += 1;
+        }
+
+        let mut result: Vec<Self> = owner_usages
+            .into_iter()
+            .map(|((remote, owner), usage)| OwnerDiskUsage {
+                owner: OwnerState {
+                    remote: remote.to_string(),
+                    owner: owner.to_string(),
+                    repo_count: owner_repo_counts[&(remote, owner)],
+                },
+                usage,
+            })
+            .collect();
+
+        result.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+        result
+    }
+}
+
+pub struct OwnerDiskUsageList {
+    pub show_remote: bool,
+    pub usages: Vec<OwnerDiskUsage>,
+    pub total: u32,
+}
+
+impl List<OwnerDiskUsage> for OwnerDiskUsageList {
+    fn titles(&self) -> Vec<&'static str> {
+        if self.show_remote {
+            vec!["Remote", "Owner", "RepoCount", "DiskUsage"]
+        } else {
+            vec!["Owner", "RepoCount", "DiskUsage"]
+        }
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[OwnerDiskUsage] {
+        &self.usages
     }
 }
 
@@ -190,5 +322,141 @@ mod tests {
 
         let usages = repo_disk_usage(ctx, repos).await.unwrap();
         assert_eq!(usages, expect);
+    }
+
+    #[test]
+    fn test_group_remotes_by_repo_usages() {
+        let repos = vec![
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo1".to_string(),
+                    ..Default::default()
+                },
+                usage: 1000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo2".to_string(),
+                    ..Default::default()
+                },
+                usage: 2000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user2".to_string(),
+                    name: "repo3".to_string(),
+                    ..Default::default()
+                },
+                usage: 5000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "gitlab".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo4".to_string(),
+                    ..Default::default()
+                },
+                usage: 1500,
+            },
+        ];
+
+        let result = RemoteDiskUsage::group_by_repo_usages(repos);
+        let expected = vec![
+            RemoteDiskUsage {
+                remote: RemoteState {
+                    remote: "github".to_string(),
+                    owner_count: 2,
+                    repo_count: 3,
+                },
+                usage: 8000,
+            },
+            RemoteDiskUsage {
+                remote: RemoteState {
+                    remote: "gitlab".to_string(),
+                    owner_count: 1,
+                    repo_count: 1,
+                },
+                usage: 1500,
+            },
+        ];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_group_owners_by_repo_usages() {
+        let repos = vec![
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo1".to_string(),
+                    ..Default::default()
+                },
+                usage: 1000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo2".to_string(),
+                    ..Default::default()
+                },
+                usage: 2000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "github".to_string(),
+                    owner: "user2".to_string(),
+                    name: "repo3".to_string(),
+                    ..Default::default()
+                },
+                usage: 5000,
+            },
+            RepoDiskUsage {
+                repo: Repository {
+                    remote: "gitlab".to_string(),
+                    owner: "user1".to_string(),
+                    name: "repo4".to_string(),
+                    ..Default::default()
+                },
+                usage: 1500,
+            },
+        ];
+
+        let result = OwnerDiskUsage::group_by_repo_usages(repos);
+
+        let expected = vec![
+            OwnerDiskUsage {
+                owner: OwnerState {
+                    remote: "github".to_string(),
+                    owner: "user2".to_string(),
+                    repo_count: 1,
+                },
+                usage: 5000,
+            },
+            OwnerDiskUsage {
+                owner: OwnerState {
+                    remote: "github".to_string(),
+                    owner: "user1".to_string(),
+                    repo_count: 2,
+                },
+                usage: 3000,
+            },
+            OwnerDiskUsage {
+                owner: OwnerState {
+                    remote: "gitlab".to_string(),
+                    owner: "user1".to_string(),
+                    repo_count: 1,
+                },
+                usage: 1500,
+            },
+        ];
+
+        assert_eq!(result, expected);
     }
 }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
@@ -241,7 +242,7 @@ impl<'a> RepositoryHandle<'a> {
 
     /// Query distinct remotes with owner and repo counts, ordered by
     /// latest `last_visited_at` desc.
-    pub fn query_remotes(&self, limit: LimitOptions) -> Result<Vec<RemoteState>> {
+    pub fn query_remotes(&self, limit: Option<LimitOptions>) -> Result<Vec<RemoteState>> {
         query_remotes(self.tx, limit)
     }
 
@@ -252,12 +253,22 @@ impl<'a> RepositoryHandle<'a> {
 
     /// Query distinct owners for a remote with repo counts, ordered by
     /// latest `last_visited_at` desc.
-    pub fn query_owners(&self, remote: &str, limit: LimitOptions) -> Result<Vec<OwnerState>> {
+    pub fn query_owners<S>(
+        &self,
+        remote: Option<S>,
+        limit: Option<LimitOptions>,
+    ) -> Result<Vec<OwnerState>>
+    where
+        S: AsRef<str> + Debug,
+    {
         query_owners(self.tx, remote, limit)
     }
 
     /// Count distinct owners for a remote.
-    pub fn count_owners(&self, remote: &str) -> Result<u32> {
+    pub fn count_owners<S>(&self, remote: Option<S>) -> Result<u32>
+    where
+        S: AsRef<str> + Debug,
+    {
         count_owners(self.tx, remote)
     }
 }
@@ -539,11 +550,39 @@ fn count(tx: &Transaction, opts: QueryOptions) -> Result<u32> {
     Ok(count)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+fn build_sql_with_limit<'a>(
+    sql: &'a str,
+    limit: Option<LimitOptions>,
+) -> (Cow<'a, str>, Vec<Value>) {
+    match limit {
+        Some(limit) => {
+            let sql = format!("{sql} LIMIT ? OFFSET ?");
+            let values = vec![
+                Value::Integer(limit.limit as i64),
+                Value::Integer(limit.offset as i64),
+            ];
+            (sql.into(), values)
+        }
+        None => (Cow::Borrowed(sql), vec![]),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RemoteState {
     pub remote: String,
     pub owner_count: u32,
     pub repo_count: u32,
+}
+
+impl ListItem for RemoteState {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "Remote" => Cow::Borrowed(&self.remote),
+            "OwnerCount" => self.owner_count.to_string().into(),
+            "RepoCount" => self.repo_count.to_string().into(),
+            _ => Cow::Borrowed(""),
+        }
+    }
 }
 
 const QUERY_REMOTES_SQL: &str = r#"
@@ -551,13 +590,13 @@ SELECT remote, COUNT(DISTINCT owner) AS owner_count, COUNT(*) AS repo_count
 FROM repo
 GROUP BY remote
 ORDER BY MAX(last_visited_at) DESC
-LIMIT ?2 OFFSET ?1
 "#;
 
-fn query_remotes(tx: &Transaction, limit: LimitOptions) -> Result<Vec<RemoteState>> {
+fn query_remotes(tx: &Transaction, limit: Option<LimitOptions>) -> Result<Vec<RemoteState>> {
     debug!("[db] Query remotes, limit: {limit:?}");
-    let mut stmt = tx.prepare(QUERY_REMOTES_SQL)?;
-    let rows = stmt.query_map([limit.offset, limit.limit], |row| {
+    let (sql, params) = build_sql_with_limit(QUERY_REMOTES_SQL, limit);
+    let mut stmt = tx.prepare(sql.as_ref())?;
+    let rows = stmt.query_map(params_from_iter(params), |row| {
         Ok(RemoteState {
             remote: row.get(0)?,
             owner_count: row.get(1)?,
@@ -583,26 +622,55 @@ fn count_remotes(tx: &Transaction) -> Result<u32> {
     Ok(count)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OwnerState {
     pub remote: String,
     pub owner: String,
     pub repo_count: u32,
 }
 
+impl ListItem for OwnerState {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "Remote" => Cow::Borrowed(&self.remote),
+            "Owner" => Cow::Borrowed(&self.owner),
+            "RepoCount" => self.repo_count.to_string().into(),
+            _ => Cow::Borrowed(""),
+        }
+    }
+}
+
 const QUERY_OWNERS_SQL: &str = r#"
 SELECT remote, owner, COUNT(*) AS repo_count
 FROM repo
-WHERE remote = ?1
+{{where}}
 GROUP BY remote, owner
 ORDER BY MAX(last_visited_at) DESC
-LIMIT ?3 OFFSET ?2
 "#;
 
-fn query_owners(tx: &Transaction, remote: &str, limit: LimitOptions) -> Result<Vec<OwnerState>> {
-    debug!("[db] Query owners for remote: {remote}, limit: {limit:?}");
-    let mut stmt = tx.prepare(QUERY_OWNERS_SQL)?;
-    let rows = stmt.query_map(params![remote, limit.offset, limit.limit], |row| {
+fn query_owners<S>(
+    tx: &Transaction,
+    remote: Option<S>,
+    limit: Option<LimitOptions>,
+) -> Result<Vec<OwnerState>>
+where
+    S: AsRef<str> + Debug,
+{
+    debug!("[db] Query owners for remote: {remote:?}, limit: {limit:?}");
+
+    let (sql, mut params) = match remote {
+        Some(remote) => (
+            QUERY_OWNERS_SQL.replace("{{where}}", "WHERE remote = ?"),
+            vec![Value::Text(remote.as_ref().to_string())],
+        ),
+        None => (QUERY_OWNERS_SQL.replace("{{where}}", ""), vec![]),
+    };
+
+    let (sql, limit_params) = build_sql_with_limit(&sql, limit);
+    params.extend(limit_params);
+
+    let mut stmt = tx.prepare(sql.as_ref())?;
+    let rows = stmt.query_map(params_from_iter(params), |row| {
         Ok(OwnerState {
             remote: row.get(0)?,
             owner: row.get(1)?,
@@ -618,12 +686,27 @@ fn query_owners(tx: &Transaction, remote: &str, limit: LimitOptions) -> Result<V
 }
 
 const COUNT_OWNERS_SQL: &str = r#"
-SELECT COUNT(DISTINCT owner) FROM repo WHERE remote = ?1
+SELECT COUNT(*)
+FROM (
+    SELECT DISTINCT remote, owner
+    FROM repo
+    {{where}}
+)
 "#;
 
-fn count_owners(tx: &Transaction, remote: &str) -> Result<u32> {
-    debug!("[db] Count owners for remote: {remote}");
-    let count: u32 = tx.query_row(COUNT_OWNERS_SQL, [remote], |row| row.get(0))?;
+fn count_owners<S>(tx: &Transaction, remote: Option<S>) -> Result<u32>
+where
+    S: AsRef<str> + Debug,
+{
+    debug!("[db] Count owners for remote: {remote:?}");
+    let (sql, params) = match remote {
+        Some(remote) => (
+            COUNT_OWNERS_SQL.replace("{{where}}", "WHERE remote = ?"),
+            vec![Value::Text(remote.as_ref().to_string())],
+        ),
+        None => (COUNT_OWNERS_SQL.replace("{{where}}", ""), vec![]),
+    };
+    let count: u32 = tx.query_row(&sql, params_from_iter(params), |row| row.get(0))?;
     debug!("[db] Result: {count}");
     Ok(count)
 }
@@ -1111,7 +1194,7 @@ pub mod tests {
     fn test_query_remotes() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let results = query_remotes(&tx, LimitOptions::default()).unwrap();
+        let results = query_remotes(&tx, None).unwrap();
         let expects = vec![
             RemoteState {
                 remote: "github".to_string(),
@@ -1139,7 +1222,7 @@ pub mod tests {
     fn test_query_owners() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let results = query_owners(&tx, "github", LimitOptions::default()).unwrap();
+        let results = query_owners(&tx, Some("github"), None).unwrap();
         let expects = vec![
             OwnerState {
                 remote: "github".to_string(),
@@ -1153,15 +1236,37 @@ pub mod tests {
             },
         ];
         assert_eq!(results, expects);
+
+        let results = query_owners(&tx, None::<&str>, None).unwrap();
+        let expects = vec![
+            OwnerState {
+                remote: "github".to_string(),
+                owner: "kubernetes".to_string(),
+                repo_count: 1,
+            },
+            OwnerState {
+                remote: "github".to_string(),
+                owner: "fioncat".to_string(),
+                repo_count: 3,
+            },
+            OwnerState {
+                remote: "gitlab".to_string(),
+                owner: "fioncat".to_string(),
+                repo_count: 2,
+            },
+        ];
+        assert_eq!(results, expects);
     }
 
     #[test]
     fn test_count_owners() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
-        let count = count_owners(&tx, "github").unwrap();
+        let count = count_owners(&tx, Some("github")).unwrap();
         assert_eq!(count, 2);
-        let count = count_owners(&tx, "gitlab").unwrap();
+        let count = count_owners(&tx, Some("gitlab")).unwrap();
         assert_eq!(count, 1);
+        let count = count_owners(&tx, None::<&str>).unwrap();
+        assert_eq!(count, 3);
     }
 }
