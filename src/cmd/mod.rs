@@ -1,9 +1,11 @@
+mod complete;
 mod config;
 mod disk_usage;
 mod home;
 mod list;
 mod sync;
 
+use std::io;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -19,8 +21,10 @@ use crate::exec::{SilentExit, bash, fzf, git};
 use crate::term::{confirm, output};
 
 #[async_trait]
-pub trait Command {
+pub trait Command: Args {
     async fn run(self) -> Result<()>;
+
+    fn complete_command() -> clap::Command;
 }
 
 #[derive(Parser)]
@@ -38,6 +42,7 @@ pub enum Commands {
     Home(home::HomeCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
+    Sync(sync::SyncCommand),
 }
 
 #[async_trait]
@@ -48,7 +53,22 @@ impl Command for App {
             Commands::DiskUsage(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
             Commands::List(cmd) => cmd.run().await,
+            Commands::Sync(cmd) => cmd.run().await,
         }
+    }
+
+    fn complete_command() -> clap::Command {
+        clap::Command::new("rox")
+            .disable_help_flag(true)
+            .disable_help_subcommand(true)
+            .disable_version_flag(true)
+            .subcommands([
+                config::ConfigCommand::complete_command(),
+                disk_usage::DiskUsageCommand::complete_command(),
+                home::HomeCommand::complete_command(),
+                list::ListCommand::complete_command(),
+                sync::SyncCommand::complete_command(),
+            ])
     }
 }
 
@@ -98,6 +118,17 @@ pub struct CommandResult {
 }
 
 pub async fn run() -> CommandResult {
+    match complete::register_complete() {
+        Ok(true) => return CommandResult::default(),
+        Ok(false) => {}
+        Err(e) => {
+            return CommandResult {
+                code: 1,
+                message: Some(format!("Failed to generate init script: {e:#}")),
+            };
+        }
+    }
+
     let app = match App::try_parse() {
         Ok(app) => app,
         Err(err) => {
@@ -117,6 +148,20 @@ pub async fn run() -> CommandResult {
             };
         }
     };
+
+    if !termion::is_tty(&io::stderr()) {
+        // We don't allow stderr been redirected, this will cause message been dismissed.
+        // Another reason we do this check is that the terminal control characters will be
+        // printed in stderr, redirecting it to non-tty will cause confusion.
+        // The embed commands are special conditions, their output will be captured by other
+        // programs so we should skip this check.
+        return CommandResult {
+            code: 3,
+            message: None,
+        };
+    }
+    // We only print styled message in stderr, so it is safe to enable colors forcely
+    console::set_colors_enabled(true);
 
     let result = app.run().await;
     let result = match result {

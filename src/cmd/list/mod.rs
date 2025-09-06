@@ -24,4 +24,11 @@ impl Command for ListCommand {
             ListCommands::Repo(cmd) => cmd.run().await,
         }
     }
+
+    fn complete_command() -> clap::Command {
+        clap::Command::new("ls")
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .subcommands([repo::ListRepoCommand::complete_command()])
+    }
 }

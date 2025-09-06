@@ -82,6 +82,21 @@ impl Repository {
         }
     }
 
+    pub fn display_name(&self, level: DisplayLevel) -> String {
+        match level {
+            DisplayLevel::Name => self.name.clone(),
+            DisplayLevel::Owner => {
+                format!("{}/{}", Self::escaped_path(&self.owner), self.name)
+            }
+            DisplayLevel::Remote => format!(
+                "{}:{}/{}",
+                Self::escaped_path(&self.remote),
+                Self::escaped_path(&self.owner),
+                self.name
+            ),
+        }
+    }
+
     pub fn full_name(&self) -> String {
         format!(
             "{}:{}/{}",

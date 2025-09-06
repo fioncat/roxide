@@ -1,0 +1,137 @@
+use std::mem::take;
+use std::sync::Arc;
+
+use anyhow::Result;
+use async_trait::async_trait;
+use clap::Args;
+
+use crate::batch::{self, Task};
+use crate::cmd::complete;
+use crate::config::context::ConfigContext;
+use crate::db::repo::Repository;
+use crate::repo::current::get_current_repo_optional;
+use crate::repo::ops::{RepoOperator, SyncResult};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::term::confirm::confirm_items;
+use crate::{debug, outputln};
+
+use super::{Command, ConfigArgs};
+
+#[derive(Debug, Args)]
+pub struct SyncCommand {
+    pub head: Option<String>,
+
+    pub owner: Option<String>,
+
+    pub name: Option<String>,
+
+    #[arg(long, short)]
+    pub recursive: bool,
+
+    #[arg(long, short)]
+    pub force: bool,
+
+    #[clap(flatten)]
+    pub config: ConfigArgs,
+}
+
+#[async_trait]
+impl Command for SyncCommand {
+    async fn run(self) -> Result<()> {
+        let ctx = self.config.build_ctx()?;
+        ctx.lock()?;
+        debug!("[cmd] Run sync command: {:?}", self);
+
+        if !self.recursive
+            && let Some(repo) = get_current_repo_optional(ctx.clone())?
+        {
+            return self.sync_one(ctx, repo);
+        }
+        self.sync_many(ctx).await
+    }
+
+    fn complete_command() -> clap::Command {
+        clap::Command::new("sync").args(complete::repo_args())
+    }
+}
+
+impl SyncCommand {
+    async fn sync_many(self, ctx: Arc<ConfigContext>) -> Result<()> {
+        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+        let mut opts = SelectManyReposOptions::default();
+        if !self.force {
+            opts.sync = Some(true);
+        }
+        let list = selector.select_many(opts)?;
+        if list.items.is_empty() {
+            outputln!("No repo to sync");
+            return Ok(());
+        }
+
+        let mut names = list.display_names();
+        confirm_items(&names, "Sync", "synchronization", "Repo", "Repos")?;
+
+        let mut tasks = Vec::with_capacity(list.items.len());
+        for (idx, repo) in list.items.into_iter().enumerate() {
+            let task = SyncTask {
+                name: Arc::new(take(&mut names[idx])),
+                ctx: ctx.clone(),
+                repo,
+            };
+            tasks.push(task);
+        }
+
+        let results = batch::run("Sync", tasks).await?;
+        let results: Vec<String> = results
+            .iter()
+            .filter_map(|r| {
+                let text = r.render(true);
+                if text.is_empty() { None } else { Some(text) }
+            })
+            .collect();
+        outputln!();
+        if results.is_empty() {
+            outputln!("No result to display");
+            return Ok(());
+        }
+
+        for (idx, result) in results.iter().enumerate() {
+            outputln!("{result}");
+            if idx != results.len() - 1 {
+                outputln!();
+            }
+        }
+
+        Ok(())
+    }
+
+    fn sync_one(self, ctx: Arc<ConfigContext>, repo: Repository) -> Result<()> {
+        let op = RepoOperator::new(&ctx, &repo, false)?;
+        let result = op.sync()?;
+        let text = result.render(false);
+        if text.is_empty() {
+            outputln!("No result to display");
+            return Ok(());
+        }
+
+        outputln!("{text}");
+        Ok(())
+    }
+}
+
+struct SyncTask {
+    name: Arc<String>,
+    ctx: Arc<ConfigContext>,
+    repo: Repository,
+}
+
+#[async_trait]
+impl Task<SyncResult> for SyncTask {
+    fn name(&self) -> Arc<String> {
+        self.name.clone()
+    }
+
+    async fn run(&self) -> Result<SyncResult> {
+        RepoOperator::new(self.ctx.as_ref(), &self.repo, true)?.sync()
+    }
+}

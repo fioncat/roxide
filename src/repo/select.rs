@@ -520,6 +520,16 @@ impl<'a> RepoSelector<'a> {
     }
 }
 
+impl RepoList {
+    #[inline]
+    pub fn display_names(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .map(|r| r.display_name(self.level))
+            .collect()
+    }
+}
+
 impl List<Repository> for RepoList {
     fn titles(&self) -> Vec<&'static str> {
         let mut titles = self.level.titles();

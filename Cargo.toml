@@ -25,6 +25,7 @@ ignore = "^0"
 num_cpus = "^1"
 octocrab = "^0"
 pad = "^0"
+paste = "^1"
 regex = "^1"
 reqwest = "^0"
 rusqlite = { version = "^0", features = ["bundled"] }
@@ -32,6 +33,7 @@ scanf = "^2"
 serde = {version = "^1", features = ["derive"] }
 serde_json = "^1"
 shellexpand = "^3"
+termion = "^4"
 tokio = { version = "^1", features = ["full"] }
 toml = "^0"
 

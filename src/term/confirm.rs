@@ -108,7 +108,9 @@ where
     outputln!("\n");
 
     outputln!("Total {} {} to {action}", items.len(), name.to_lowercase());
+    outputln!();
     confirm!("Proceed with {noun}");
+    outputln!();
     Ok(())
 }
 

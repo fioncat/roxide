@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete;
 use crate::format::now;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::RepoSelector;
@@ -62,5 +63,9 @@ impl Command for HomeCommand {
         debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());
         Ok(())
+    }
+
+    fn complete_command() -> clap::Command {
+        clap::Command::new("home").args(complete::repo_args())
     }
 }

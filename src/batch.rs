@@ -9,7 +9,7 @@ use crate::{debug, outputln};
 
 #[async_trait::async_trait]
 pub trait Task<R: Send> {
-    fn name(&self) -> String;
+    fn name(&self) -> Arc<String>;
 
     async fn run(&self) -> Result<R>;
 }
@@ -105,8 +105,8 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Task<usize> for TestTask {
-        fn name(&self) -> String {
-            format!("Task-{}", self.idx)
+        fn name(&self) -> Arc<String> {
+            Arc::new(format!("Task-{}", self.idx))
         }
 
         async fn run(&self) -> Result<usize> {
@@ -137,8 +137,8 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Task<()> for FailTask {
-        fn name(&self) -> String {
-            format!("FailTask-{}", self.idx)
+        fn name(&self) -> Arc<String> {
+            Arc::new(format!("FailTask-{}", self.idx))
         }
 
         async fn run(&self) -> Result<()> {

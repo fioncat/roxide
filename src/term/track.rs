@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{Result, bail};
 use console::style;
 use tokio::sync::mpsc::Receiver;
@@ -11,7 +13,7 @@ use crate::{cursor_up, debug, outputln};
 pub enum Report<R> {
     /// Indicates that the task is still in progress, where `usize` is the current
     /// task index and `String` is the name of the current task.
-    Running(usize, String),
+    Running(usize, Arc<String>),
 
     /// Indicates that the task has been completed. `usize` is the current task
     /// index, and `Result<R>` represents the execution result of the task.
@@ -27,7 +29,7 @@ pub struct Tracker<R> {
     total_pad: usize,
 
     /// running tasks.
-    running: Vec<(usize, String)>,
+    running: Vec<(usize, Arc<String>)>,
     /// done tasks.
     done: Vec<(usize, Result<R>)>,
 
@@ -43,7 +45,7 @@ pub struct Tracker<R> {
     ok_count: usize,
     fail_count: usize,
 
-    fail_message: Vec<(String, String)>,
+    fail_message: Vec<(Arc<String>, String)>,
 }
 
 impl<R> Tracker<R> {
@@ -141,7 +143,7 @@ impl<R> Tracker<R> {
     }
 
     /// Print running task on terminal.
-    fn trace_running(&mut self, idx: usize, name: String) {
+    fn trace_running(&mut self, idx: usize, name: Arc<String>) {
         debug!("[tracker] Trace running {idx}: {name}");
         self.running.push((idx, name));
         let line = self.render();
@@ -342,7 +344,7 @@ mod tests {
         for i in 0..count {
             let tx = tx.clone();
             tokio::spawn(async move {
-                tx.send(Report::Running(i, format!("task-{i}")))
+                tx.send(Report::Running(i, Arc::new(format!("task-{i}"))))
                     .await
                     .unwrap();
                 time::sleep(Duration::from_millis(500)).await;
@@ -369,7 +371,7 @@ mod tests {
         for i in 0..count {
             let tx = tx.clone();
             tokio::spawn(async move {
-                tx.send(Report::Running(i, format!("task-{i}")))
+                tx.send(Report::Running(i, Arc::new(format!("task-{i}"))))
                     .await
                     .unwrap();
                 time::sleep(Duration::from_millis(500)).await;
