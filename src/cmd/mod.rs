@@ -2,6 +2,7 @@ mod config;
 mod disk_usage;
 mod home;
 mod list;
+mod sync;
 
 use std::sync::Arc;
 

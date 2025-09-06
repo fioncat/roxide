@@ -308,7 +308,7 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread")] // We must use multi thread when using crossbeam
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_scan() {
         let paths = [
             "scan_dir0",

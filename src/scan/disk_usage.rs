@@ -96,11 +96,15 @@ impl ScanHandler<()> for DiskUsageHandler {
             return Ok(());
         }
 
-        let files_count = files.len();
+        let mut files_count = 0;
         let mut items: BTreeMap<PathBuf, u64> = BTreeMap::new();
         let mut files_usage: u64 = 0;
 
         for file in files {
+            if self.ignore.matched(&file.path, false) {
+                continue;
+            }
+            files_count += 1;
             let usage = file.metadata.len();
             files_usage += usage;
             let path = file.path.strip_prefix(&self.base)?;
@@ -152,5 +156,186 @@ impl ScanHandler<()> for DiskUsageHandler {
 
     fn should_skip(&self, dir: &Path, _: ()) -> Result<bool> {
         Ok(self.ignore.matched(dir, true))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+
+    use crate::repo::ensure_dir;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_disk_usage() {
+        struct File {
+            path: &'static str,
+            size: u64,
+        }
+
+        let files = [
+            File {
+                path: "a/b/c.txt",
+                size: 100,
+            },
+            File {
+                path: "a/b/d.txt",
+                size: 200,
+            },
+            File {
+                path: "a/e/f.txt",
+                size: 300,
+            },
+            File {
+                path: "g/h/i.txt",
+                size: 400,
+            },
+            File {
+                path: "g/j/m.txt",
+                size: 600,
+            },
+            File {
+                path: "g/k/m.txt",
+                size: 700,
+            },
+            File {
+                path: "o/p.txt",
+                size: 800,
+            },
+        ];
+        let base_dir = PathBuf::from("tests/disk_usage");
+        let _ = fs::remove_dir_all(&base_dir);
+        ensure_dir(&base_dir).unwrap();
+        let files_count = files.len();
+        let mut total_size = 0;
+        for case in files {
+            total_size += case.size;
+            let full_path = base_dir.join(case.path);
+            ensure_dir(full_path.parent().unwrap()).unwrap();
+            let data = vec![0u8; case.size as usize];
+            fs::write(full_path, data).unwrap();
+        }
+
+        // The symlink won't be handled now
+        symlink(base_dir.join("a/b/c/txt"), base_dir.join("a/b/c_link.txt")).unwrap();
+
+        #[derive(Default)]
+        struct Case {
+            depth: usize,
+            items: BTreeMap<PathBuf, u64>,
+            ignore: Ignore,
+
+            files_count: Option<usize>,
+            total_size: Option<u64>,
+        }
+
+        let cases = [
+            Case {
+                depth: 0,
+                items: BTreeMap::new(),
+                ignore: Ignore::default(),
+                ..Default::default()
+            },
+            Case {
+                depth: 1,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("a"), 600);
+                    m.insert(PathBuf::from("g"), 1700);
+                    m.insert(PathBuf::from("o"), 800);
+                    m
+                },
+                ..Default::default()
+            },
+            Case {
+                depth: 2,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("a/b"), 300);
+                    m.insert(PathBuf::from("a/e"), 300);
+                    m.insert(PathBuf::from("g/h"), 400);
+                    m.insert(PathBuf::from("g/j"), 600);
+                    m.insert(PathBuf::from("g/k"), 700);
+                    m.insert(PathBuf::from("o/p.txt"), 800);
+                    m
+                },
+                ..Default::default()
+            },
+            Case {
+                depth: 1,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("g"), 1700);
+                    m.insert(PathBuf::from("o"), 800);
+                    m
+                },
+                files_count: Some(files_count - 3),
+                total_size: Some(total_size - 600),
+                ignore: Ignore::parse(base_dir.clone(), ["a"]).unwrap(),
+            },
+            Case {
+                depth: 2,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("g/h"), 400);
+                    m.insert(PathBuf::from("g/j"), 600);
+                    m.insert(PathBuf::from("g/k"), 700);
+                    m
+                },
+                files_count: Some(files_count - 4),
+                total_size: Some(total_size - 1400),
+                ignore: Ignore::parse(base_dir.clone(), ["a", "o"]).unwrap(),
+            },
+            Case {
+                depth: 4,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("a/b/c.txt"), 100);
+                    m.insert(PathBuf::from("a/b/d.txt"), 200);
+                    m.insert(PathBuf::from("a/e/f.txt"), 300);
+                    m.insert(PathBuf::from("g/h/i.txt"), 400);
+                    m.insert(PathBuf::from("g/j/m.txt"), 600);
+                    m.insert(PathBuf::from("g/k/m.txt"), 700);
+                    m.insert(PathBuf::from("o/p.txt"), 800);
+                    m
+                },
+                ..Default::default()
+            },
+            Case {
+                depth: 4,
+                items: BTreeMap::new(),
+                ignore: Ignore::parse(base_dir.clone(), ["*.txt"]).unwrap(),
+                files_count: Some(0),
+                total_size: Some(0),
+            },
+            Case {
+                depth: 1,
+                items: {
+                    let mut m = BTreeMap::new();
+                    m.insert(PathBuf::from("a"), 600);
+                    m
+                },
+                ignore: Ignore::parse(base_dir.clone(), ["o/*.txt", "g/**/*.txt"]).unwrap(),
+                files_count: Some(3),
+                total_size: Some(600),
+            },
+        ];
+
+        for case in cases {
+            let usage = disk_usage(base_dir.clone(), case.depth, case.ignore)
+                .await
+                .unwrap();
+            match case.files_count {
+                Some(c) => assert_eq!(usage.files_count, c),
+                None => assert_eq!(usage.files_count, files_count),
+            }
+            match case.total_size {
+                Some(s) => assert_eq!(usage.files_usage, s),
+                None => assert_eq!(usage.files_usage, total_size),
+            }
+            assert_eq!(usage.items, case.items);
+        }
     }
 }
