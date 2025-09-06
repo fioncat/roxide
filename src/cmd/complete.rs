@@ -9,7 +9,6 @@ use clap_complete::{ArgValueCompleter, CompleteEnv, CompletionCandidate};
 use paste::paste;
 
 use crate::cmd::Command;
-use crate::config::Config;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{LimitOptions, QueryOptions, RemoteState};
 use crate::debug;
@@ -65,6 +64,7 @@ fn setup_complete() -> Vec<String> {
         output::set_debug(debug);
     }
     let mut args = env::args().collect::<Vec<_>>();
+    debug!("[complete] Raw args: {args:?}");
     args.remove(0); // remove binary name
     args.remove(0); // remnove "--"
     args.pop(); // remove current
@@ -100,7 +100,7 @@ fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandi
         return complete_remote(args, "");
     }
 
-    let ctx = build_context()?;
+    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let remotes = db.with_transaction(|tx| tx.repo().query_remotes(LimitOptions::default()))?;
     debug!("[complete] Remotes: {remotes:?}");
@@ -125,9 +125,9 @@ fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandi
     Ok(candidates)
 }
 
-fn complete_remote(_args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_remote(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete remote, current: {current:?}");
-    let ctx = build_context()?;
+    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let remotes = db.with_transaction(|tx| tx.repo().query_remotes(LimitOptions::default()))?;
     debug!("[complete] Remotes: {remotes:?}");
@@ -141,7 +141,7 @@ fn complete_owner(mut args: Vec<String>, current: &str) -> Result<Vec<Completion
         return Ok(vec![]);
     };
 
-    let ctx = build_context()?;
+    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let owners =
         db.with_transaction(|tx| tx.repo().query_owners(&remote, LimitOptions::default()))?;
@@ -166,7 +166,8 @@ fn complete_name(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionC
         return Ok(vec![]);
     };
 
-    let ctx = build_context()?;
+    let ctx = build_context(&args)?;
+
     let db = ctx.get_db()?;
     let repos = db.with_transaction(|tx| {
         tx.repo().query(QueryOptions {
@@ -198,8 +199,219 @@ fn remotes_to_candidates(remotes: Vec<RemoteState>, current: &str) -> Vec<Comple
     candidates
 }
 
+#[cfg(test)]
 #[inline]
-fn build_context() -> Result<Arc<ConfigContext>> {
+fn build_context(args: &[String]) -> Result<Arc<ConfigContext>> {
+    use crate::config::context;
+    let test_name = format!("complete_{}", args[0]);
+    Ok(context::tests::build_test_context(&test_name, None))
+}
+
+#[cfg(not(test))]
+#[inline]
+fn build_context(_: &[String]) -> Result<Arc<ConfigContext>> {
+    use crate::config::Config;
     let cfg = Config::read(None::<&str>)?;
     ConfigContext::new(cfg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct CompleteCase {
+        args: Vec<&'static str>,
+        current: &'static str,
+        expect: Vec<&'static str>,
+    }
+
+    fn run_cases<I, F>(name: &str, cases: I, f: F)
+    where
+        I: IntoIterator<Item = CompleteCase>,
+        F: Fn(Vec<String>, &str) -> Result<Vec<CompletionCandidate>>,
+    {
+        for case in cases {
+            let mut args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
+            args.insert(0, name.to_string());
+            let canidates = f(args, case.current).unwrap();
+            let results = canidates
+                .iter()
+                .map(|c| c.get_value().to_str().unwrap().to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(results, case.expect, "{name} case {case:?} failed");
+        }
+    }
+
+    #[test]
+    fn test_complete_remote() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gi",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gith",
+                expect: vec!["github"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "rox",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("remote", cases, complete_remote);
+    }
+
+    #[test]
+    fn test_complete_head() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gi",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gith",
+                expect: vec!["github"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "rox",
+                expect: vec!["roxide"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "temp",
+                expect: vec!["template"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "zzzz",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("head", cases, complete_head);
+    }
+
+    #[test]
+    fn test_complete_owner() {
+        let cases = [
+            CompleteCase {
+                args: vec!["github"],
+                current: "",
+                expect: vec!["kubernetes", "fioncat"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "f",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "k",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "x",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["gitlab"],
+                current: "",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["gitlab"],
+                current: "fio",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["test"],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["test"],
+                current: "test",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("owner", cases, complete_owner);
+    }
+
+    #[test]
+    fn test_complete_name() {
+        let cases = [
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "",
+                expect: vec!["nvimdots", "roxide", "otree"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "r",
+                expect: vec!["roxide"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "otr",
+                expect: vec!["otree"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "x",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["github", "kubernetes"],
+                current: "",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["github", "kubernetes"],
+                current: "kube",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["gitlab", "fioncat"],
+                current: "",
+                expect: vec!["template", "someproject"],
+            },
+            CompleteCase {
+                args: vec!["gitlab", "fioncat"],
+                current: "some",
+                expect: vec!["someproject"],
+            },
+            CompleteCase {
+                args: vec!["test", "test"],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["test", "test"],
+                current: "test",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("name", cases, complete_name);
+    }
 }

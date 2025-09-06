@@ -18,13 +18,17 @@ impl Database {
         let db = Self {
             conn: Mutex::new(conn),
         };
-        db.with_transaction(|tx| {
+        db.ensure_tables()?;
+        Ok(db)
+    }
+
+    fn ensure_tables(&self) -> Result<()> {
+        self.with_transaction(|tx| {
             tx.repo().ensure_table()?;
             tx.remote_owner().ensure_table()?;
             tx.remote_repo().ensure_table()?;
             Ok(())
-        })?;
-        Ok(db)
+        })
     }
 
     pub fn with_transaction<T, F>(&self, f: F) -> Result<T>

@@ -11,3 +11,7 @@ test-clean:
 	@rm -rf ./tests/*
 	@touch ./tests/.gitkeep
 
+
+.PHONY: test-stable
+test-stable:
+	@bash -c "for i in {1..120}; do cargo test; sleep 1; done"
