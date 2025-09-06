@@ -3,6 +3,7 @@ pub mod commit;
 pub mod remote;
 pub mod tag;
 
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -40,6 +41,16 @@ where
         git.mute()
     } else {
         git.message(message)
+    }
+}
+
+const MAX_COMMIT_MESSAGE_LEN: usize = 40;
+
+fn short_message<'a>(message: &'a str) -> Cow<'a, str> {
+    if message.len() > MAX_COMMIT_MESSAGE_LEN {
+        format!("{}...", &message[..MAX_COMMIT_MESSAGE_LEN]).into()
+    } else {
+        Cow::Borrowed(message)
     }
 }
 

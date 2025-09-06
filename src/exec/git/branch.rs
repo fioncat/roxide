@@ -1,32 +1,46 @@
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::OnceLock;
 
 use anyhow::{Result, bail};
 use regex::Regex;
+use serde::Serialize;
 
 use crate::debug;
+use crate::term::list::{List, ListItem};
 
 const HEAD_BRANCH_PREFIX: &str = "HEAD branch:";
 const BRANCH_REMOTE_PREFIX: &str = "remotes/";
 const BRANCH_ORIGIN_PREFIX: &str = "origin/";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum BranchStatus {
+    #[serde(rename = "sync")]
     Sync,
+    #[serde(rename = "gone")]
     Gone,
+    #[serde(rename = "ahead")]
     Ahead,
+    #[serde(rename = "behind")]
     Behind,
+    #[serde(rename = "conflict")]
     Conflict,
+    #[serde(rename = "detached")]
     Detached,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Branch {
     pub name: String,
     pub status: BranchStatus,
     pub current: bool,
     pub commit_id: String,
     pub commit_message: String,
+}
+
+pub struct BranchList {
+    pub branches: Vec<Branch>,
+    pub total: u32,
 }
 
 static BRANCH_RE: OnceLock<Regex> = OnceLock::new();
@@ -226,6 +240,38 @@ impl Branch {
         };
         debug!("[branch] Parse result: {branch:?}");
         Ok(branch)
+    }
+}
+
+impl ListItem for Branch {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        let name = if self.current {
+            format!("* {}", self.name).into()
+        } else {
+            Cow::Borrowed(self.name.as_str())
+        };
+        let message = super::short_message(&self.commit_message);
+        match title {
+            "Name" => name,
+            "Status" => format!("{:?}", self.status).into(),
+            "CommitID" => Cow::Borrowed(&self.commit_id),
+            "Message" => message,
+            _ => Cow::Borrowed(""),
+        }
+    }
+}
+
+impl List<Branch> for BranchList {
+    fn titles(&self) -> Vec<&'static str> {
+        vec!["Name", "Status", "CommitID", "Message"]
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[Branch] {
+        &self.branches
     }
 }
 

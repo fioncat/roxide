@@ -4,10 +4,10 @@ use clap::Args;
 
 use crate::cmd::complete;
 use crate::cmd::{Command, ConfigArgs};
-use crate::output;
 use crate::repo::disk_usage::{RepoDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
-use crate::term::list::{ListArgs, PageArgs, pagination};
+use crate::term::list::{ListArgs, pagination};
+use crate::{debug, output};
 
 #[derive(Debug, Args)]
 pub struct ListRepoCommand {
@@ -30,19 +30,17 @@ pub struct ListRepoCommand {
     pub list: ListArgs,
 
     #[clap(flatten)]
-    pub page: PageArgs,
-
-    #[clap(flatten)]
     pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for ListRepoCommand {
     async fn run(self) -> Result<()> {
+        debug!("[cmd] Run list repo command: {:?}", self);
         let ctx = self.config.build_ctx()?;
 
         let selector = RepoSelector::new(ctx.clone(), &self.remote, &self.owner, &self.name);
-        let limit = self.page.limit();
+        let limit = self.list.limit();
         let mut opts = SelectManyReposOptions::default();
         if self.sync {
             opts.sync = Some(true);
@@ -64,9 +62,9 @@ impl Command for ListRepoCommand {
                 total,
                 level,
             };
-            self.list.render(list, Some(self.page))?
+            self.list.render(list)?
         } else {
-            self.list.render(list, Some(self.page))?
+            self.list.render(list)?
         };
 
         output!("{text}");

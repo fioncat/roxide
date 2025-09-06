@@ -3,10 +3,11 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::{Command, ConfigArgs};
-use crate::output;
 use crate::repo::disk_usage::{RemoteDiskUsage, RemoteDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_remotes};
-use crate::term::list::{ListArgs, PageArgs, pagination};
+use crate::term::list::{ListArgs, pagination};
+
+use crate::{debug, output};
 
 #[derive(Debug, Args)]
 pub struct ListRemoteCommand {
@@ -17,18 +18,16 @@ pub struct ListRemoteCommand {
     pub list: ListArgs,
 
     #[clap(flatten)]
-    pub page: PageArgs,
-
-    #[clap(flatten)]
     pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for ListRemoteCommand {
     async fn run(self) -> Result<()> {
+        debug!("[cmd] Run list remote command: {:?}", self);
         let ctx = self.config.build_ctx()?;
 
-        let limit = self.page.limit();
+        let limit = self.list.limit();
         let text = if self.disk_usage {
             let selector = RepoSelector::new(ctx.clone(), &None, &None, &None);
             let repos = selector.select_many(SelectManyReposOptions::default())?;
@@ -36,10 +35,10 @@ impl Command for ListRemoteCommand {
             let usages = RemoteDiskUsage::group_by_repo_usages(usages);
             let (usages, total) = pagination(usages, limit);
             let list = RemoteDiskUsageList { usages, total };
-            self.list.render(list, Some(self.page))?
+            self.list.render(list)?
         } else {
             let list = select_remotes(ctx, limit)?;
-            self.list.render(list, Some(self.page))?
+            self.list.render(list)?
         };
         output!("{text}");
         Ok(())

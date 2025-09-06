@@ -611,6 +611,7 @@ impl List<RemoteState> for RemoteList {
 }
 
 pub fn select_remotes(ctx: Arc<ConfigContext>, limit: LimitOptions) -> Result<RemoteList> {
+    debug!("[select] Select remotes, limit: {limit:?}");
     let db = ctx.get_db()?;
     let (remotes, total) = db.with_transaction(|tx| {
         let total = tx.repo().count_remotes()?;
@@ -618,6 +619,7 @@ pub fn select_remotes(ctx: Arc<ConfigContext>, limit: LimitOptions) -> Result<Re
         Ok((remotes, total))
     })?;
     let list = RemoteList { remotes, total };
+    debug!("[select] Result: {list:?}");
     Ok(list)
 }
 
@@ -651,6 +653,7 @@ pub fn select_owners(
     remote: Option<String>,
     limit: LimitOptions,
 ) -> Result<OwnerList> {
+    debug!("[select] Select owners, remote: {remote:?}, limit: {limit:?}");
     let db = ctx.get_db()?;
 
     let show_remote = remote.is_none();
@@ -665,6 +668,7 @@ pub fn select_owners(
         owners,
         total,
     };
+    debug!("[select] Result: {list:?}");
     Ok(list)
 }
 

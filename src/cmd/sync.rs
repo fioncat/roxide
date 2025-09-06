@@ -38,9 +38,9 @@ pub struct SyncCommand {
 #[async_trait]
 impl Command for SyncCommand {
     async fn run(self) -> Result<()> {
+        debug!("[cmd] Run sync command: {:?}", self);
         let ctx = self.config.build_ctx()?;
         ctx.lock()?;
-        debug!("[cmd] Run sync command: {:?}", self);
 
         if !self.recursive
             && let Some(repo) = get_current_repo_optional(ctx.clone())?

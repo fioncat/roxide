@@ -34,9 +34,9 @@ pub struct HomeCommand {
 #[async_trait]
 impl Command for HomeCommand {
     async fn run(self) -> Result<()> {
+        debug!("[cmd] Run home command: {:?}", self);
         let ctx = self.config.build_ctx()?;
         ctx.lock()?;
-        debug!("[cmd] Run home command: {:?}", self);
 
         let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
         let mut repo = selector.select_one(self.force_no_cache, self.local).await?;

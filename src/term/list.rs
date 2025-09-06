@@ -26,10 +26,7 @@ pub struct ListArgs {
 
     #[arg(long)]
     pub headless: bool,
-}
 
-#[derive(Debug, Clone, Copy, Args)]
-pub struct PageArgs {
     #[arg(long, short, default_value = "1")]
     pub page: u32,
 
@@ -37,16 +34,14 @@ pub struct PageArgs {
     pub page_size: u32,
 }
 
-impl PageArgs {
+impl ListArgs {
     pub fn limit(&self) -> LimitOptions {
         let offset = (self.page - 1) * self.page_size;
         let limit = self.page_size;
         LimitOptions { offset, limit }
     }
-}
 
-impl ListArgs {
-    pub fn render<L, T>(&self, list: L, page: Option<PageArgs>) -> Result<String>
+    pub fn render<L, T>(&self, list: L) -> Result<String>
     where
         L: List<T>,
         T: ListItem,
@@ -75,13 +70,9 @@ impl ListArgs {
             table.add(row);
         }
 
-        if let Some(opts) = page {
-            let total_pages = total.div_ceil(opts.page_size);
-            let hint = format!("Page: {}/{total_pages}, Total: {}", opts.page, total);
-            return Ok(format!("{hint}\n{}", table.render()));
-        }
-
-        Ok(table.render())
+        let total_pages = total.div_ceil(self.page_size);
+        let hint = format!("Page: {}/{total_pages}, Total: {}", self.page, total);
+        Ok(format!("{hint}\n{}", table.render()))
     }
 }
 
@@ -147,18 +138,21 @@ mod tests {
     fn test_render() {
         struct Case {
             users: Vec<User>,
-            headless: bool,
             total: u32,
-            args: Option<PageArgs>,
+            args: ListArgs,
             expect: &'static str,
         }
 
         let cases = [
             Case {
                 users: vec![],
-                headless: false,
                 total: 0,
-                args: None,
+                args: ListArgs {
+                    headless: false,
+                    page: 1,
+                    page_size: 10,
+                    json: false,
+                },
                 expect: "<empty list>",
             },
             Case {
@@ -179,12 +173,13 @@ mod tests {
                         email: "test3@33.com".to_string(),
                     },
                 ],
-                headless: false,
                 total: 30,
-                args: Some(PageArgs {
+                args: ListArgs {
                     page: 2,
                     page_size: 3,
-                }),
+                    headless: false,
+                    json: false,
+                },
                 expect: "Page: 2/10, Total: 30\n\
                          +----+---------+---------------+\n\
                          | ID | Name    | Email         |\n\
@@ -207,12 +202,13 @@ mod tests {
                         email: "bob@example.com".to_string(),
                     },
                 ],
-                headless: true,
                 total: 2,
-                args: Some(PageArgs {
+                args: ListArgs {
                     page: 1,
                     page_size: 2,
-                }),
+                    headless: true,
+                    json: false,
+                },
                 expect: "Page: 1/1, Total: 2\n\
                          +---+-------+-------------------+\n\
                          | 1 | Alice | alice@example.com |\n\
@@ -226,11 +222,7 @@ mod tests {
                 users: case.users,
                 total: case.total,
             };
-            let args = ListArgs {
-                json: false,
-                headless: case.headless,
-            };
-            let result = args.render(list, case.args).unwrap();
+            let result = case.args.render(list).unwrap();
             assert_eq!(result, case.expect);
         }
     }
@@ -253,10 +245,12 @@ mod tests {
         let total = users.len() as u32;
         let list = UserList { users, total };
         let args = ListArgs {
+            page: 1,
+            page_size: 20,
             json: true,
             headless: false,
         };
-        let result = args.render(list, None).unwrap();
+        let result = args.render(list).unwrap();
         assert_eq!(result, expected);
     }
 

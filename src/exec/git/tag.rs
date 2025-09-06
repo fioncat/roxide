@@ -1,14 +1,24 @@
+use std::borrow::Cow;
 use std::path::Path;
 
 use anyhow::{Result, bail};
+use serde::Serialize;
 
-use crate::debug;
+use crate::{
+    debug,
+    term::list::{List, ListItem},
+};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Tag {
     pub name: String,
     pub commit_id: String,
     pub commit_message: String,
+}
+
+pub struct TagList {
+    pub tags: Vec<Tag>,
+    pub total: u32,
 }
 
 impl Tag {
@@ -78,6 +88,32 @@ impl Tag {
             bail!("no latest tag");
         }
         Self::get(path, mute, &name)
+    }
+}
+
+impl ListItem for Tag {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        let message = super::short_message(&self.commit_message);
+        match title {
+            "Name" => Cow::Borrowed(&self.name),
+            "CommitID" => Cow::Borrowed(&self.commit_id),
+            "Message" => message,
+            _ => Cow::Borrowed(""),
+        }
+    }
+}
+
+impl List<Tag> for TagList {
+    fn titles(&self) -> Vec<&'static str> {
+        vec!["Name", "CommitID", "Message"]
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+
+    fn items(&self) -> &[Tag] {
+        &self.tags
     }
 }
 

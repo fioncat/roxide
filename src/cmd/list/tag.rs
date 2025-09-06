@@ -3,12 +3,12 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::{Command, ConfigArgs};
-use crate::exec::git::branch::{Branch, BranchList};
+use crate::exec::git::tag::{Tag, TagList};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, output};
 
 #[derive(Debug, Args)]
-pub struct ListBranchCommand {
+pub struct ListTagCommand {
     #[clap(flatten)]
     pub list: ListArgs,
 
@@ -17,15 +17,15 @@ pub struct ListBranchCommand {
 }
 
 #[async_trait]
-impl Command for ListBranchCommand {
+impl Command for ListTagCommand {
     async fn run(self) -> Result<()> {
-        debug!("[cmd] Run list branch command: {:?}", self);
+        debug!("[cmd] Run list tag command: {:?}", self);
         let _ = self.config.build_ctx()?;
 
-        let branches = Branch::list(None::<&str>, true)?;
-        let (branches, total) = pagination(branches, self.list.limit());
+        let tags = Tag::list(None::<&str>, true)?;
+        let (tags, total) = pagination(tags, self.list.limit());
 
-        let list = BranchList { branches, total };
+        let list = TagList { tags, total };
         let text = self.list.render(list)?;
 
         output!("{text}");
@@ -33,6 +33,6 @@ impl Command for ListBranchCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("branch"))
+        Self::augment_args(clap::Command::new("tag"))
     }
 }
