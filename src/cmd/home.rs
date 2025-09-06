@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::complete;
-use crate::format::now;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::RepoSelector;
 use crate::{confirm, debug};
@@ -43,10 +42,7 @@ impl Command for HomeCommand {
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);
-
-        repo.visit_at(now());
-        repo.sync = owner.sync;
-        repo.pin = owner.pin;
+        repo.visit(owner);
 
         let db = ctx.get_db()?;
         if repo.new_created {

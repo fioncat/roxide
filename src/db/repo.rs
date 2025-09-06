@@ -7,8 +7,9 @@ use rusqlite::types::Value;
 use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
+use crate::config::remote::OwnerConfigRef;
 use crate::debug;
-use crate::format::format_time;
+use crate::format::{format_time, now};
 use crate::term::list::ListItem;
 
 /// The database model for a repository.
@@ -108,8 +109,10 @@ impl Repository {
     }
 
     #[inline]
-    pub fn visit_at(&mut self, now: u64) {
-        self.last_visited_at = now;
+    pub fn visit(&mut self, owner: OwnerConfigRef) {
+        self.sync = owner.sync;
+        self.pin = owner.pin;
+        self.last_visited_at = now();
         self.visited_count += 1;
     }
 

@@ -1,5 +1,7 @@
+mod attach;
 mod complete;
 mod config;
+mod detach;
 mod disk_usage;
 mod home;
 mod list;
@@ -36,7 +38,9 @@ pub struct App {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    Attach(attach::AttachCommand),
     Config(config::ConfigCommand),
+    Detach(detach::DetachCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
     Home(home::HomeCommand),
@@ -49,7 +53,9 @@ pub enum Commands {
 impl Command for App {
     async fn run(self) -> Result<()> {
         match self.command {
+            Commands::Attach(cmd) => cmd.run().await,
             Commands::Config(cmd) => cmd.run().await,
+            Commands::Detach(cmd) => cmd.run().await,
             Commands::DiskUsage(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
             Commands::List(cmd) => cmd.run().await,
@@ -63,7 +69,9 @@ impl Command for App {
             .disable_help_subcommand(true)
             .disable_version_flag(true)
             .subcommands([
+                attach::AttachCommand::complete_command(),
                 config::ConfigCommand::complete_command(),
+                detach::DetachCommand::complete_command(),
                 disk_usage::DiskUsageCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 list::ListCommand::complete_command(),

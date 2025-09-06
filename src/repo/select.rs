@@ -51,6 +51,7 @@ impl<'a> RepoSelector<'a> {
         owner: &'a Option<String>,
         name: &'a Option<String>,
     ) -> Self {
+        debug!("[select] Create repo selector, head: {head:?}, owner: {owner:?}, name: {name:?}");
         Self {
             ctx,
             head: head.as_deref().unwrap_or(""),
@@ -60,6 +61,7 @@ impl<'a> RepoSelector<'a> {
         }
     }
 
+    #[cfg(test)]
     pub fn from_args(ctx: Arc<ConfigContext>, args: &'a [String]) -> Self {
         Self {
             ctx,
@@ -71,16 +73,13 @@ impl<'a> RepoSelector<'a> {
     }
 
     pub async fn select_one(&self, force_no_cache: bool, local: bool) -> Result<Repository> {
-        debug!(
-            "[select] Select one, head: {:?}, owner: {:?}, name: {:?}, local: {local}, force_no_cache: {force_no_cache}",
-            self.head, self.owner, self.name,
-        );
+        debug!("[select] Select one, local: {local}, force_no_cache: {force_no_cache}");
         if self.head.is_empty() {
             return self.select_one_from_db("", "", false);
         }
 
         if self.owner.is_empty() {
-            let repo = self.select_one_from_head()?;
+            let repo = self.select_one_from_head(false)?;
             if local && repo.new_created {
                 bail!("cannot find repo from url or ssh");
             }
@@ -94,10 +93,74 @@ impl<'a> RepoSelector<'a> {
         self.select_one_from_name(local)
     }
 
-    fn select_one_from_head(&self) -> Result<Repository> {
-        debug!("[select] Select one from head");
+    pub async fn select_remote(&self, force_no_cache: bool) -> Result<Repository> {
+        let repo = self.select_remote_inner(force_no_cache).await?;
+        if !repo.new_created {
+            bail!("repo {:?} already exists locally", repo.full_name());
+        }
+        Ok(repo)
+    }
+
+    async fn select_remote_inner(&self, force_no_cache: bool) -> Result<Repository> {
+        debug!("[select] Select one remote repo, force_no_cache: {force_no_cache}");
+        if self.head.is_empty() {
+            bail!("head cannot be empty when selecting from remote");
+        }
+
+        if self.owner.is_empty() {
+            return self.select_one_from_head(true);
+        }
+
+        if !self.name.is_empty() {
+            debug!("[select] Select one remote repo from name");
+            return self.get_or_create(self.head, self.owner, self.name);
+        }
+
+        let remote = self.ctx.cfg.get_remote(self.head)?;
+        let api = self.ctx.get_api(&remote.name, force_no_cache)?;
+        let remote_repos = api.list_repos(&remote.name, self.owner).await?;
+        if remote_repos.is_empty() {
+            bail!("no remote repo in {:?}", self.owner);
+        }
+
+        let db = self.ctx.get_db()?;
+        let locals = db
+            .with_transaction(|tx| {
+                tx.repo().query(QueryOptions {
+                    remote: Some(&remote.name),
+                    owner: Some(self.owner),
+                    ..Default::default()
+                })
+            })?
+            .into_iter()
+            .map(|r| r.name)
+            .collect::<HashSet<_>>();
+
+        let remote_repos = remote_repos
+            .into_iter()
+            .filter(|r| !locals.contains(r))
+            .collect::<Vec<_>>();
+        if remote_repos.is_empty() {
+            bail!(
+                "all repos in {:?} exist locally, no new repo to select",
+                self.owner
+            );
+        }
+
+        let idx = fzf::search("Search remote repos", &remote_repos, self.fzf_filter)?;
+        let name = &remote_repos[idx];
+        let repo = self.get_or_create(&remote.name, self.owner, name)?;
+        debug!("[select] Select remote repo: {repo:?}");
+        Ok(repo)
+    }
+
+    fn select_one_from_head(&self, remote_mode: bool) -> Result<Repository> {
+        debug!("[select] Select one from head, remote_mode: {remote_mode}");
         if self.head == "-" {
             debug!("[select] Select latest from db");
+            if remote_mode {
+                bail!("cannot use '-' to select latest when selecting from remote");
+            }
             // Select latest repo from db
             return self.select_one_from_db("", "", true);
         }
@@ -142,6 +205,9 @@ impl<'a> RepoSelector<'a> {
             SelectOneType::Url(url) => self.select_one_from_url(&url),
             SelectOneType::Ssh(ssh) => self.select_one_from_ssh(ssh),
             SelectOneType::Direct => {
+                if remote_mode {
+                    bail!("the head must be url or ssh when selecting from remote");
+                }
                 // Treating `head` as a remote (with higher priority) or fuzzy matching
                 // keyword, we will call different functions from the database to retrieve
                 // the information.
@@ -337,7 +403,7 @@ impl<'a> RepoSelector<'a> {
         let items = merge_sorted(locals, remote_repos);
 
         debug!("[select] Use fzf to select items: {items:?}");
-        let idx = fzf::search("Search remote repos", &items, self.fzf_filter)?;
+        let idx = fzf::search("Search repos", &items, self.fzf_filter)?;
         let name = &items[idx];
         let repo = self.get_or_create(&remote.name, self.owner, name)?;
         debug!("[select] Select repo: {repo:?}");
@@ -1218,6 +1284,142 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(names, expect_names);
         }
+    }
+
+    #[derive(Debug)]
+    enum CaseResult {
+        Ok(&'static str, &'static str, &'static str),
+        Err(String),
+    }
+
+    impl Default for CaseResult {
+        fn default() -> Self {
+            Self::Err("no expect set".to_string())
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct SelectRemoteCase {
+        head: &'static str,
+        owner: &'static str,
+        name: &'static str,
+        filter: Option<&'static str>,
+        expect: CaseResult,
+    }
+
+    async fn run_select_remote_cases<I>(ctx: Arc<ConfigContext>, cases: I)
+    where
+        I: IntoIterator<Item = SelectRemoteCase>,
+    {
+        for case in cases {
+            let mut args = vec![case.head.to_string()];
+            if !case.owner.is_empty() {
+                args.push(case.owner.to_string());
+            }
+            if !case.name.is_empty() {
+                args.push(case.name.to_string());
+            }
+            let mut selector = RepoSelector::from_args(ctx.clone(), &args);
+            if let Some(filter) = case.filter {
+                selector.fzf_filter = Some(filter);
+            }
+            let result = selector.select_remote(false).await;
+            match case.expect {
+                CaseResult::Ok(expect_remote, expect_owner, expect_name) => {
+                    let expect = Repository {
+                        remote: expect_remote.to_string(),
+                        owner: expect_owner.to_string(),
+                        name: expect_name.to_string(),
+                        new_created: true,
+                        ..Default::default()
+                    };
+                    let repo = result.unwrap();
+                    assert_eq!(repo, expect);
+                }
+                CaseResult::Err(expect) => {
+                    let err = result.err().unwrap();
+                    assert_eq!(err.to_string(), expect);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_select_remote_by_url() {
+        let cases = [
+            SelectRemoteCase {
+                head: "https://github.com/kubernetes/kubectl",
+                expect: CaseResult::Ok("github", "kubernetes", "kubectl"),
+                ..Default::default()
+            },
+            SelectRemoteCase {
+                head: "https://github.com/fioncat/roxide",
+                expect: CaseResult::Err(format!(
+                    "repo {:?} already exists locally",
+                    "github:fioncat/roxide"
+                )),
+                ..Default::default()
+            },
+            SelectRemoteCase {
+                head: "github",
+                expect: CaseResult::Err(
+                    "the head must be url or ssh when selecting from remote".to_string(),
+                ),
+                ..Default::default()
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_remote_by_url", None);
+        run_select_remote_cases(ctx, cases).await;
+    }
+
+    #[tokio::test]
+    async fn test_select_remote_by_owner() {
+        let cases = [
+            SelectRemoteCase {
+                head: "github",
+                owner: "fioncat",
+                filter: Some("filewarden"),
+                expect: CaseResult::Ok("github", "fioncat", "filewarden"),
+                ..Default::default()
+            },
+            SelectRemoteCase {
+                head: "github",
+                owner: "fioncat",
+                filter: Some("roxide"),
+                expect: CaseResult::Err("fzf no match found".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_remote_by_owner", None);
+        run_select_remote_cases(ctx, cases).await;
+    }
+
+    #[tokio::test]
+    async fn test_select_remote_by_name() {
+        let cases = [
+            SelectRemoteCase {
+                head: "github",
+                owner: "fioncat",
+                name: "filewarden",
+                expect: CaseResult::Ok("github", "fioncat", "filewarden"),
+                ..Default::default()
+            },
+            SelectRemoteCase {
+                head: "github",
+                owner: "fioncat",
+                name: "roxide",
+                expect: CaseResult::Err(format!(
+                    "repo {:?} already exists locally",
+                    "github:fioncat/roxide"
+                )),
+                ..Default::default()
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_remote_by_name", None);
+        run_select_remote_cases(ctx, cases).await;
     }
 
     #[test]

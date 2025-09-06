@@ -215,7 +215,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
     }
 
-    fn ensure_remote(&self) -> Result<()> {
+    pub fn ensure_remote(&self) -> Result<()> {
         debug!("[op] Ensure repo remote");
 
         let Some(url) = self.get_clone_url() else {
@@ -244,7 +244,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         )
     }
 
-    fn ensure_user(&self) -> Result<()> {
+    pub fn ensure_user(&self) -> Result<()> {
         if let Some(ref user) = self.owner.user {
             debug!("[op] Set user.name to {user:?}");
             let message = format!("Set user to {user:?}");
