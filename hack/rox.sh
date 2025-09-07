@@ -1,5 +1,5 @@
 rox_home() {
-    if ret_path=$({{binary}} $@); then
+    if ret_path=$(ROXIDE_WRAP="true" {{binary}} $@); then
         if [ -z "$ret_path" ]; then
             return
         fi
@@ -23,7 +23,7 @@ rox() {
         ;;
 
     *)
-        {{binary}} "$@"
+        ROXIDE_WRAP="true" {{binary}} "$@"
         ;;
     esac
     return $?

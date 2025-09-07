@@ -3,7 +3,6 @@ use std::io::Write;
 use std::sync::OnceLock;
 
 use chrono::Local;
-use console::style;
 
 #[macro_export]
 macro_rules! debug {
@@ -18,7 +17,8 @@ macro_rules! debug {
 macro_rules! info {
     ($($arg:tt)*) => {
         if !cfg!(test) {
-            $crate::term::output::print_hint("==>", "green");
+            let hint = console::style("==>").green().bold();
+            eprint!("{hint} ");
             eprintln!($($arg)*);
         }
     };
@@ -46,8 +46,9 @@ macro_rules! outputln {
 macro_rules! warn {
     ($($arg:tt)*) => {
         if !cfg!(test) {
-            $crate::term::output::print_hint("WARNING", "yellow");
-            eprintln!($($arg)*);
+            let message = console::style(format!($($arg)*)).yellow();
+            let hint = console::style("WARNING:").yellow().bold();
+            eprintln!("{hint} {message}");
         }
     };
 }
@@ -85,30 +86,6 @@ pub fn write_debug(file: &str, msg: String) {
     }
 }
 
-static NO_STYLE: OnceLock<bool> = OnceLock::new();
-
-pub fn set_no_style(no_style: bool) {
-    let _ = NO_STYLE.set(no_style);
-}
-
-pub fn is_no_style() -> bool {
-    NO_STYLE.get().copied().unwrap_or(false)
-}
-
-pub fn print_hint(hint: &str, color: &str) {
-    if is_no_style() {
-        eprint!("{hint} ");
-        return;
-    }
-    let styled = match color {
-        "blue" => style(hint).blue().bold(),
-        "green" => style(hint).green().bold(),
-        "yellow" => style(hint).yellow().bold(),
-        _ => return,
-    };
-    eprint!("{styled} ");
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,15 +104,5 @@ mod tests {
         debug!("This is a test debug message.");
         let content = fs::read_to_string(file).unwrap();
         assert!(content.contains("This is a test debug message."));
-    }
-
-    #[test]
-    fn test_no_style() {
-        assert!(!is_no_style());
-        set_no_style(true);
-        assert!(is_no_style());
-        // Next set should not take effect
-        set_no_style(false);
-        assert!(is_no_style());
     }
 }

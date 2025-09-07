@@ -15,8 +15,9 @@ mod squash;
 mod switch;
 mod sync;
 
-use std::io;
+use std::path::Path;
 use std::sync::Arc;
+use std::{env, io};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -26,9 +27,9 @@ use clap::{Parser, Subcommand};
 
 use crate::config::Config;
 use crate::config::context::ConfigContext;
-use crate::debug;
 use crate::exec::{SilentExit, bash, fzf, git};
 use crate::term::{confirm, output};
+use crate::{debug, warn};
 
 #[async_trait]
 pub trait Command: Args {
@@ -121,9 +122,6 @@ pub struct ConfigArgs {
 
     #[arg(long, short)]
     pub yes: bool,
-
-    #[arg(long)]
-    pub no_style: bool,
 }
 
 impl ConfigArgs {
@@ -137,9 +135,6 @@ impl ConfigArgs {
         }
         if self.yes {
             confirm::set_no_confirm(true);
-        }
-        if self.no_style {
-            output::set_no_style(true);
         }
         let cfg = Config::read(self.config_path.as_deref())?;
         if let Some(ref fzf) = cfg.fzf {
@@ -170,6 +165,24 @@ pub async fn run() -> CommandResult {
                 code: 1,
                 message: Some(format!("Failed to generate init script: {e:#}")),
             };
+        }
+    }
+
+    if env::var("ROXIDE_WRAP").is_err() {
+        match get_shell_type() {
+            Some(shell) if shell == "zsh" || shell == "bash" => {
+                warn!(
+                    "Please do not use `roxide` command directly, add `source <(ROXIDE_INIT='{shell}' roxide)` to your profile and use `rox` command instead"
+                );
+            }
+            Some(shell) => {
+                warn!("Now we do not support shell {shell:?}, please use `bash` or `zsh` instead")
+            }
+            None => {
+                warn!(
+                    "Cannot detect your shell type, please make sure you are using `bash` or `zsh`"
+                );
+            }
         }
     }
 
@@ -226,4 +239,10 @@ pub async fn run() -> CommandResult {
     };
     debug!("[cmd] Cmd result: {result:?}");
     result
+}
+
+fn get_shell_type() -> Option<String> {
+    let shell = env::var("SHELL").ok()?;
+    let name = Path::new(&shell).file_name()?.to_str()?;
+    Some(name.to_string())
 }
