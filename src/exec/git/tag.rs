@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use chrono::Local;
+use chrono::{Local, NaiveDate};
 use semver::{Prerelease, Version};
 use serde::Serialize;
 
@@ -124,6 +124,7 @@ pub enum UpdateTagRule {
     Patch,
     Minor,
     Major,
+    Date,
     DateDash,
     DateDot,
 }
@@ -134,6 +135,7 @@ impl UpdateTagRule {
             "patch" => Some(Self::Patch),
             "minor" => Some(Self::Minor),
             "major" => Some(Self::Major),
+            "date" => Some(Self::Date),
             "date-dash" => Some(Self::DateDash),
             "date-dot" => Some(Self::DateDot),
             _ => None,
@@ -171,6 +173,20 @@ impl UpdateTagRule {
                     version.to_string()
                 };
                 Ok(version)
+            }
+            Self::Date => {
+                let format = if NaiveDate::parse_from_str(tag, "%Y-%m-%d").is_ok() {
+                    "%Y-%m-%d"
+                } else if NaiveDate::parse_from_str(tag, "%Y.%m.%d").is_ok() {
+                    "%Y.%m.%d"
+                } else {
+                    bail!(
+                        "tag {tag:?} is not a valid date format (YYYY-MM-DD or YYYY.MM.DD), please use `date-dash` or `date-dot` rule instead"
+                    );
+                };
+
+                let date = Local::now().format(format).to_string();
+                Ok(date)
             }
             Self::DateDash => {
                 let date = Local::now().format("%Y-%m-%d").to_string();
@@ -426,5 +442,11 @@ mod tests {
         let date_dot_result = UpdateTagRule::DateDot.apply("any_tag").unwrap();
         let today_dot = chrono::Local::now().format("%Y.%m.%d").to_string();
         assert_eq!(date_dot_result, today_dot);
+
+        let date_result = UpdateTagRule::Date.apply("2020-12-12").unwrap();
+        assert_eq!(date_result, today_dash);
+
+        let date_result = UpdateTagRule::Date.apply("2020.12.12").unwrap();
+        assert_eq!(date_result, today_dot);
     }
 }

@@ -218,7 +218,7 @@ fn complete_tag_method(args: Vec<String>, current: &str) -> Result<Vec<Completio
     debug!("[complete] Begin to complete tag method, current: {current:?}");
     build_context(&args)?;
 
-    let candidates = vec!["patch", "minor", "major", "date-dash", "date-dot"]
+    let candidates = vec!["patch", "minor", "major", "date", "date-dash", "date-dot"]
         .into_iter()
         .filter(|m| m.starts_with(current))
         .map(CompletionCandidate::new)

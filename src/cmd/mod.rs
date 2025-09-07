@@ -58,6 +58,7 @@ pub enum Commands {
     Home(home::HomeCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
+    Open(open::OpenCommand),
     Rebase(rebase::RebaseCommand),
     #[command(alias = "rm")]
     Remove(remove::RemoveCommand),
@@ -79,6 +80,7 @@ impl Command for App {
             Commands::Display(cmd) => cmd.run().await,
             Commands::Home(cmd) => cmd.run().await,
             Commands::List(cmd) => cmd.run().await,
+            Commands::Open(cmd) => cmd.run().await,
             Commands::Rebase(cmd) => cmd.run().await,
             Commands::Remove(cmd) => cmd.run().await,
             Commands::Squash(cmd) => cmd.run().await,
@@ -102,6 +104,7 @@ impl Command for App {
                 display::DisplayCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 list::ListCommand::complete_command(),
+                open::OpenCommand::complete_command(),
                 rebase::RebaseCommand::complete_command(),
                 remove::RemoveCommand::complete_command(),
                 squash::SquashCommand::complete_command(),
