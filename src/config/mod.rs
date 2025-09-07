@@ -152,13 +152,6 @@ impl Config {
 }
 
 impl CmdConfig {
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            name: format!("{}", path.as_ref().display()),
-            args: vec![],
-        }
-    }
-
     fn validate(&mut self) -> Result<()> {
         self.name = expandenv(take(&mut self.name));
         if self.name.is_empty() {

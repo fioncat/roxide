@@ -4,10 +4,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{Context, Result, bail};
+use semver::Version;
 
 use crate::api::{self, RemoteAPI};
 use crate::db::Database;
 use crate::debug;
+use crate::exec::{fzf, git};
 use crate::filelock::FileLock;
 
 use super::Config;
@@ -16,6 +18,10 @@ pub struct ConfigContext {
     pub cfg: Config,
 
     pub current_dir: PathBuf,
+
+    pub git_version: Version,
+
+    pub fzf_version: Version,
 
     db: OnceLock<Result<Arc<Database>>>,
 
@@ -30,6 +36,8 @@ impl ConfigContext {
         Ok(Arc::new(Self {
             cfg,
             current_dir,
+            git_version: Self::get_git_version()?,
+            fzf_version: Self::get_fzf_version()?,
             db: OnceLock::new(),
             apis: Mutex::new(HashMap::new()),
             file_lock: OnceLock::new(),
@@ -48,6 +56,8 @@ impl ConfigContext {
         Arc::new(Self {
             cfg,
             current_dir,
+            git_version: Self::get_git_version().unwrap(),
+            fzf_version: Self::get_fzf_version().unwrap(),
             db: OnceLock::new(),
             apis: Mutex::new(apis),
             file_lock: OnceLock::new(),
@@ -103,6 +113,38 @@ impl ConfigContext {
             bail!("failed to acquire global file lock: {e:#}");
         }
         Ok(())
+    }
+
+    fn get_git_version() -> Result<Version> {
+        let version = git::new(["--version"], None::<&str>, "", true)
+            .output()
+            .context("failed to check git command")?;
+        let version = version.trim_start_matches("git version").trim();
+        if version.is_empty() {
+            bail!("`git --version` command does not report anything");
+        }
+        let version = Version::parse(version)
+            .with_context(|| format!("failed to parse git version {version:?}"))?;
+        Ok(version)
+    }
+
+    fn get_fzf_version() -> Result<Version> {
+        let version = fzf::get_cmd()
+            .mute()
+            .args(["--version"])
+            .output()
+            .context("failed to check fzf command")?;
+        let mut fields = version.split_whitespace().collect::<Vec<_>>();
+        if fields.is_empty() {
+            bail!("`fzf --version` command does not report anything");
+        }
+        let version = fields.remove(0);
+        if version.is_empty() {
+            bail!("`fzf --version` command reports empty version");
+        }
+        let version = Version::parse(version)
+            .with_context(|| format!("failed to parse fzf version {version:?}"))?;
+        Ok(version)
     }
 }
 

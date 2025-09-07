@@ -255,7 +255,7 @@ mod tests {
                 repo: Repository {
                     remote: "test".to_string(),
                     owner: "disk-usage".to_string(),
-                    name: "exmaple0".to_string(),
+                    name: "example0".to_string(),
                     ..Default::default()
                 },
                 dirs: vec!["dir0", "dir1"],
@@ -272,7 +272,7 @@ mod tests {
                 repo: Repository {
                     remote: "test".to_string(),
                     owner: "disk-usage".to_string(),
-                    name: "exmaple1".to_string(),
+                    name: "example1".to_string(),
                     ..Default::default()
                 },
                 dirs: vec![],
@@ -282,7 +282,7 @@ mod tests {
                 repo: Repository {
                     remote: "test".to_string(),
                     owner: "disk-usage".to_string(),
-                    name: "exmaple2".to_string(),
+                    name: "example".to_string(),
                     ..Default::default()
                 },
                 dirs: vec![],

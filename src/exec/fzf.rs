@@ -13,14 +13,18 @@ pub fn set_cmd(cfg: CmdConfig) {
     let _ = FZF_COMMAND_CONFIG.set(cfg);
 }
 
+pub fn get_cmd() -> Cmd {
+    FZF_COMMAND_CONFIG
+        .get()
+        .map(|cfg| Cmd::new(&cfg.name).args(&cfg.args))
+        .unwrap_or(Cmd::new("fzf"))
+}
+
 pub fn search<S>(desc: &str, items: &[S], filter: Option<&str>) -> Result<usize>
 where
     S: AsRef<str> + std::fmt::Debug,
 {
-    let mut cmd = FZF_COMMAND_CONFIG
-        .get()
-        .map(|cfg| Cmd::new(&cfg.name).args(&cfg.args))
-        .unwrap_or(Cmd::new("fzf"));
+    let mut cmd = get_cmd();
     if let Some(f) = filter {
         cmd = cmd.args(["--filter", f]);
     }

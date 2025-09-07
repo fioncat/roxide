@@ -43,7 +43,7 @@ pub fn new(
     force_cache: bool,
 ) -> Result<Arc<dyn RemoteAPI>> {
     let Some(ref api_config) = remote.api else {
-        bail!("remote '{}' does not have api config", remote.name);
+        bail!("remote {:?} does not have api config", remote.name);
     };
 
     let mut api: Arc<dyn RemoteAPI> = match api_config.provider {

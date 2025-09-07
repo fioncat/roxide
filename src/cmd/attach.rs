@@ -38,7 +38,7 @@ impl Command for AttachCommand {
 
         if let Some(repo) = get_current_repo_optional(ctx.clone())? {
             bail!(
-                "current path is already attched to {}, please detach first",
+                "current path is already attached to {}, please detach first",
                 repo.full_name()
             );
         }

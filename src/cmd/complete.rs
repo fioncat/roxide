@@ -83,7 +83,7 @@ macro_rules! register_complete {
     };
 }
 
-register_complete!(head, remote, owner, name, branch, tag);
+register_complete!(head, remote, owner, name, branch, tag, tag_method);
 
 fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete head, current: {current:?}");
@@ -214,6 +214,20 @@ fn complete_tag(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandid
     Ok(candidates)
 }
 
+fn complete_tag_method(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete tag method, current: {current:?}");
+    build_context(&args)?;
+
+    let candidates = vec!["patch", "minor", "major", "date-dash", "date-dot"]
+        .into_iter()
+        .filter(|m| m.starts_with(current))
+        .map(CompletionCandidate::new)
+        .collect::<Vec<_>>();
+
+    debug!("[complete] Results: {candidates:?}");
+    Ok(candidates)
+}
+
 #[inline]
 fn remotes_to_candidates(remotes: Vec<RemoteState>, current: &str) -> Vec<CompletionCandidate> {
     let candidates = remotes
@@ -260,8 +274,8 @@ mod tests {
         for case in cases {
             let mut args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
             args.insert(0, name.to_string());
-            let canidates = f(args, case.current).unwrap();
-            let results = canidates
+            let candidates = f(args, case.current).unwrap();
+            let results = candidates
                 .iter()
                 .map(|c| c.get_value().to_str().unwrap().to_string())
                 .collect::<Vec<_>>();

@@ -1,11 +1,14 @@
 mod attach;
+mod check;
 mod complete;
 mod config;
+mod create;
 mod detach;
 mod disk_usage;
 mod display;
 mod home;
 mod list;
+mod open;
 mod rebase;
 mod remove;
 mod squash;
@@ -44,7 +47,9 @@ pub struct App {
 #[derive(Subcommand)]
 pub enum Commands {
     Attach(attach::AttachCommand),
+    Check(check::CheckCommand),
     Config(config::ConfigCommand),
+    Create(create::CreateCommand),
     Detach(detach::DetachCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
@@ -65,7 +70,9 @@ impl Command for App {
     async fn run(self) -> Result<()> {
         match self.command {
             Commands::Attach(cmd) => cmd.run().await,
+            Commands::Check(cmd) => cmd.run().await,
             Commands::Config(cmd) => cmd.run().await,
+            Commands::Create(cmd) => cmd.run().await,
             Commands::Detach(cmd) => cmd.run().await,
             Commands::DiskUsage(cmd) => cmd.run().await,
             Commands::Display(cmd) => cmd.run().await,
@@ -86,7 +93,9 @@ impl Command for App {
             .disable_version_flag(true)
             .subcommands([
                 attach::AttachCommand::complete_command(),
+                check::CheckCommand::complete_command(),
                 config::ConfigCommand::complete_command(),
+                create::CreateCommand::complete_command(),
                 detach::DetachCommand::complete_command(),
                 disk_usage::DiskUsageCommand::complete_command(),
                 display::DisplayCommand::complete_command(),
@@ -126,6 +135,12 @@ impl ConfigArgs {
         if let Some(ref file) = self.debug {
             output::set_debug(file.clone());
         }
+        if self.yes {
+            confirm::set_no_confirm(true);
+        }
+        if self.no_style {
+            output::set_no_style(true);
+        }
         let cfg = Config::read(self.config_path.as_deref())?;
         if let Some(ref fzf) = cfg.fzf {
             fzf::set_cmd(fzf.clone());
@@ -135,12 +150,6 @@ impl ConfigArgs {
         }
         if let Some(ref bash) = cfg.bash {
             bash::set_cmd(bash.clone());
-        }
-        if self.yes {
-            confirm::set_no_confirm(true);
-        }
-        if self.no_style {
-            output::set_no_style(true);
         }
         Ok(cfg)
     }
@@ -195,7 +204,7 @@ pub async fn run() -> CommandResult {
             message: None,
         };
     }
-    // We only print styled message in stderr, so it is safe to enable colors forcely
+    // We only print styled message in stderr, so it is safe to enable colors forcibly
     console::set_colors_enabled(true);
 
     let result = app.run().await;

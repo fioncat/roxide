@@ -18,11 +18,6 @@ pub fn set_cmd(cfg: CmdConfig) {
     let _ = GIT_COMMAND_CONFIG.set(cfg);
 }
 
-#[cfg(test)]
-pub fn get_cmd() -> &'static CmdConfig {
-    GIT_COMMAND_CONFIG.get().unwrap()
-}
-
 pub fn new<I, S, P>(args: I, path: Option<P>, message: impl ToString, mute: bool) -> Cmd
 where
     I: IntoIterator<Item = S>,
