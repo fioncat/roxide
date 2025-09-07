@@ -20,18 +20,53 @@ pub trait ListItem: Serialize {
 }
 
 #[derive(Debug, Clone, Copy, Args)]
-pub struct ListArgs {
+pub struct TableArgs {
     #[arg(long)]
     pub json: bool,
 
     #[arg(long)]
     pub headless: bool,
+}
+
+#[derive(Debug, Clone, Copy, Args)]
+pub struct ListArgs {
+    #[clap(flatten)]
+    pub table: TableArgs,
 
     #[arg(long, short, default_value = "1")]
     pub page: u32,
 
     #[arg(long, short = 's', default_value = "20")]
     pub page_size: u32,
+}
+
+impl TableArgs {
+    pub fn render<T>(&self, titles: Vec<&str>, items: &[T]) -> Result<String>
+    where
+        T: ListItem,
+    {
+        if self.json {
+            let json = serde_json::to_string_pretty(items)?;
+            return Ok(json);
+        }
+        if items.is_empty() {
+            return Ok(String::from("<empty list>"));
+        }
+
+        let mut table = Table::with_capacity(items.len(), self.headless);
+        table.add_static(titles.clone());
+
+        for item in items {
+            let mut row = Vec::with_capacity(titles.len());
+            for title in titles.iter() {
+                let cell = item.row(title);
+                row.push(cell);
+            }
+            table.add(row);
+        }
+
+        Ok(table.render())
+    }
 }
 
 impl ListArgs {
@@ -46,33 +81,18 @@ impl ListArgs {
         L: List<T>,
         T: ListItem,
     {
-        let items = list.items();
-        if self.json {
-            let json = serde_json::to_string_pretty(items)?;
-            return Ok(json);
+        let text = self.table.render(list.titles(), list.items())?;
+        if self.table.json {
+            return Ok(text);
         }
-        if items.is_empty() {
-            return Ok(String::from("<empty list>"));
+        if text == "<empty list>" {
+            return Ok(text);
         }
 
-        let titles = list.titles();
         let total = list.total();
-
-        let mut table = Table::with_capacity(items.len(), self.headless);
-        table.add_static(titles.clone());
-
-        for item in items {
-            let mut row = Vec::with_capacity(titles.len());
-            for title in titles.iter() {
-                let cell = item.row(title);
-                row.push(cell);
-            }
-            table.add(row);
-        }
-
         let total_pages = total.div_ceil(self.page_size);
         let hint = format!("Page: {}/{total_pages}, Total: {}", self.page, total);
-        Ok(format!("{hint}\n{}", table.render()))
+        Ok(format!("{hint}\n{text}"))
     }
 }
 
@@ -148,10 +168,12 @@ mod tests {
                 users: vec![],
                 total: 0,
                 args: ListArgs {
-                    headless: false,
+                    table: TableArgs {
+                        json: false,
+                        headless: false,
+                    },
                     page: 1,
                     page_size: 10,
-                    json: false,
                 },
                 expect: "<empty list>",
             },
@@ -175,10 +197,12 @@ mod tests {
                 ],
                 total: 30,
                 args: ListArgs {
+                    table: TableArgs {
+                        json: false,
+                        headless: false,
+                    },
                     page: 2,
                     page_size: 3,
-                    headless: false,
-                    json: false,
                 },
                 expect: "Page: 2/10, Total: 30\n\
                          +----+---------+---------------+\n\
@@ -204,10 +228,12 @@ mod tests {
                 ],
                 total: 2,
                 args: ListArgs {
+                    table: TableArgs {
+                        json: false,
+                        headless: true,
+                    },
                     page: 1,
                     page_size: 2,
-                    headless: true,
-                    json: false,
                 },
                 expect: "Page: 1/1, Total: 2\n\
                          +---+-------+-------------------+\n\
@@ -245,10 +271,12 @@ mod tests {
         let total = users.len() as u32;
         let list = UserList { users, total };
         let args = ListArgs {
+            table: TableArgs {
+                json: true,
+                headless: false,
+            },
             page: 1,
             page_size: 20,
-            json: true,
-            headless: false,
         };
         let result = args.render(list).unwrap();
         assert_eq!(result, expected);

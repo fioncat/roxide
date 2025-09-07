@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::fs::Metadata;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -9,7 +10,7 @@ use serde::Serialize;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, OwnerState, RemoteState, Repository};
 use crate::format::format_bytes;
-use crate::scan::{ScanFile, ScanHandler, Task, scan_files_with_data};
+use crate::scan::{ScanHandler, ScanTask, scan_files_with_data};
 use crate::term::list::{List, ListItem};
 
 pub async fn repo_disk_usage(
@@ -22,10 +23,7 @@ pub async fn repo_disk_usage(
     for repo in repos {
         let name = Arc::new(repo.full_name());
         let path = repo.get_path(&ctx.cfg.workspace);
-        let task = Task {
-            path,
-            data: name.clone(),
-        };
+        let task = ScanTask::new(path, name.clone())?;
         tasks.push(task);
         usages.insert(name, RepoDiskUsage { repo, usage: 0 });
     }
@@ -33,7 +31,7 @@ pub async fn repo_disk_usage(
     let handler = RepoDiskUsageHandler {
         usages: Mutex::new(usages),
     };
-    let handler = scan_files_with_data(tasks, handler).await?;
+    let handler = scan_files_with_data(tasks, handler, true).await?;
     let usages = handler.usages.into_inner().unwrap();
     let mut repos: Vec<_> = usages.into_values().collect();
     repos.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
@@ -83,8 +81,8 @@ struct RepoDiskUsageHandler {
 }
 
 impl ScanHandler<Arc<String>> for RepoDiskUsageHandler {
-    fn handle(&self, files: Vec<ScanFile>, name: Arc<String>) -> Result<()> {
-        let usage: u64 = files.iter().map(|f| f.metadata.len()).sum();
+    fn handle_files(&self, files: Vec<(PathBuf, Metadata)>, name: Arc<String>) -> Result<()> {
+        let usage: u64 = files.iter().map(|(_, metadata)| metadata.len()).sum();
         let mut usages = self.usages.lock().unwrap();
         let Some(repo_usage) = usages.get_mut(name.as_ref()) else {
             return Ok(());

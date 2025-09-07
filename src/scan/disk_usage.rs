@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -6,11 +7,11 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use pad::PadStr;
 
-use crate::format::{format_bytes, now_millis};
+use crate::format::format_bytes;
 use crate::scan::ignore::Ignore;
-use crate::{cursor_up, outputln};
+use crate::{cursor_up, outputln, report_scan_process};
 
-use super::{ScanFile, ScanHandler, scan_files};
+use super::{ScanHandler, scan_files};
 
 pub async fn disk_usage(path: PathBuf, depth: usize, ignore: Ignore) -> Result<DiskUsage> {
     let handler = DiskUsageHandler {
@@ -21,20 +22,12 @@ pub async fn disk_usage(path: PathBuf, depth: usize, ignore: Ignore) -> Result<D
     };
     outputln!("Begin to scan files");
     let start = Instant::now();
-    let result = scan_files(vec![path], handler).await;
+    let result = scan_files(vec![path], handler, true).await;
     cursor_up!();
     let handler = result?;
 
     let mut usage = handler.usage.into_inner().unwrap();
     usage.elapsed = start.elapsed();
-
-    let elapsed_secs = usage.elapsed.as_secs_f64();
-    let speed = if elapsed_secs > 0.0 {
-        usage.files_count as f64 / elapsed_secs
-    } else {
-        0.0
-    };
-    usage.speed = speed as u64;
 
     Ok(usage)
 }
@@ -47,7 +40,6 @@ pub struct DiskUsage {
     pub items: BTreeMap<PathBuf, u64>,
 
     pub elapsed: Duration,
-    pub speed: u64,
 
     last_report: u64,
 }
@@ -79,8 +71,6 @@ impl DiskUsage {
     }
 }
 
-const REPORT_MILL_SECONDS: u64 = 100;
-
 #[derive(Debug)]
 struct DiskUsageHandler {
     depth: usize,
@@ -91,7 +81,7 @@ struct DiskUsageHandler {
 }
 
 impl ScanHandler<()> for DiskUsageHandler {
-    fn handle(&self, files: Vec<ScanFile>, _: ()) -> Result<()> {
+    fn handle_files(&self, files: Vec<(PathBuf, Metadata)>, _: ()) -> Result<()> {
         if files.is_empty() {
             return Ok(());
         }
@@ -100,14 +90,14 @@ impl ScanHandler<()> for DiskUsageHandler {
         let mut items: BTreeMap<PathBuf, u64> = BTreeMap::new();
         let mut files_usage: u64 = 0;
 
-        for file in files {
-            if self.ignore.matched(&file.path, false) {
+        for (path, metadata) in files {
+            if self.ignore.matched(&path, false) {
                 continue;
             }
             files_count += 1;
-            let usage = file.metadata.len();
+            let usage = metadata.len();
             files_usage += usage;
-            let path = file.path.strip_prefix(&self.base)?;
+            let path = path.strip_prefix(&self.base)?;
             let path = PathBuf::from(path);
             let parts = path.components().collect::<Vec<_>>();
             if parts.len() <= self.depth {
@@ -138,19 +128,7 @@ impl ScanHandler<()> for DiskUsageHandler {
             usage.items.insert(path, new_usage);
         }
 
-        let now = now_millis();
-        let should_report = if usage.last_report == 0 {
-            true
-        } else {
-            let delta = now.saturating_sub(usage.last_report);
-            delta > REPORT_MILL_SECONDS
-        };
-        if should_report {
-            cursor_up!();
-            outputln!("Scanning {} files", usage.files_count);
-            usage.last_report = now;
-        }
-
+        report_scan_process!(usage);
         Ok(())
     }
 

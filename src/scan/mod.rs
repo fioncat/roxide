@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use crossbeam::channel::{self, Receiver, Sender};
@@ -13,35 +14,50 @@ use crossbeam::select;
 
 use crate::debug;
 
-pub struct ScanFile {
+#[derive(Debug, Clone)]
+pub struct ScanTask<T: Send + Sync + Clone + Debug> {
     pub path: PathBuf,
     pub metadata: fs::Metadata,
+    pub data: T,
 }
 
-pub trait ScanHandler<T: Send + Sync + Clone>: Send + Sync {
-    fn handle(&self, files: Vec<ScanFile>, data: T) -> Result<()>;
+impl<T: Send + Sync + Clone + Debug> ScanTask<T> {
+    pub fn new(path: PathBuf, data: T) -> Result<Self> {
+        let metadata = path
+            .metadata()
+            .with_context(|| format!("failed to get metadata for path: {:?}", path.display()))?;
+        Ok(Self {
+            path,
+            metadata,
+            data,
+        })
+    }
+}
+
+pub trait ScanHandler<T: Send + Sync + Clone + Debug>: Send + Sync {
+    fn handle_files(&self, _files: Vec<(PathBuf, fs::Metadata)>, _data: T) -> Result<()> {
+        unreachable!("handle_files should not be called when not in compact mode");
+    }
+
+    fn handle_file(&self, _task: ScanTask<T>) -> Result<()> {
+        unreachable!("handle_file should not be called when in compact mode");
+    }
 
     fn should_skip(&self, dir: &Path, data: T) -> Result<bool>;
 }
 
-#[derive(Debug)]
-pub struct Task<T: Send + Sync + Clone + Debug> {
-    pub path: PathBuf,
-    pub data: T,
-}
-
-struct Dispatcher<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = Task<T>>> {
+struct Dispatcher<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTask<T>>> {
     bootstrap_tasks: Option<I>,
 
-    tasks: Sender<Task<T>>,
+    tasks: Sender<ScanTask<T>>,
     stops: Vec<Sender<()>>,
 
-    results: Receiver<Result<Vec<Task<T>>>>,
+    results: Receiver<Result<Vec<ScanTask<T>>>>,
 
     dispatched: usize,
 }
 
-impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = Task<T>>> Dispatcher<T, I> {
+impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTask<T>>> Dispatcher<T, I> {
     fn wait(&mut self) -> Result<()> {
         debug!("[scan] Dispatcher start");
         loop {
@@ -85,12 +101,14 @@ impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = Task<T>>> Dispatcher
 struct Worker<T: Send + Sync + Clone + Debug> {
     index: usize,
 
-    tasks: Receiver<Task<T>>,
+    tasks: Receiver<ScanTask<T>>,
     stop: Receiver<()>,
 
     handler: Arc<dyn ScanHandler<T>>,
 
-    results: Sender<Result<Vec<Task<T>>>>,
+    results: Sender<Result<Vec<ScanTask<T>>>>,
+
+    compact: bool,
 }
 
 impl<T: Send + Sync + Clone + Debug> Worker<T> {
@@ -111,57 +129,55 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
         }
     }
 
-    fn handle(&self, task: Task<T>) -> Result<Vec<Task<T>>> {
+    fn handle(&self, task: ScanTask<T>) -> Result<Vec<ScanTask<T>>> {
         debug!(
             "[scan] Worker {} begin to handle task: {task:?}",
             self.index
         );
-        let Task { path, data } = task;
-        if !path.exists() {
-            bail!("path does not exist: {:?}", path.display());
+        if !task.path.exists() {
+            bail!("path does not exist: {:?}", task.path.display());
         }
 
-        let metadata = fs::metadata(&path)
-            .with_context(|| format!("failed to get metadata for path: {:?}", path.display()))?;
-
-        if metadata.is_file() {
+        if task.metadata.is_file() {
             debug!(
                 "[scan] Worker {}: task is a file, handle it directly",
                 self.index
             );
-            self.handler
-                .handle(vec![ScanFile { path, metadata }], data.clone())?;
+            if self.compact {
+                self.handler
+                    .handle_files(vec![(task.path, task.metadata)], task.data)?;
+            } else {
+                self.handler.handle_file(task)?;
+            }
             return Ok(vec![]);
         }
 
-        if !metadata.is_dir() {
+        if !task.metadata.is_dir() {
             // TODO: Handle symlink
             debug!("[scan] Worker {}: task is a symlink, skip it", self.index);
             return Ok(vec![]);
         }
 
-        let mut sub_dirs = vec![];
+        let mut sub_tasks = vec![];
         let mut sub_files = vec![];
-        let ents = fs::read_dir(&path)
-            .with_context(|| format!("failed to read dir {:?}", path.display()))?;
+        let ents = fs::read_dir(&task.path)
+            .with_context(|| format!("failed to read dir {:?}", task.path.display()))?;
         for ent in ents {
-            let ent =
-                ent.with_context(|| format!("failed to read dir entry in {:?}", path.display()))?;
-            let sub_path = path.join(ent.file_name());
+            let ent = ent.with_context(|| {
+                format!("failed to read dir entry in {:?}", task.path.display())
+            })?;
+            let sub_path = task.path.join(ent.file_name());
             let sub_metadata = ent.metadata().with_context(|| {
                 format!("failed to get metadata for path: {:?}", sub_path.display())
             })?;
 
             if sub_metadata.is_file() {
                 debug!(
-                    "[scan] Worker {}: task sub entry {:?} is a file, add to handle list",
+                    "[scan] Worker {}: task sub entry {:?} is a file",
                     self.index,
                     sub_path.display()
                 );
-                sub_files.push(ScanFile {
-                    path: sub_path,
-                    metadata: sub_metadata,
-                });
+                sub_files.push((sub_path, sub_metadata));
                 continue;
             }
 
@@ -175,7 +191,7 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
                 continue;
             }
 
-            if self.handler.should_skip(&sub_path, data.clone())? {
+            if self.handler.should_skip(&sub_path, task.data.clone())? {
                 debug!(
                     "[scan] Worker {}: task sub dir {:?} ignored by handler",
                     self.index,
@@ -189,41 +205,58 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
                 self.index,
                 sub_path.display()
             );
-            sub_dirs.push(Task {
+            sub_tasks.push(ScanTask {
                 path: sub_path,
-                data: data.clone(),
+                metadata: sub_metadata,
+                data: task.data.clone(),
             });
         }
 
-        if !sub_files.is_empty() {
-            debug!("[scan] Worker {}: handle files", self.index);
-            self.handler.handle(sub_files, data.clone())?;
+        if sub_files.is_empty() {
+            debug!("[scan] Worker {}: no file found, handle done", self.index);
+            return Ok(sub_tasks);
+        }
+
+        if self.compact {
+            debug!(
+                "[scan] Worker {} is in compact mode, handle files {sub_files:?} directly",
+                self.index
+            );
+            self.handler.handle_files(sub_files, task.data.clone())?;
+        } else {
+            debug!(
+                "[scan] Worker {} not in compact mode, send files {sub_files:?} to dispatcher to let other workers handle",
+                self.index
+            );
+            sub_tasks.extend(sub_files.into_iter().map(|(path, metadata)| ScanTask {
+                path,
+                metadata,
+                data: task.data.clone(),
+            }));
         }
 
         debug!("[scan] Worker {}: handle done", self.index);
-        Ok(sub_dirs)
+        Ok(sub_tasks)
     }
 }
 
-pub async fn scan_files<I, H, S>(paths: I, handler: H) -> Result<H>
+pub async fn scan_files<I, H, S>(paths: I, handler: H, compact: bool) -> Result<H>
 where
     I: IntoIterator<Item = S>,
     H: ScanHandler<()> + std::fmt::Debug + 'static,
     S: AsRef<Path>,
 {
-    let tasks = paths
-        .into_iter()
-        .map(|path| Task {
-            path: PathBuf::from(path.as_ref()),
-            data: (),
-        })
-        .collect::<Vec<_>>();
-    scan_files_with_data(tasks, handler).await
+    let mut tasks = vec![];
+    for path in paths {
+        let task = ScanTask::new(path.as_ref().to_path_buf(), ())?;
+        tasks.push(task);
+    }
+    scan_files_with_data(tasks, handler, compact).await
 }
 
-pub async fn scan_files_with_data<I, H, T>(tasks: I, handler: H) -> Result<H>
+pub async fn scan_files_with_data<I, H, T>(tasks: I, handler: H, compact: bool) -> Result<H>
 where
-    I: IntoIterator<Item = Task<T>> + Debug,
+    I: IntoIterator<Item = ScanTask<T>> + Debug,
     H: ScanHandler<T> + Debug + 'static,
     T: Send + Sync + Clone + Debug + 'static,
 {
@@ -247,6 +280,7 @@ where
             stop: stop_rx.clone(),
             handler: handler.clone(),
             results: results_tx.clone(),
+            compact,
         };
         stops.push(stop_tx.clone());
 
@@ -276,6 +310,48 @@ where
     Ok(handler)
 }
 
+pub const REPORT_MILL_SECONDS: u64 = 100;
+
+#[macro_export]
+macro_rules! report_scan_process {
+    ($self:ident) => {
+        let now = $crate::format::now_millis();
+        let should_report = if $self.last_report == 0 {
+            true
+        } else {
+            let delta = now.saturating_sub($self.last_report);
+            delta > $crate::scan::REPORT_MILL_SECONDS
+        };
+        if should_report {
+            $crate::cursor_up!();
+            $crate::outputln!("Scanning {} files", $self.files_count);
+            $self.last_report = now;
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! report_scan_process_done {
+    ($self:ident) => {
+        $crate::outputln!(
+            "Total {} files, took: {}, speed: {} files/s",
+            $self.files_count,
+            $crate::format::format_elapsed($self.elapsed),
+            $crate::scan::get_handle_speed($self.elapsed, $self.files_count)
+        );
+    };
+}
+
+pub fn get_handle_speed(elapsed: Duration, files_count: usize) -> u64 {
+    let elapsed_secs = elapsed.as_secs_f64();
+    let speed = if elapsed_secs > 0.0 {
+        files_count as f64 / elapsed_secs
+    } else {
+        0.0
+    };
+    speed as u64
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
@@ -285,18 +361,40 @@ mod tests {
     #[derive(Debug)]
     struct TestHandler {
         files: Mutex<Vec<PathBuf>>,
+        compact: bool,
     }
 
     impl ScanHandler<Arc<String>> for TestHandler {
-        fn handle(&self, files: Vec<ScanFile>, data: Arc<String>) -> Result<()> {
+        fn handle_files(
+            &self,
+            files: Vec<(PathBuf, fs::Metadata)>,
+            data: Arc<String>,
+        ) -> Result<()> {
+            if !self.compact {
+                unreachable!();
+            }
             let root = PathBuf::from("tests").join(data.as_str());
             let root = fs::canonicalize(root).unwrap();
 
             let mut all_files = self.files.lock().unwrap();
-            for file in files {
-                assert!(file.path.starts_with(&root));
-                all_files.push(file.path);
+            for (path, _) in files {
+                assert!(path.starts_with(&root));
+                all_files.push(path);
             }
+
+            Ok(())
+        }
+
+        fn handle_file(&self, task: ScanTask<Arc<String>>) -> Result<()> {
+            if self.compact {
+                unreachable!();
+            }
+            let root = PathBuf::from("tests").join(task.data.as_str());
+            let root = fs::canonicalize(root).unwrap();
+
+            let mut all_files = self.files.lock().unwrap();
+            assert!(task.path.starts_with(&root));
+            all_files.push(task.path);
             Ok(())
         }
 
@@ -357,23 +455,37 @@ mod tests {
 
         let handler = TestHandler {
             files: Mutex::new(vec![]),
+            compact: false,
         };
 
         let tasks = [
-            Task {
-                path: fs::canonicalize("tests/scan_dir0").unwrap(),
-                data: Arc::new("scan_dir0".to_string()),
-            },
-            Task {
-                path: fs::canonicalize("tests/scan_dir1").unwrap(),
-                data: Arc::new("scan_dir1".to_string()),
-            },
-            Task {
-                path: fs::canonicalize("tests/scan_skip").unwrap(),
-                data: Arc::new("scan_skip".to_string()),
-            },
+            ScanTask::new(
+                fs::canonicalize("tests/scan_dir0").unwrap(),
+                Arc::new("scan_dir0".to_string()),
+            )
+            .unwrap(),
+            ScanTask::new(
+                fs::canonicalize("tests/scan_dir1").unwrap(),
+                Arc::new("scan_dir1".to_string()),
+            )
+            .unwrap(),
+            ScanTask::new(
+                fs::canonicalize("tests/scan_skip").unwrap(),
+                Arc::new("scan_skip".to_string()),
+            )
+            .unwrap(),
         ];
-        let handler = scan_files_with_data(tasks, handler).await.unwrap();
+        let handler = scan_files_with_data(tasks.clone(), handler, false)
+            .await
+            .unwrap();
+        let results = handler.files.into_inner().unwrap();
+        assert_eq!(results.as_ref(), expected);
+
+        let handler = TestHandler {
+            files: Mutex::new(vec![]),
+            compact: true,
+        };
+        let handler = scan_files_with_data(tasks, handler, true).await.unwrap();
         let results = handler.files.lock().unwrap();
         assert_eq!(results.as_ref(), expected);
     }

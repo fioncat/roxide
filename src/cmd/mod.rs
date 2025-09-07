@@ -12,6 +12,7 @@ mod open;
 mod rebase;
 mod remove;
 mod squash;
+mod stats;
 mod switch;
 mod sync;
 
@@ -63,6 +64,7 @@ pub enum Commands {
     #[command(alias = "rm")]
     Remove(remove::RemoveCommand),
     Squash(squash::SquashCommand),
+    Stats(stats::StatsCommand),
     Switch(switch::SwitchCommand),
     Sync(sync::SyncCommand),
 }
@@ -84,6 +86,7 @@ impl Command for App {
             Commands::Rebase(cmd) => cmd.run().await,
             Commands::Remove(cmd) => cmd.run().await,
             Commands::Squash(cmd) => cmd.run().await,
+            Commands::Stats(cmd) => cmd.run().await,
             Commands::Switch(cmd) => cmd.run().await,
             Commands::Sync(cmd) => cmd.run().await,
         }
@@ -108,6 +111,7 @@ impl Command for App {
                 rebase::RebaseCommand::complete_command(),
                 remove::RemoveCommand::complete_command(),
                 squash::SquashCommand::complete_command(),
+                stats::StatsCommand::complete_command(),
                 switch::SwitchCommand::complete_command(),
                 sync::SyncCommand::complete_command(),
             ])

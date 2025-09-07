@@ -176,7 +176,7 @@ impl RemoteConfig {
             }
             owner
                 .validate(hooks)
-                .with_context(|| format!("validate owner '{name}'"))?;
+                .with_context(|| format!("validate owner {name:?}"))?;
         }
 
         debug!("[config] Remote validated: {:?}", self);
@@ -246,7 +246,7 @@ impl OwnerConfig {
                 bail!("on_create hook #{idx} is empty");
             }
             if !hooks.contains(&name) {
-                bail!("on_create hook '{name}' not found");
+                bail!("on_create hook {name:?} not found");
             }
             new_on_create.push(name);
         }

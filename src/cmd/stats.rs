@@ -5,28 +5,26 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::scan::disk_usage::disk_usage;
+use crate::scan::code_stats::get_code_stats;
 use crate::scan::ignore::Ignore;
-use crate::{outputln, report_scan_process_done};
+use crate::term::list::TableArgs;
+use crate::{output, report_scan_process_done};
 
 use super::Command;
 
 #[derive(Debug, Args)]
-pub struct DiskUsageCommand {
+pub struct StatsCommand {
     pub path: Option<String>,
-
-    #[arg(long, short, default_value = "1")]
-    pub depth: usize,
 
     #[arg(long, short = 'I')]
     pub ignore: Option<Vec<String>>,
 
-    #[arg(long, short)]
-    pub stats: bool,
+    #[clap(flatten)]
+    pub table: TableArgs,
 }
 
 #[async_trait]
-impl Command for DiskUsageCommand {
+impl Command for StatsCommand {
     async fn run(self) -> Result<()> {
         let path = match self.path {
             Some(path) => PathBuf::from(path),
@@ -37,20 +35,18 @@ impl Command for DiskUsageCommand {
             None => Ignore::default(),
         };
 
-        let usage = disk_usage(path, self.depth, ignore).await?;
-        if self.stats {
-            report_scan_process_done!(usage);
-        }
+        let stats = get_code_stats(path, ignore).await?;
+        report_scan_process_done!(stats);
 
-        let items = usage.formatted();
-        for (path, usage) in items {
-            outputln!("{usage}  {}", path.display());
-        }
-
+        let text = self.table.render(
+            vec!["Lang", "Files", "Code", "Comment", "Blank", "Total"],
+            &stats.items,
+        )?;
+        output!("{text}");
         Ok(())
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("disk-usage"))
+        Self::augment_args(clap::Command::new("stats"))
     }
 }
