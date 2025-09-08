@@ -5,10 +5,11 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::config::context::ConfigContext;
 use crate::scan::code_stats::get_code_stats;
 use crate::scan::ignore::Ignore;
 use crate::term::list::TableArgs;
-use crate::{output, report_scan_process_done};
+use crate::{debug, output, report_scan_process_done};
 
 use super::Command;
 
@@ -25,7 +26,9 @@ pub struct StatsCommand {
 
 #[async_trait]
 impl Command for StatsCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: ConfigContext) -> Result<()> {
+        debug!("[cmd] Run stats command: {:?}", self);
+
         let path = match self.path {
             Some(path) => PathBuf::from(path),
             None => env::current_dir().context("failed to get current directory")?,

@@ -26,6 +26,10 @@ impl DerefMut for Remote {
 }
 
 impl Remote {
+    pub fn new(name: &str) -> Self {
+        Remote(name.to_string())
+    }
+
     pub fn origin(cmd: GitCmd) -> Result<Option<Self>> {
         let remotes = Self::list(cmd)?;
         for remote in remotes {
@@ -119,6 +123,7 @@ impl Remote {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::context::ConfigContext;
     use crate::exec::git;
 
     use super::*;
@@ -128,13 +133,15 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let remotes = Remote::list(Some(repo_path), true).unwrap();
+        let remotes = Remote::list(cmd).unwrap();
         assert_eq!(remotes.len(), 1);
-        assert_eq!(remotes[0].name, "origin");
+        assert_eq!(remotes[0].as_str(), "origin");
 
-        let remote = Remote::origin(Some(repo_path), true).unwrap().unwrap();
-        assert_eq!(remote.name, "origin");
+        let remote = Remote::origin(cmd).unwrap().unwrap();
+        assert_eq!(remote.as_str(), "origin");
     }
 
     #[test]
@@ -142,9 +149,11 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let remote = Remote::origin(Some(repo_path), true).unwrap().unwrap();
-        let url = remote.get_url().unwrap();
+        let remote = Remote::origin(cmd).unwrap().unwrap();
+        let url = remote.get_url(cmd).unwrap();
         assert_eq!(url, "https://github.com/fioncat/roxide.git");
     }
 
@@ -153,9 +162,11 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let remote = Remote::origin(Some(repo_path), true).unwrap().unwrap();
-        let target = remote.get_target("").unwrap();
+        let remote = Remote::origin(cmd).unwrap().unwrap();
+        let target = remote.get_target(cmd, "").unwrap();
         assert_eq!(target, "origin/main");
     }
 }

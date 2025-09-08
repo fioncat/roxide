@@ -2,7 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{Command, ConfigArgs};
+use crate::cmd::Command;
+use crate::config::context::ConfigContext;
 use crate::exec::git::branch::{Branch, BranchList};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, output};
@@ -11,18 +12,14 @@ use crate::{debug, output};
 pub struct ListBranchCommand {
     #[clap(flatten)]
     pub list: ListArgs,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for ListBranchCommand {
-    async fn run(self) -> Result<()> {
-        self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list branch command: {:?}", self);
 
-        let branches = Branch::list(None::<&str>, true)?;
+        let branches = Branch::list(ctx.git())?;
         let (branches, total) = pagination(branches, self.list.limit());
 
         let list = BranchList { branches, total };

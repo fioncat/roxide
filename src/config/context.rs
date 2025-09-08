@@ -9,8 +9,8 @@ use semver::Version;
 use crate::api::{self, RemoteAPI};
 use crate::db::Database;
 use crate::debug;
+use crate::exec::fzf;
 use crate::exec::git::GitCmd;
-use crate::exec::{fzf, git};
 use crate::filelock::FileLock;
 use crate::term::{confirm, output};
 
@@ -30,19 +30,29 @@ impl ConfigContext {
     const CONFIG_ENV: &'static str = "ROXIDE_CONFIG";
     const DEBUG_ENV: &'static str = "ROXIDE_DEBUG";
     const NO_CONFIRM_ENV: &'static str = "ROXIDE_NO_CONFIRM";
+    const WORK_ENV: &'static str = "ROXIDE_WORK";
 
     pub fn setup() -> Result<Self> {
         if let Ok(debug) = env::var(Self::DEBUG_ENV) {
             output::set_debug(debug);
         }
-        if env::var(Self::CONFIG_ENV).is_ok() {
+        if env::var(Self::NO_CONFIRM_ENV).is_ok() {
             confirm::set_no_confirm(true);
         }
 
         let config_path = env::var(Self::CONFIG_ENV).ok();
         let cfg = Config::read(config_path)?;
 
-        let current_dir = env::current_dir().context("failed to get current directory")?;
+        let current_dir = match env::var(Self::WORK_ENV) {
+            Ok(dir) => {
+                let path = PathBuf::from(dir);
+                if !path.exists() {
+                    bail!("user set work dir {:?} does not exists", path.display());
+                }
+                path
+            }
+            Err(_) => env::current_dir().context("failed to get current directory")?,
+        };
         Ok(Self {
             cfg,
             current_dir,
@@ -57,7 +67,10 @@ impl ConfigContext {
     pub fn new_mock() -> Self {
         let current_dir = env::current_dir().unwrap();
         Self {
-            cfg: Config::default(),
+            cfg: Config {
+                git: Config::default_git(),
+                ..Default::default()
+            },
             current_dir,
             mute: true,
             db: OnceLock::new(),
@@ -133,7 +146,7 @@ impl ConfigContext {
     }
 
     #[inline]
-    pub fn git(&self) -> GitCmd {
+    pub fn git<'a>(&'a self) -> GitCmd<'a> {
         GitCmd::new(&self.cfg.git, &self.current_dir, self.mute)
     }
 
@@ -142,9 +155,11 @@ impl ConfigContext {
         GitCmd::new(&self.cfg.git, work_dir, self.mute)
     }
 
-    fn get_git_version() -> Result<Version> {
-        let version = git::new(["--version"], None::<&str>, "", true)
-            .output()
+    pub fn get_git_version(&self) -> Result<Version> {
+        let version = self
+            .git()
+            .mute()
+            .output(["--version"], "")
             .context("failed to check git command")?;
         let version = version.trim_start_matches("git version").trim();
         if version.is_empty() {
@@ -155,7 +170,7 @@ impl ConfigContext {
         Ok(version)
     }
 
-    fn get_fzf_version() -> Result<Version> {
+    pub fn get_fzf_version(&self) -> Result<Version> {
         let version = fzf::get_cmd()
             .mute()
             .args(["--version"])
@@ -239,7 +254,7 @@ pub mod tests {
         }
     }
 
-    pub fn build_test_context(name: &str, current_dir: Option<PathBuf>) -> Arc<ConfigContext> {
+    pub fn build_test_context(name: &str) -> ConfigContext {
         let base_dir = format!("tests/{name}");
         let _ = fs::remove_dir_all(&base_dir);
         repo::ensure_dir(&base_dir).unwrap();
@@ -265,12 +280,13 @@ pub mod tests {
             data_dir: format!("{}", data_dir.display()),
             remotes,
             hooks,
+            git: Config::default_git(),
             ..Default::default()
         };
         let home_dir = dirs::home_dir().unwrap();
         cfg.validate(&home_dir).unwrap();
 
-        let ctx = ConfigContext::new_mock_api(cfg, Arc::new(MockAPI {}), current_dir);
+        let ctx = ConfigContext::new_mock_api(cfg, Arc::new(MockAPI {}));
 
         let repos = db::tests::test_repos();
 
@@ -288,7 +304,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_context() {
-        let ctx = build_test_context("context", None);
+        let ctx = build_test_context("context");
         let repo = ctx
             .get_db()
             .unwrap()

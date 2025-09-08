@@ -4,29 +4,27 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::Command;
 use crate::cmd::complete;
-use crate::cmd::{Command, ConfigArgs};
+use crate::config::context::ConfigContext;
 use crate::debug;
+use crate::exec::fzf;
 use crate::exec::git::tag::Tag;
-use crate::exec::{fzf, git};
 
 #[derive(Debug, Args)]
 pub struct RemoveTagCommand {
     pub tag: Option<String>,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
+
 #[async_trait]
 impl Command for RemoveTagCommand {
-    async fn run(self) -> Result<()> {
-        self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove tag command: {:?}", self);
 
         let tag = match self.tag {
-            Some(ref tag) => Tag::get(None::<&str>, false, tag)?.name,
+            Some(ref tag) => Tag::get(ctx.git(), tag)?.name,
             None => {
-                let mut tags = Tag::list(None::<&str>, false)?
+                let mut tags = Tag::list(ctx.git())?
                     .into_iter()
                     .map(|t| t.name)
                     .collect::<Vec<_>>();
@@ -35,21 +33,13 @@ impl Command for RemoveTagCommand {
             }
         };
 
-        git::new(
-            ["tag", "-d", &tag],
-            None::<&str>,
-            format!("Remove local tag {tag:?}"),
-            false,
-        )
-        .execute()?;
+        ctx.git()
+            .execute(["tag", "-d", &tag], format!("Remove local tag {tag:?}"))?;
 
-        git::new(
+        ctx.git().execute(
             ["push", "origin", "--delete", &tag],
-            None::<&str>,
             format!("Remove remote tag {tag:?}"),
-            false,
-        )
-        .execute()?;
+        )?;
 
         Ok(())
     }

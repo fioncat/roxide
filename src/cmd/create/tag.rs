@@ -3,36 +3,32 @@ use async_trait::async_trait;
 use clap::Args;
 use console::style;
 
+use crate::cmd::Command;
 use crate::cmd::complete;
-use crate::cmd::{Command, ConfigArgs};
-use crate::exec::git;
+use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, UpdateTagRule};
 use crate::{confirm, debug, info, output};
 
 #[derive(Debug, Args)]
 pub struct CreateTagCommand {
     pub tag: String,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for CreateTagCommand {
-    async fn run(self) -> Result<()> {
-        self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run create tag command: {:?}", self);
 
         let tag = match UpdateTagRule::from_str(&self.tag) {
             Some(rule) => {
-                let latest = Tag::get_latest(None::<&str>, false)?;
+                let latest = Tag::get_latest(ctx.git())?;
                 info!("Latest tag is: {}", style(&latest.name).green());
                 let new_tag = rule.apply(&latest.name)?;
                 confirm!("Do you want to create tag {}", style(&new_tag).magenta());
                 new_tag
             }
             None => {
-                let tags = Tag::list(None::<&str>, false)?;
+                let tags = Tag::list(ctx.git())?;
                 for t in tags {
                     if t.name == self.tag {
                         output!("Tag {:?} already exists", self.tag);
@@ -43,21 +39,13 @@ impl Command for CreateTagCommand {
             }
         };
 
-        git::new(
-            ["tag", &tag],
-            None::<&str>,
-            format!("Create tag {tag:?}"),
-            false,
-        )
-        .execute()?;
+        ctx.git()
+            .execute(["tag", &tag], format!("Create tag {tag:?}"))?;
 
-        git::new(
+        ctx.git().execute(
             ["push", "origin", &tag],
-            None::<&str>,
             format!("Push tag {tag:?} to remote"),
-            true,
-        )
-        .execute()?;
+        )?;
 
         Ok(())
     }

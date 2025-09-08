@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use reqwest::Url;
@@ -13,12 +12,12 @@ use crate::debug;
 use crate::exec::fzf;
 use crate::term::list::List;
 
-pub struct RepoSelector<'a> {
-    ctx: Arc<ConfigContext>,
+pub struct RepoSelector<'a, 'b> {
+    ctx: &'a ConfigContext,
 
-    head: &'a str,
-    owner: &'a str,
-    name: &'a str,
+    head: &'b str,
+    owner: &'b str,
+    name: &'b str,
 
     fzf_filter: Option<&'static str>,
 }
@@ -44,12 +43,12 @@ enum SelectOneType<'a> {
     Direct,
 }
 
-impl<'a> RepoSelector<'a> {
+impl<'a, 'b> RepoSelector<'a, 'b> {
     pub fn new(
-        ctx: Arc<ConfigContext>,
-        head: &'a Option<String>,
-        owner: &'a Option<String>,
-        name: &'a Option<String>,
+        ctx: &'a ConfigContext,
+        head: &'b Option<String>,
+        owner: &'b Option<String>,
+        name: &'b Option<String>,
     ) -> Self {
         debug!("[select] Create repo selector, head: {head:?}, owner: {owner:?}, name: {name:?}");
         Self {
@@ -62,7 +61,7 @@ impl<'a> RepoSelector<'a> {
     }
 
     #[cfg(test)]
-    pub fn from_args(ctx: Arc<ConfigContext>, args: &'a [String]) -> Self {
+    pub fn from_args(ctx: &'a ConfigContext, args: &'b [String]) -> Self {
         Self {
             ctx,
             head: args.first().map(|s| s.as_str()).unwrap_or(""),
@@ -676,7 +675,7 @@ impl List<RemoteState> for RemoteList {
     }
 }
 
-pub fn select_remotes(ctx: Arc<ConfigContext>, limit: LimitOptions) -> Result<RemoteList> {
+pub fn select_remotes(ctx: &ConfigContext, limit: LimitOptions) -> Result<RemoteList> {
     debug!("[select] Select remotes, limit: {limit:?}");
     let db = ctx.get_db()?;
     let (remotes, total) = db.with_transaction(|tx| {
@@ -715,7 +714,7 @@ impl List<OwnerState> for OwnerList {
 }
 
 pub fn select_owners(
-    ctx: Arc<ConfigContext>,
+    ctx: &ConfigContext,
     remote: Option<String>,
     limit: LimitOptions,
 ) -> Result<OwnerList> {
@@ -748,9 +747,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_empty() {
-        let ctx = context::tests::build_test_context("select_one_empty", None);
+        let ctx = context::tests::build_test_context("select_one_empty");
 
-        let mut selector = RepoSelector::from_args(ctx, &[]);
+        let mut selector = RepoSelector::from_args(&ctx, &[]);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -779,10 +778,10 @@ mod tests {
             .join("github")
             .join("fioncat")
             .join("roxide");
-        let ctx =
-            context::tests::build_test_context("select_one_empty_in_repo_root", Some(repo_path));
+        let mut ctx = context::tests::build_test_context("select_one_empty_in_repo_root");
+        ctx.current_dir = repo_path;
 
-        let mut selector = RepoSelector::from_args(ctx, &[]);
+        let mut selector = RepoSelector::from_args(&ctx, &[]);
         selector.fzf_filter = Some("roxide");
         // We are in roxide, it should be excluded
         let result = selector.select_one(false, false).await;
@@ -801,10 +800,10 @@ mod tests {
             .join("roxide")
             .join("src")
             .join("subdir");
-        let ctx =
-            context::tests::build_test_context("select_one_empty_in_repo_subdir", Some(repo_path));
+        let mut ctx = context::tests::build_test_context("select_one_empty_in_repo_subdir");
+        ctx.current_dir = repo_path;
 
-        let mut selector = RepoSelector::from_args(ctx, &[]);
+        let mut selector = RepoSelector::from_args(&ctx, &[]);
         // This should be ignored, because we are in a subdir of roxide
         // The selector should select it directly
         selector.fzf_filter = Some("non-exists");
@@ -827,7 +826,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_url_ssh() {
-        let ctx = context::tests::build_test_context("select_one_url_ssh", None);
+        let ctx = context::tests::build_test_context("select_one_url_ssh");
 
         #[derive(Default)]
         struct Case {
@@ -912,7 +911,7 @@ mod tests {
         for case in cases {
             let url = case.url.to_string();
             let args = vec![url];
-            let selector = RepoSelector::from_args(ctx.clone(), &args);
+            let selector = RepoSelector::from_args(&ctx, &args);
             let result = selector.select_one(false, false).await;
             if !case.should_ok {
                 assert!(result.is_err());
@@ -926,9 +925,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_remote() {
-        let ctx = context::tests::build_test_context("select_one_remote", None);
+        let ctx = context::tests::build_test_context("select_one_remote");
         let args = vec!["github".to_string()];
-        let mut selector = RepoSelector::from_args(ctx, &args);
+        let mut selector = RepoSelector::from_args(&ctx, &args);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -949,9 +948,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_remote_latest() {
-        let ctx = context::tests::build_test_context("select_one_remote_latest", None);
+        let ctx = context::tests::build_test_context("select_one_remote_latest");
         let args = vec!["-".to_string()];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -971,9 +970,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_remote_fuzzy() {
-        let ctx = context::tests::build_test_context("select_one_remote_fuzzy", None);
+        let ctx = context::tests::build_test_context("select_one_remote_fuzzy");
         let args = vec!["rox".to_string()];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -993,9 +992,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_owner() {
-        let ctx = context::tests::build_test_context("select_one_owner", None);
+        let ctx = context::tests::build_test_context("select_one_owner");
         let args = vec!["github".to_string(), "fioncat".to_string()];
-        let mut selector = RepoSelector::from_args(ctx, &args);
+        let mut selector = RepoSelector::from_args(&ctx, &args);
         selector.fzf_filter = Some("dotfiles");
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
@@ -1012,9 +1011,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_owner_latest() {
-        let ctx = context::tests::build_test_context("select_one_owner_latest", None);
+        let ctx = context::tests::build_test_context("select_one_owner_latest");
         let args = vec!["github".to_string(), "-".to_string()];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -1034,9 +1033,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_owner_local() {
-        let ctx = context::tests::build_test_context("select_one_owner_local", None);
+        let ctx = context::tests::build_test_context("select_one_owner_local");
         let args = vec!["github".to_string(), "fioncat".to_string()];
-        let mut selector = RepoSelector::from_args(ctx, &args);
+        let mut selector = RepoSelector::from_args(&ctx, &args);
         selector.fzf_filter = Some("roxide");
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
@@ -1062,10 +1061,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_owner_local_fuzzy() {
-        let ctx = context::tests::build_test_context("select_one_owner_local_fuzzy", None);
+        let ctx = context::tests::build_test_context("select_one_owner_local_fuzzy");
         // `rox` is not an owner, in local mode, it should be treated as a fuzzy keyword
         let args = vec!["github".to_string(), "rox".to_string()];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
             repo,
@@ -1085,13 +1084,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_name() {
-        let ctx = context::tests::build_test_context("select_one_name", None);
+        let ctx = context::tests::build_test_context("select_one_name");
         let args = vec![
             "github".to_string(),
             "fioncat".to_string(),
             "roxide".to_string(),
         ];
-        let selector = RepoSelector::from_args(ctx.clone(), &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -1114,7 +1113,7 @@ mod tests {
             "fioncat".to_string(),
             "dotfiles".to_string(),
         ];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, false).await.unwrap();
         assert_eq!(
             repo,
@@ -1130,13 +1129,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_select_one_name_local() {
-        let ctx = context::tests::build_test_context("select_one_name_local", None);
+        let ctx = context::tests::build_test_context("select_one_name_local");
         let args = vec![
             "github".to_string(),
             "fioncat".to_string(),
             "rox".to_string(),
         ];
-        let selector = RepoSelector::from_args(ctx.clone(), &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, true).await.unwrap();
         assert_eq!(
             repo,
@@ -1159,7 +1158,7 @@ mod tests {
             "fioncat".to_string(),
             "dotfiles".to_string(),
         ];
-        let selector = RepoSelector::from_args(ctx, &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let result = selector.select_one(false, true).await;
         assert!(result.is_err());
     }
@@ -1269,10 +1268,10 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_many", None);
+        let ctx = context::tests::build_test_context("select_many");
         for case in cases {
             let args = case.args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            let selector = RepoSelector::from_args(ctx.clone(), &args);
+            let selector = RepoSelector::from_args(&ctx, &args);
             let list = selector.select_many(case.opts).unwrap();
             assert_eq!(list.total, case.expect_total);
             assert_eq!(list.level, case.expect_level);
@@ -1307,7 +1306,7 @@ mod tests {
         expect: CaseResult,
     }
 
-    async fn run_select_remote_cases<I>(ctx: Arc<ConfigContext>, cases: I)
+    async fn run_select_remote_cases<I>(ctx: &ConfigContext, cases: I)
     where
         I: IntoIterator<Item = SelectRemoteCase>,
     {
@@ -1319,7 +1318,7 @@ mod tests {
             if !case.name.is_empty() {
                 args.push(case.name.to_string());
             }
-            let mut selector = RepoSelector::from_args(ctx.clone(), &args);
+            let mut selector = RepoSelector::from_args(ctx, &args);
             if let Some(filter) = case.filter {
                 selector.fzf_filter = Some(filter);
             }
@@ -1369,8 +1368,8 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_remote_by_url", None);
-        run_select_remote_cases(ctx, cases).await;
+        let ctx = context::tests::build_test_context("select_remote_by_url");
+        run_select_remote_cases(&ctx, cases).await;
     }
 
     #[tokio::test]
@@ -1392,8 +1391,8 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_remote_by_owner", None);
-        run_select_remote_cases(ctx, cases).await;
+        let ctx = context::tests::build_test_context("select_remote_by_owner");
+        run_select_remote_cases(&ctx, cases).await;
     }
 
     #[tokio::test]
@@ -1418,8 +1417,8 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_remote_by_name", None);
-        run_select_remote_cases(ctx, cases).await;
+        let ctx = context::tests::build_test_context("select_remote_by_name");
+        run_select_remote_cases(&ctx, cases).await;
     }
 
     #[test]
@@ -1464,9 +1463,9 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_remotes", None);
+        let ctx = context::tests::build_test_context("select_remotes");
         for case in cases {
-            let list = select_remotes(ctx.clone(), case.limit).unwrap();
+            let list = select_remotes(&ctx, case.limit).unwrap();
             assert_eq!(list, case.expect);
         }
     }
@@ -1550,9 +1549,9 @@ mod tests {
             },
         ];
 
-        let ctx = context::tests::build_test_context("select_owners", None);
+        let ctx = context::tests::build_test_context("select_owners");
         for case in cases {
-            let list = select_owners(ctx.clone(), case.remote, case.limit).unwrap();
+            let list = select_owners(&ctx, case.remote, case.limit).unwrap();
             assert_eq!(list, case.expect);
         }
     }

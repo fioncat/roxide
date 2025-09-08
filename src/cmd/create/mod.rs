@@ -5,6 +5,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::config::context::ConfigContext;
+
 use super::Command;
 
 #[derive(Args)]
@@ -21,10 +23,10 @@ pub enum CreateCommands {
 
 #[async_trait]
 impl Command for CreateCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
-            CreateCommands::Branch(cmd) => cmd.run().await,
-            CreateCommands::Tag(cmd) => cmd.run().await,
+            CreateCommands::Branch(cmd) => cmd.run(ctx).await,
+            CreateCommands::Tag(cmd) => cmd.run(ctx).await,
         }
     }
 

@@ -4,7 +4,8 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{Command, ConfigArgs, complete};
+use crate::cmd::{Command, complete};
+use crate::config::context::ConfigContext;
 use crate::exec::git::branch::Branch;
 use crate::repo::current::get_current_repo;
 use crate::{debug, info};
@@ -19,19 +20,15 @@ pub struct OpenRepoCommand {
 
     #[arg(long, short)]
     pub upstream: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for OpenRepoCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run open repo command: {:?}", self);
-        let ctx = self.config.build_ctx()?;
         ctx.lock()?;
 
-        let repo = get_current_repo(ctx.clone())?;
+        let repo = get_current_repo(&ctx)?;
         let api = ctx.get_api(&repo.remote, self.force_no_cache)?;
 
         let mut api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
@@ -48,7 +45,7 @@ impl Command for OpenRepoCommand {
         if let Some(branch) = self.branch {
             let branch = match branch {
                 Some(b) => b,
-                None => Branch::current(None::<&str>, false)?,
+                None => Branch::current(ctx.git())?,
             };
 
             let path = Path::new(&web_url).join("tree").join(branch);

@@ -1,19 +1,17 @@
-use std::sync::Arc;
-
 use anyhow::{Result, bail};
 
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::debug;
 
-pub fn get_current_repo(ctx: Arc<ConfigContext>) -> Result<Repository> {
+pub fn get_current_repo(ctx: &ConfigContext) -> Result<Repository> {
     match get_current_repo_optional(ctx)? {
         Some(repo) => Ok(repo),
         None => bail!("you are not in any repository"),
     }
 }
 
-pub fn get_current_repo_optional(ctx: Arc<ConfigContext>) -> Result<Option<Repository>> {
+pub fn get_current_repo_optional(ctx: &ConfigContext) -> Result<Option<Repository>> {
     debug!(
         "[current] Get current repo, dir: {}",
         ctx.current_dir.display()
@@ -50,11 +48,10 @@ mod tests {
 
     #[test]
     fn test_current_repo() {
-        let ctx = context::tests::build_test_context(
-            "current_repo",
-            Some(PathBuf::from("/path/to/nvimdots")),
-        );
-        let repo = get_current_repo(ctx).unwrap();
+        let mut ctx = context::tests::build_test_context("current_repo");
+        ctx.current_dir = PathBuf::from("/path/to/nvimdots");
+
+        let repo = get_current_repo(&ctx).unwrap();
         assert_eq!(
             repo,
             Repository {
@@ -82,8 +79,9 @@ mod tests {
             .join("fioncat")
             .join("roxide")
             .join("src");
-        let ctx = context::tests::build_test_context("current_repo_workspace", Some(repo_path));
-        let repo = get_current_repo(ctx).unwrap();
+        let mut ctx = context::tests::build_test_context("current_repo_workspace");
+        ctx.current_dir = repo_path;
+        let repo = get_current_repo(&ctx).unwrap();
         assert_eq!(
             repo,
             Repository {

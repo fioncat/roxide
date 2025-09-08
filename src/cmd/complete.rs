@@ -1,6 +1,5 @@
 use std::env;
 use std::ffi::OsStr;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Arg;
@@ -14,12 +13,10 @@ use crate::db::repo::{QueryOptions, RemoteState};
 use crate::debug;
 use crate::exec::git::branch::Branch;
 use crate::exec::git::tag::Tag;
-use crate::term::output;
 
 use super::App;
 
 const INIT_ENV: &str = "ROXIDE_INIT";
-const COMPLETE_DEBUG_ENV: &str = "ROXIDE_COMPLETE_DEBUG";
 const BIN_NAME: &str = "rox";
 
 pub fn register_complete() -> Result<bool> {
@@ -46,17 +43,15 @@ pub fn repo_args() -> [Arg; 3] {
     [head_arg(), owner_arg(), name_arg()]
 }
 
-fn setup_complete() -> Vec<String> {
-    if let Ok(debug) = env::var(COMPLETE_DEBUG_ENV) {
-        output::set_debug(debug);
-    }
+fn setup_complete() -> Result<(ConfigContext, Vec<String>)> {
+    let ctx = ConfigContext::setup()?;
     let mut args = env::args().collect::<Vec<_>>();
     debug!("[complete] Raw args: {args:?}");
     args.remove(0); // remove binary name
     args.remove(0); // remnove "--"
     args.pop(); // remove current
     debug!("[complete] Setup done, args: {args:?}");
-    args
+    Ok((ctx, args))
 }
 
 macro_rules! register_complete {
@@ -64,8 +59,14 @@ macro_rules! register_complete {
         $(
             paste! {
                 pub fn $param(current: &OsStr) -> Vec<CompletionCandidate> {
-                    let args = setup_complete();
-                    match [<complete_ $param>](args, current.to_str().unwrap_or_default()) {
+                    let (ctx, args) = match setup_complete() {
+                        Ok((ctx, args)) => (ctx, args),
+                        Err(e) => {
+                            debug!("Complete setup error: {e:#}");
+                            return vec![];
+                        }
+                    };
+                    match [<complete_ $param>](&ctx, args, current.to_str().unwrap_or_default()) {
                         Ok(items) => items,
                         Err(e) => {
                             debug!("Complete error: {e:#}");
@@ -85,14 +86,17 @@ macro_rules! register_complete {
 
 register_complete!(head, remote, owner, name, branch, tag, tag_method);
 
-fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_head(
+    ctx: &ConfigContext,
+    args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete head, current: {current:?}");
     if current.is_empty() {
         debug!("[complete] Current is empty, complete remote");
-        return complete_remote(args, "");
+        return complete_remote(ctx, args, "");
     }
 
-    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let remotes = db.with_transaction(|tx| tx.repo().query_remotes(None))?;
     debug!("[complete] Remotes: {remotes:?}");
@@ -117,23 +121,29 @@ fn complete_head(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandi
     Ok(candidates)
 }
 
-fn complete_remote(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_remote(
+    ctx: &ConfigContext,
+    _args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete remote, current: {current:?}");
-    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let remotes = db.with_transaction(|tx| tx.repo().query_remotes(None))?;
     debug!("[complete] Remotes: {remotes:?}");
     Ok(remotes_to_candidates(remotes, current))
 }
 
-fn complete_owner(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_owner(
+    ctx: &ConfigContext,
+    mut args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete owner, current: {current:?}");
     let Some(remote) = args.pop() else {
         debug!("[complete] Remote is required to complete owner, skip");
         return Ok(vec![]);
     };
 
-    let ctx = build_context(&args)?;
     let db = ctx.get_db()?;
     let owners = db.with_transaction(|tx| tx.repo().query_owners(Some(remote), None))?;
     debug!("[complete] Owners: {owners:?}");
@@ -146,7 +156,11 @@ fn complete_owner(mut args: Vec<String>, current: &str) -> Result<Vec<Completion
     Ok(candidates)
 }
 
-fn complete_name(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_name(
+    ctx: &ConfigContext,
+    mut args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete name, current: {current:?}");
     let Some(owner) = args.pop() else {
         debug!("[complete] Owner is required to complete name, skip");
@@ -156,8 +170,6 @@ fn complete_name(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionC
         debug!("[complete] Remote is required to complete name, skip");
         return Ok(vec![]);
     };
-
-    let ctx = build_context(&args)?;
 
     let db = ctx.get_db()?;
     let repos = db.with_transaction(|tx| {
@@ -179,11 +191,14 @@ fn complete_name(mut args: Vec<String>, current: &str) -> Result<Vec<CompletionC
     Ok(candidates)
 }
 
-fn complete_branch(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_branch(
+    ctx: &ConfigContext,
+    _args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete branch, current: {current:?}");
-    build_context(&args)?;
 
-    let branches = Branch::list(None::<&str>, true)?;
+    let branches = Branch::list(ctx.git())?;
     debug!("[complete] Branches: {branches:?}");
 
     let candidates = branches
@@ -197,11 +212,14 @@ fn complete_branch(args: Vec<String>, current: &str) -> Result<Vec<CompletionCan
     Ok(candidates)
 }
 
-fn complete_tag(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_tag(
+    ctx: &ConfigContext,
+    _args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete tag, current: {current:?}");
-    build_context(&args)?;
 
-    let tags = Tag::list(None::<&str>, true)?;
+    let tags = Tag::list(ctx.git())?;
     debug!("[complete] Tags: {tags:?}");
 
     let candidates = tags
@@ -214,9 +232,12 @@ fn complete_tag(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandid
     Ok(candidates)
 }
 
-fn complete_tag_method(args: Vec<String>, current: &str) -> Result<Vec<CompletionCandidate>> {
+fn complete_tag_method(
+    _ctx: &ConfigContext,
+    _args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
     debug!("[complete] Begin to complete tag method, current: {current:?}");
-    build_context(&args)?;
 
     let candidates = vec!["patch", "minor", "major", "date", "date-dash", "date-dot"]
         .into_iter()
@@ -240,23 +261,9 @@ fn remotes_to_candidates(remotes: Vec<RemoteState>, current: &str) -> Vec<Comple
 }
 
 #[cfg(test)]
-#[inline]
-fn build_context(args: &[String]) -> Result<Arc<ConfigContext>> {
-    use crate::config::context;
-    let test_name = format!("complete_{}", args[0]);
-    Ok(context::tests::build_test_context(&test_name, None))
-}
-
-#[cfg(not(test))]
-#[inline]
-fn build_context(_: &[String]) -> Result<Arc<ConfigContext>> {
-    use crate::config::Config;
-    let cfg = Config::read(None::<&str>)?;
-    ConfigContext::new(cfg)
-}
-
-#[cfg(test)]
 mod tests {
+    use crate::config::context;
+
     use super::*;
 
     #[derive(Debug)]
@@ -269,12 +276,15 @@ mod tests {
     fn run_cases<I, F>(name: &str, cases: I, f: F)
     where
         I: IntoIterator<Item = CompleteCase>,
-        F: Fn(Vec<String>, &str) -> Result<Vec<CompletionCandidate>>,
+        F: Fn(&ConfigContext, Vec<String>, &str) -> Result<Vec<CompletionCandidate>>,
     {
+        let name = format!("complete_{name}");
+        let ctx = context::tests::build_test_context(&name);
+
         for case in cases {
             let mut args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
             args.insert(0, name.to_string());
-            let candidates = f(args, case.current).unwrap();
+            let candidates = f(&ctx, args, case.current).unwrap();
             let results = candidates
                 .iter()
                 .map(|c| c.get_value().to_str().unwrap().to_string())

@@ -3,12 +3,13 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::complete;
+use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::RepoSelector;
 use crate::{debug, info};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
 pub struct AttachCommand {
@@ -20,15 +21,11 @@ pub struct AttachCommand {
 
     #[arg(long, short)]
     pub force_no_cache: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for AttachCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run attach command: {:?}", self);
         ctx.lock()?;
 
@@ -36,7 +33,7 @@ impl Command for AttachCommand {
             bail!("cannot attach repo to workspace, please use `home` command instead");
         }
 
-        if let Some(repo) = get_current_repo_optional(ctx.clone())? {
+        if let Some(repo) = get_current_repo_optional(&ctx)? {
             bail!(
                 "current path is already attached to {}, please detach first",
                 repo.full_name()
@@ -44,7 +41,7 @@ impl Command for AttachCommand {
         }
 
         let head = Some(self.head);
-        let selector = RepoSelector::new(ctx.clone(), &head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &head, &self.owner, &self.name);
         let mut repo = selector.select_remote(self.force_no_cache).await?;
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);
@@ -56,7 +53,7 @@ impl Command for AttachCommand {
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().insert(&repo))?;
 
-        let op = RepoOperator::new_static(ctx.as_ref(), remote, owner, &repo, path, false);
+        let op = RepoOperator::new_static(&ctx, remote, owner, &repo, path, false);
         op.ensure_remote()?;
         op.ensure_user()?;
 

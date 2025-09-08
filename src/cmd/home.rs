@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::complete;
+use crate::config::context::ConfigContext;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::RepoSelector;
 use crate::{confirm, debug};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
 pub struct HomeCommand {
@@ -25,19 +26,15 @@ pub struct HomeCommand {
 
     #[arg(long, short)]
     pub thin: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for HomeCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
 
-        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
         let mut repo = selector.select_one(self.force_no_cache, self.local).await?;
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;
@@ -53,7 +50,7 @@ impl Command for HomeCommand {
         };
 
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new_static(ctx.as_ref(), remote, owner, &repo, path, false);
+        let op = RepoOperator::new_static(&ctx, remote, owner, &repo, path, false);
         op.ensure_create(self.thin, None)?;
 
         debug!("[cmd] Home path: {:?}", op.path().display());

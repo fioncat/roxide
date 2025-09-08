@@ -3,28 +3,25 @@ use async_trait::async_trait;
 use clap::Args;
 use console::style;
 
+use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, QueryOptions};
 use crate::{cursor_up, debug, outputln};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
 pub struct CheckCommand {
     #[arg(long, short)]
     pub force_no_cache: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for CheckCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run check command: {:?}", self);
 
-        outputln!("git version: {}", ctx.git_version);
-        outputln!("fzf version: {}", ctx.fzf_version);
+        outputln!("git version: {}", ctx.get_git_version()?);
+        outputln!("fzf version: {}", ctx.get_fzf_version()?);
         outputln!();
 
         let db = ctx.get_db()?;

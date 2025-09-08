@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -8,10 +7,11 @@ use console::style;
 use crate::config::context::ConfigContext;
 use crate::config::remote::{OwnerConfigRef, RemoteConfig};
 use crate::db::repo::Repository;
+use crate::exec::bash;
+use crate::exec::git::GitCmd;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
 use crate::exec::git::remote::Remote;
-use crate::exec::{bash, git};
 use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
@@ -132,7 +132,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 } else {
                     vec!["clone", &url, &path]
                 };
-                git::new(args, None::<&str>, message, self.mute).execute()?;
+                self.ctx.git().execute(args, message)?;
 
                 self.ensure_user()?;
                 cloned = true;
@@ -145,7 +145,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
                 show_info!(self, "Create empty repository: {}", self.path.display());
                 super::ensure_dir(&self.path)?;
-                self.git(
+                self.git().execute(
                     ["init", "-b", self.ctx.cfg.default_branch.as_str()],
                     "Initializing empty git repository",
                 )?;
@@ -223,22 +223,22 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             return Ok(());
         };
 
-        let Some(remote) = Remote::origin(Some(&self.path), self.mute)? else {
+        let Some(remote) = Remote::origin(self.git())? else {
             debug!("[op] Repo has no origin remote, add: {url:?}");
-            return self.git(
+            return self.git().execute(
                 ["remote", "add", "origin", &url],
                 format!("Add origin remote: {url}"),
             );
         };
 
-        let current_url = remote.get_url()?;
+        let current_url = remote.get_url(self.git())?;
         if current_url == url {
             debug!("[op] Repo origin remote url is up-to-date: {url:?}");
             return Ok(());
         }
 
         debug!("[op] Repo origin remote url is different, current: {current_url:?}, new: {url:?}");
-        self.git(
+        self.git().execute(
             ["remote", "set-url", "origin", &url],
             format!("Set origin remote: {url}"),
         )
@@ -248,35 +248,32 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         if let Some(ref user) = self.owner.user {
             debug!("[op] Set user.name to {user:?}");
             let message = format!("Set user to {user:?}");
-            self.git(["config", "user.name", user], message)?;
+            self.git().execute(["config", "user.name", user], message)?;
         }
 
         if let Some(ref email) = self.owner.email {
             debug!("[op] Set user.email to {email:?}");
             let message = format!("Set email to {email:?}");
-            self.git(["config", "user.email", email], message)?;
+            self.git()
+                .execute(["config", "user.email", email], message)?;
         }
 
         Ok(())
     }
 
-    pub async fn get_git_remote<'c>(
-        &'c self,
-        upstream: bool,
-        force_no_cache: bool,
-    ) -> Result<Remote<'c>> {
+    pub async fn get_git_remote(&self, upstream: bool, force_no_cache: bool) -> Result<Remote> {
         debug!("[op] Get git remote, upstream: {upstream}, force_no_cache: {force_no_cache}");
         if !upstream {
-            let Some(remote) = Remote::origin(Some(&self.path), self.mute)? else {
+            let Some(remote) = Remote::origin(self.git())? else {
                 bail!("repository does not have origin remote, please sync first");
             };
             debug!("[op] Get origin remote: {remote:?}");
             return Ok(remote);
         }
 
-        let remotes = Remote::list(Some(&self.path), false)?;
+        let remotes = Remote::list(self.git())?;
         for remote in remotes {
-            if remote.name == "upstream" {
+            if remote.as_str() == "upstream" {
                 debug!("[op] Get upstream remote: {remote:?}");
                 return Ok(remote);
             }
@@ -319,12 +316,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
 
         show_info!(self, "Set upstream remote to {upstream_url:?}");
-        self.git(
+        self.git().execute(
             ["remote", "add", "upstream", &upstream_url],
             format!("Set upstream to {upstream_url}"),
         )?;
 
-        let remote = Remote::new(String::from("upstream"), Some(&self.path), self.mute);
+        let remote = Remote::new("upstream");
         debug!("[op] Add upstream remote: {remote:?}");
         Ok(remote)
     }
@@ -343,20 +340,20 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             ..Default::default()
         };
 
-        self.git(
+        self.git().execute(
             ["fetch", "origin", "--prune", "--prune-tags"],
             "Fetching origin remote",
         )?;
 
-        let uncommitted = count_uncommitted_changes(Some(&self.path), self.mute)?;
+        let uncommitted = count_uncommitted_changes(self.git())?;
         if uncommitted > 0 {
             debug!("[op] Repo has {uncommitted} uncommitted changes, skip sync branches");
             result.uncommitted = uncommitted;
             return Ok(result);
         }
 
-        let branches = Branch::list(Some(&self.path), self.mute)?;
-        let default_branch = Branch::default(Some(&self.path), self.mute)?;
+        let branches = Branch::list(self.git())?;
+        let default_branch = Branch::default(self.git())?;
         let mut back = default_branch.clone();
         debug!(
             "[op] Begin to sync branches, default_branch: {default_branch}, branches: {branches:?}"
@@ -425,7 +422,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                     if current != task.branch {
                         debug!("[op] Checkout to branch {} to push or pull", task.branch);
                         // checkout to this branch to perform push/pull
-                        self.git(
+                        self.git().execute(
                             ["checkout", &task.branch],
                             format!("Checkout to branch {}", task.branch),
                         )?;
@@ -438,7 +435,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                         _ => unreachable!(),
                     };
                     debug!("[op] {title} branch {}", task.branch);
-                    self.git(
+                    self.git().execute(
                         [op, "origin", &task.branch],
                         format!("{title} branch {}", task.branch),
                     )?;
@@ -448,14 +445,14 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                         debug!("[op] Checkout to default branch {default_branch} before delete");
                         // we cannot delete branch when we are inside it, checkout
                         // to default branch first.
-                        self.git(
+                        self.git().execute(
                             ["checkout", &default_branch],
                             format!("Checkout to default branch {default_branch}"),
                         )?;
                     }
 
                     debug!("[op] Deleting branch {}", task.branch);
-                    self.git(
+                    self.git().execute(
                         ["branch", "-D", &task.branch],
                         format!("Deleting branch {}", task.branch),
                     )?;
@@ -470,7 +467,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
         if current != back {
             debug!("[op] Checkout to backup branch {back:?}");
-            self.git(
+            self.git().execute(
                 ["checkout", &back],
                 format!("Checkout to backup branch {back}"),
             )?;
@@ -482,29 +479,30 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
     pub async fn rebase(&self, opts: RebaseOptions<'_>) -> Result<()> {
         debug!("[op] Begin to rebase repo, options: {opts:?}");
-        ensure_no_uncommitted_changes(Some(&self.path), self.mute)?;
+        ensure_no_uncommitted_changes(self.git())?;
 
         let remote = self
             .get_git_remote(opts.upstream, opts.force_no_cache)
             .await?;
         debug!("[op] Get remote for rebase: {remote:?}");
 
-        let target = remote.get_target(opts.target)?;
+        let target = remote.get_target(self.git(), opts.target)?;
         debug!("[op] Get target for rebase: {target:?}");
 
-        self.git(["rebase", &target], format!("Rebasing from {target}"))
+        self.git()
+            .execute(["rebase", &target], format!("Rebasing from {target}"))
     }
 
     pub async fn squash(&self, opts: SquashOptions<'_>) -> Result<()> {
         debug!("[op] Begin to squash repo, options: {opts:?}");
-        ensure_no_uncommitted_changes(Some(&self.path), self.mute)?;
+        ensure_no_uncommitted_changes(self.git())?;
 
         let remote = self
             .get_git_remote(opts.upstream, opts.force_no_cache)
             .await?;
         debug!("[op] Get remote for squash: {remote:?}");
 
-        let commits = remote.commits_between(opts.target, true)?;
+        let commits = remote.commits_between(self.git(), opts.target, true)?;
         debug!("[op] Commits between: {commits:?}");
 
         if commits.is_empty() {
@@ -529,7 +527,8 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
         debug!("[op] Soft reset to squash commits");
         let set = format!("HEAD~{}", commits.len());
-        self.git(["reset", "--soft", &set], "Soft reset to squash")?;
+        self.git()
+            .execute(["reset", "--soft", &set], "Soft reset to squash")?;
 
         debug!("[op] Commit squashed changes");
         let args = if let Some(message) = opts.message {
@@ -537,7 +536,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         } else {
             vec!["commit"]
         };
-        self.git(args, "Commit squashed changes")
+        self.git().execute(args, "Commit squashed changes")
     }
 
     pub fn path(&self) -> &Path {
@@ -551,12 +550,8 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     #[inline]
-    fn git<I, S>(&self, args: I, message: impl ToString) -> Result<()>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        git::new(args, Some(&self.path), message, self.mute).execute()
+    fn git<'this>(&'this self) -> GitCmd<'this> {
+        self.ctx.git_work_dir(&self.path)
     }
 }
 
@@ -618,6 +613,7 @@ mod tests {
     use std::path::Path;
 
     use crate::config::context;
+    use crate::exec::git;
     use crate::repo::select::RepoSelector;
 
     use super::*;
@@ -628,20 +624,17 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("create_clone", None);
+        let ctx = context::tests::build_test_context("create_clone");
         let args = ["roxide".to_string()];
-        let selector = RepoSelector::from_args(ctx.clone(), &args);
+        let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, true).await.unwrap();
-        let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(false, None).unwrap();
 
-        let git_remote = git::remote::Remote::origin(Some(&path), true)
-            .unwrap()
-            .unwrap();
-        assert_eq!(git_remote.name, "origin");
+        let git_remote = git::remote::Remote::origin(op.git()).unwrap().unwrap();
+        assert_eq!(git_remote.as_str(), "origin");
 
-        let url = git_remote.get_url().unwrap();
+        let url = git_remote.get_url(op.git()).unwrap();
         let expect = op.get_clone_url().unwrap();
         assert_eq!(url, expect);
 
@@ -657,14 +650,12 @@ mod tests {
             name: "hello".to_string(),
             ..Default::default()
         };
-        let ctx = context::tests::build_test_context("create_empty", None);
+        let ctx = context::tests::build_test_context("create_empty");
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
-        git::new(["status"], Some(&path), "", true)
-            .execute()
-            .unwrap();
+        op.git().execute(["status"], "").unwrap();
 
         // The cargo-init hook should have created a Cargo.toml
         let cargo_path = path.join("Cargo.toml");
@@ -679,9 +670,9 @@ mod tests {
             name: "hello".to_string(),
             ..Default::default()
         };
-        let ctx = context::tests::build_test_context("remove", None);
+        let ctx = context::tests::build_test_context("remove");
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
         fs::write(Path::new(&ctx.cfg.workspace).join("test.txt"), "test").unwrap();
@@ -699,21 +690,21 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("get_git_remote", None);
+        let ctx = context::tests::build_test_context("get_git_remote");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
         let remote = op.get_git_remote(false, false).await.unwrap();
-        assert_eq!(remote.name, "origin");
+        assert_eq!(remote.as_str(), "origin");
     }
 
     #[tokio::test]
@@ -722,23 +713,23 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("get_git_remote_upstream", None);
+        let ctx = context::tests::build_test_context("get_git_remote_upstream");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "nvimdots".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
         let remote = op.get_git_remote(true, true).await.unwrap();
-        assert_eq!(remote.name, "upstream");
+        assert_eq!(remote.as_str(), "upstream");
 
-        let url = remote.get_url().unwrap();
+        let url = remote.get_url(op.git()).unwrap();
         assert_eq!(url, "https://github.com/ayamir/nvimdots.git");
     }
 
@@ -748,43 +739,48 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("sync_branch", None);
+        let ctx = context::tests::build_test_context("sync_branch");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
         // Reset a commit, to test pulling
-        op.git(["reset", "--hard", "HEAD~1"], "Reset last commit")
+        op.git()
+            .execute(["reset", "--hard", "HEAD~1"], "Reset last commit")
             .unwrap();
 
         // Create a new branch, to test pushing
-        op.git(["checkout", "-b", "test-push"], "Create new branch")
+        op.git()
+            .execute(["checkout", "-b", "test-push"], "Create new branch")
             .unwrap();
-        op.git(
-            ["push", "origin", "--set-upstream", "test-push"],
-            "Push new branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["push", "origin", "--set-upstream", "test-push"],
+                "Push new branch",
+            )
+            .unwrap();
         fs::write(path.join("test.txt"), "test").unwrap();
-        op.git(["add", "."], "Add file").unwrap();
-        op.git(["commit", "-m", "Add test file"], "Commit file")
+        op.git().execute(["add", "."], "Add file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test file"], "Commit file")
             .unwrap();
 
-        op.git(
-            ["checkout", "-b", "test-detached"],
-            "Create detached branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["checkout", "-b", "test-detached"],
+                "Create detached branch",
+            )
+            .unwrap();
 
-        let branches = Branch::list(Some(&path), true).unwrap();
+        let branches = Branch::list(op.git()).unwrap();
         let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
         let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
         let detached_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
@@ -804,7 +800,7 @@ mod tests {
             }
         );
 
-        let branches = Branch::list(Some(&path), true).unwrap();
+        let branches = Branch::list(op.git()).unwrap();
         let push_branch = branches.iter().find(|b| b.name == "test-push").unwrap();
         let pull_branch = branches.iter().find(|b| b.name == "master").unwrap();
         let detached_branch = branches.iter().find(|b| b.name == "test-detached").unwrap();
@@ -816,13 +812,15 @@ mod tests {
         assert_eq!(current.name, "test-detached");
 
         // Cleanup
-        op.git(["branch", "-D", "test-push"], "Delete test-push branch")
+        op.git()
+            .execute(["branch", "-D", "test-push"], "Delete test-push branch")
             .unwrap();
-        op.git(
-            ["push", "origin", "--delete", "test-push"],
-            "Delete remote test-push branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["push", "origin", "--delete", "test-push"],
+                "Delete remote test-push branch",
+            )
+            .unwrap();
     }
 
     #[test]
@@ -831,14 +829,14 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("sync_uncommitted", None);
+        let ctx = context::tests::build_test_context("sync_uncommitted");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -865,14 +863,14 @@ mod tests {
             return;
         }
 
-        let ctx = context::tests::build_test_context("sync_create", None);
+        let ctx = context::tests::build_test_context("sync_create");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(!path.exists());
@@ -889,7 +887,7 @@ mod tests {
         assert!(path.exists());
 
         let remote = op.get_git_remote(false, false).await.unwrap();
-        assert_eq!(remote.name, "origin");
+        assert_eq!(remote.as_str(), "origin");
     }
 
     #[tokio::test]
@@ -897,36 +895,39 @@ mod tests {
         if !git::tests::enable() {
             return;
         }
-        let ctx = context::tests::build_test_context("sync_ensure", None);
+        let ctx = context::tests::build_test_context("sync_ensure");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
-        op.git(["config", "user.name", "test-user"], "Set user name")
+        op.git()
+            .execute(["config", "user.name", "test-user"], "Set user name")
             .unwrap();
-        op.git(
-            ["config", "user.email", "test-email@test.com"],
-            "Set user email",
-        )
-        .unwrap();
-        op.git(
-            [
-                "remote",
-                "set-url",
-                "origin",
-                "https://github.com/fioncat/roxide.git",
-            ],
-            "Update origin remote",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["config", "user.email", "test-email@test.com"],
+                "Set user email",
+            )
+            .unwrap();
+        op.git()
+            .execute(
+                [
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/fioncat/roxide.git",
+                ],
+                "Update origin remote",
+            )
+            .unwrap();
 
         let result = op.sync().unwrap();
         assert_eq!(
@@ -937,18 +938,14 @@ mod tests {
             }
         );
 
-        let name = git::new(["config", "user.name"], Some(&path), "", true)
-            .output()
-            .unwrap();
-        let email = git::new(["config", "user.email"], Some(&path), "", true)
-            .output()
-            .unwrap();
+        let name = op.git().output(["config", "user.name"], "").unwrap();
+        let email = op.git().output(["config", "user.email"], "").unwrap();
         assert_eq!(name, "fioncat");
         assert_eq!(email, "lazycat7706@gmail.com");
 
         let remote = op.get_git_remote(false, false).await.unwrap();
-        assert_eq!(remote.name, "origin");
-        let url = remote.get_url().unwrap();
+        assert_eq!(remote.as_str(), "origin");
+        let url = remote.get_url(op.git()).unwrap();
         assert_eq!(url, op.get_clone_url().unwrap());
     }
 
@@ -957,46 +954,52 @@ mod tests {
         if !git::tests::enable() {
             return;
         }
-        let ctx = context::tests::build_test_context("rebase", None);
+        let ctx = context::tests::build_test_context("rebase");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
-        op.git(
-            ["checkout", "-b", "test-rebase-target"],
-            "Create rebase target branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["checkout", "-b", "test-rebase-target"],
+                "Create rebase target branch",
+            )
+            .unwrap();
 
         fs::write(path.join("test_target.txt"), "content from target branch").unwrap();
-        op.git(["add", "."], "Add file").unwrap();
-        op.git(["commit", "-m", "Add test_target.txt"], "Commit file")
+        op.git().execute(["add", "."], "Add file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test_target.txt"], "Commit file")
             .unwrap();
-        op.git(
-            ["push", "origin", "test-rebase-target"],
-            "Push target branch",
-        )
-        .unwrap();
-
-        op.git(["checkout", "master"], "Checkout back to master")
+        op.git()
+            .execute(
+                ["push", "origin", "test-rebase-target"],
+                "Push target branch",
+            )
             .unwrap();
 
-        op.git(
-            ["checkout", "-b", "test-rebase"],
-            "Create test-rebase branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(["checkout", "master"], "Checkout back to master")
+            .unwrap();
+
+        op.git()
+            .execute(
+                ["checkout", "-b", "test-rebase"],
+                "Create test-rebase branch",
+            )
+            .unwrap();
         fs::write(path.join("test_rebase.txt"), "content from rebase branch").unwrap();
-        op.git(["add", "."], "Add file").unwrap();
-        op.git(["commit", "-m", "Add test_rebase.txt"], "Commit file")
+        op.git().execute(["add", "."], "Add file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test_rebase.txt"], "Commit file")
             .unwrap();
 
         let target_path = path.join("test_target.txt");
@@ -1016,16 +1019,18 @@ mod tests {
         assert!(target_path.exists());
         assert!(rebase_path.exists());
 
-        op.git(
-            ["branch", "-D", "test-rebase-target"],
-            "Delete test-rebase branch",
-        )
-        .unwrap();
-        op.git(
-            ["push", "origin", "--delete", "test-rebase-target"],
-            "Delete remote test-rebase branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["branch", "-D", "test-rebase-target"],
+                "Delete test-rebase branch",
+            )
+            .unwrap();
+        op.git()
+            .execute(
+                ["push", "origin", "--delete", "test-rebase-target"],
+                "Delete remote test-rebase branch",
+            )
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1033,24 +1038,25 @@ mod tests {
         if !git::tests::enable() {
             return;
         }
-        let ctx = context::tests::build_test_context("squash", None);
+        let ctx = context::tests::build_test_context("squash");
         let repo = Repository {
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(ctx.as_ref(), &repo, true).unwrap();
+        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(path.exists());
 
-        op.git(
-            ["checkout", "-b", "test-squash-target"],
-            "Create squash target branch",
-        )
-        .unwrap();
+        op.git()
+            .execute(
+                ["checkout", "-b", "test-squash-target"],
+                "Create squash target branch",
+            )
+            .unwrap();
 
         let message = Some("Squashed commit".to_string());
         let opts = SquashOptions {
@@ -1061,31 +1067,32 @@ mod tests {
         };
 
         fs::write(path.join("test1.txt"), "Test content 1").unwrap();
-        op.git(["add", "."], "Add file").unwrap();
-        op.git(["commit", "-m", "Add test1.txt"], "Commit file")
+        op.git().execute(["add", "."], "Add file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test1.txt"], "Commit file")
             .unwrap();
 
         fs::write(path.join("test2.txt"), "Test content 2").unwrap();
-        op.git(["add", "."], "Add file").unwrap();
-        op.git(["commit", "-m", "Add test2.txt"], "Commit file")
+        op.git().execute(["add", "."], "Add file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test2.txt"], "Commit file")
             .unwrap();
 
         op.squash(opts).await.unwrap();
 
-        let lines = git::new(
-            [
-                "log",
-                "--left-right",
-                "--cherry-pick",
-                "--oneline",
-                "HEAD...origin/master",
-            ],
-            Some(&path),
-            "Get commits",
-            true,
-        )
-        .lines()
-        .unwrap();
+        let lines = op
+            .git()
+            .lines(
+                [
+                    "log",
+                    "--left-right",
+                    "--cherry-pick",
+                    "--oneline",
+                    "HEAD...origin/master",
+                ],
+                "Get commits",
+            )
+            .unwrap();
         assert_eq!(lines.len(), 1);
     }
 }

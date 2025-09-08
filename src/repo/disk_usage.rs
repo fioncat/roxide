@@ -14,7 +14,7 @@ use crate::scan::{ScanHandler, ScanTask, scan_files_with_data};
 use crate::term::list::{List, ListItem};
 
 pub async fn repo_disk_usage(
-    ctx: Arc<ConfigContext>,
+    ctx: &ConfigContext,
     repos: Vec<Repository>,
 ) -> Result<Vec<RepoDiskUsage>> {
     let mut tasks = Vec::with_capacity(repos.len());
@@ -240,7 +240,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_repo_disk_usage() {
-        let ctx = context::tests::build_test_context("repo_disk_usage", None);
+        let ctx = context::tests::build_test_context("repo_disk_usage");
 
         struct Case {
             repo: Repository,
@@ -291,7 +291,7 @@ mod tests {
         let mut repos = vec![];
         let mut expect = vec![];
         for case in cases {
-            let op = RepoOperator::new(ctx.as_ref(), &case.repo, true).unwrap();
+            let op = RepoOperator::new(&ctx, &case.repo, true).unwrap();
             op.ensure_create(false, None).unwrap();
             let path = op.path();
             for dir in case.dirs {
@@ -318,7 +318,7 @@ mod tests {
         }
         expect.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
 
-        let usages = repo_disk_usage(ctx, repos).await.unwrap();
+        let usages = repo_disk_usage(&ctx, repos).await.unwrap();
         assert_eq!(usages, expect);
     }
 

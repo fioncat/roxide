@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::Command;
 use crate::cmd::complete;
-use crate::cmd::{Command, ConfigArgs};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::ops::RepoOperator;
@@ -26,22 +24,18 @@ pub struct RemoveRepoCommand {
 
     #[arg(long, short)]
     pub force: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 #[async_trait]
 impl Command for RemoveRepoCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove repo command: {:?}", self);
         ctx.lock()?;
 
-        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
         if !self.recursive {
             let repo = selector.select_one(false, true).await?;
             confirm!("Are you sure to remove repository {}", repo.full_name());
-            return self.remove(ctx, repo);
+            return self.remove(&ctx, repo);
         }
 
         let mut opts = SelectManyReposOptions::default();
@@ -58,7 +52,7 @@ impl Command for RemoveRepoCommand {
         confirm_items(&names, "remove", "removal", "Repo", "Repos")?;
 
         for repo in list.items {
-            self.remove(ctx.clone(), repo)?;
+            self.remove(&ctx, repo)?;
         }
 
         Ok(())
@@ -70,9 +64,9 @@ impl Command for RemoveRepoCommand {
 }
 
 impl RemoveRepoCommand {
-    fn remove(&self, ctx: Arc<ConfigContext>, repo: Repository) -> Result<()> {
+    fn remove(&self, ctx: &ConfigContext, repo: Repository) -> Result<()> {
         let db = ctx.get_db()?;
-        let op = RepoOperator::new(ctx.as_ref(), &repo, false)?;
+        let op = RepoOperator::new(ctx, &repo, false)?;
         op.remove()?;
         db.with_transaction(|tx| tx.repo().delete(&repo))?;
         info!(

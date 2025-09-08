@@ -2,26 +2,22 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::config::context::ConfigContext;
 use crate::db::repo::DisplayLevel;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
-pub struct DisplayCommand {
-    #[clap(flatten)]
-    pub config: ConfigArgs,
-}
+pub struct WhichCommand {}
 
 #[async_trait]
-impl Command for DisplayCommand {
-    async fn run(self) -> Result<()> {
-        debug!("[cmd] Run display command: {:?}", self);
-        let ctx = self.config.build_ctx()?;
-        ctx.lock()?;
+impl Command for WhichCommand {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
+        debug!("[cmd] Run which command: {:?}", self);
 
-        let repo = get_current_repo(ctx.clone())?;
+        let repo = get_current_repo(&ctx)?;
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;
 
@@ -35,6 +31,6 @@ impl Command for DisplayCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("display"))
+        Self::augment_args(clap::Command::new("which"))
     }
 }

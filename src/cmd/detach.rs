@@ -2,21 +2,18 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::{debug, info};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
-pub struct DetachCommand {
-    #[clap(flatten)]
-    pub config: ConfigArgs,
-}
+pub struct DetachCommand {}
 
 #[async_trait]
 impl Command for DetachCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run detach command: {:?}", self);
         ctx.lock()?;
 
@@ -24,7 +21,7 @@ impl Command for DetachCommand {
             bail!("cannot detach workspace repo, please use `remove repo` command instead");
         }
 
-        let repo = get_current_repo(ctx.clone())?;
+        let repo = get_current_repo(&ctx)?;
         debug!("[cmd] Detach repo: {repo:?}");
 
         let db = ctx.get_db()?;

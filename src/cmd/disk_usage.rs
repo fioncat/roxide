@@ -5,9 +5,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::config::context::ConfigContext;
 use crate::scan::disk_usage::disk_usage;
 use crate::scan::ignore::Ignore;
-use crate::{outputln, report_scan_process_done};
+use crate::{debug, outputln, report_scan_process_done};
 
 use super::Command;
 
@@ -27,7 +28,9 @@ pub struct DiskUsageCommand {
 
 #[async_trait]
 impl Command for DiskUsageCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: ConfigContext) -> Result<()> {
+        debug!("[cmd] Run disk-usage command: {:?}", self);
+
         let path = match self.path {
             Some(path) => PathBuf::from(path),
             None => env::current_dir().context("failed to get current directory")?,

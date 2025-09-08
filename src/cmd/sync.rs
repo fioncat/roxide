@@ -15,7 +15,7 @@ use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::confirm::confirm_items;
 use crate::{debug, outputln};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
 pub struct SyncCommand {
@@ -30,20 +30,16 @@ pub struct SyncCommand {
 
     #[arg(long, short)]
     pub force: bool,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for SyncCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run sync command: {:?}", self);
         ctx.lock()?;
 
         if !self.recursive
-            && let Some(repo) = get_current_repo_optional(ctx.clone())?
+            && let Some(repo) = get_current_repo_optional(&ctx)?
         {
             return self.sync_one(ctx, repo);
         }
@@ -56,8 +52,8 @@ impl Command for SyncCommand {
 }
 
 impl SyncCommand {
-    async fn sync_many(self, ctx: Arc<ConfigContext>) -> Result<()> {
-        let selector = RepoSelector::new(ctx.clone(), &self.head, &self.owner, &self.name);
+    async fn sync_many(self, ctx: ConfigContext) -> Result<()> {
+        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
         let mut opts = SelectManyReposOptions::default();
         if !self.force {
             opts.sync = Some(true);
@@ -72,6 +68,7 @@ impl SyncCommand {
         confirm_items(&names, "Sync", "synchronization", "Repo", "Repos")?;
 
         let mut tasks = Vec::with_capacity(list.items.len());
+        let ctx = Arc::new(ctx);
         for (idx, repo) in list.items.into_iter().enumerate() {
             let task = SyncTask {
                 name: Arc::new(take(&mut names[idx])),
@@ -105,7 +102,7 @@ impl SyncCommand {
         Ok(())
     }
 
-    fn sync_one(self, ctx: Arc<ConfigContext>, repo: Repository) -> Result<()> {
+    fn sync_one(self, ctx: ConfigContext, repo: Repository) -> Result<()> {
         let op = RepoOperator::new(&ctx, &repo, false)?;
         let result = op.sync()?;
         let text = result.render(false);

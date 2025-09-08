@@ -2,29 +2,25 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::Command;
 use crate::cmd::complete;
-use crate::cmd::{Command, ConfigArgs};
+use crate::config::context::ConfigContext;
 use crate::debug;
-use crate::exec::git;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
 
 #[derive(Debug, Args)]
 pub struct RemoveBranchCommand {
     pub branch: Option<String>,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for RemoveBranchCommand {
-    async fn run(self) -> Result<()> {
-        self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove branch command: {:?}", self);
 
-        let branches = Branch::list(None::<&str>, false)?;
-        let default_branch = Branch::default(None::<&str>, false)?;
+        let branches = Branch::list(ctx.git())?;
+        let default_branch = Branch::default(ctx.git())?;
         let branch = match self.branch {
             Some(branch) => {
                 let found = branches.iter().any(|b| b.name == branch.as_str());
@@ -37,41 +33,32 @@ impl Command for RemoveBranchCommand {
                 branch
             }
             None => {
-                let current = Branch::current(None::<&str>, false)?;
+                let current = Branch::current(ctx.git())?;
                 if current == default_branch {
                     bail!("you are in the default branch {default_branch:?}, cannot remove it");
                 }
-                ensure_no_uncommitted_changes(None::<&str>, false)?;
-                git::new(
+                ensure_no_uncommitted_changes(ctx.git())?;
+                ctx.git().execute(
                     ["checkout", &default_branch],
-                    None::<&str>,
                     format!("Checkout to default branch {default_branch:?}"),
-                    false,
-                )
-                .execute()?;
+                )?;
                 current
             }
         };
 
-        git::new(
+        ctx.git().execute(
             ["branch", "-D", &branch],
-            None::<&str>,
             format!("Remove local branch {branch:?}"),
-            false,
-        )
-        .execute()?;
+        )?;
 
         let branch = branches.into_iter().find(|b| b.name == branch);
         if let Some(branch) = branch
             && !matches!(branch.status, BranchStatus::Gone | BranchStatus::Detached)
         {
-            git::new(
+            ctx.git().execute(
                 ["push", "origin", "--delete", &branch.name],
-                None::<&str>,
                 format!("Remove remote branch {branch:?}"),
-                false,
-            )
-            .execute()?;
+            )?;
         }
 
         Ok(())

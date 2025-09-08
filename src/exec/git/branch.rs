@@ -252,6 +252,7 @@ impl List<Branch> for BranchList {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::context::ConfigContext;
     use crate::exec::git;
 
     use super::*;
@@ -261,8 +262,10 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let branches = Branch::list(Some(repo_path), true).unwrap();
+        let branches = Branch::list(cmd).unwrap();
         for branch in branches {
             if branch.name == "main" {
                 assert_eq!(branch.status, BranchStatus::Sync);
@@ -276,8 +279,10 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let current = Branch::current(Some(repo_path), true).unwrap();
+        let current = Branch::current(cmd).unwrap();
         assert_eq!(current, "main");
     }
 
@@ -286,8 +291,10 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let default = Branch::default(Some(repo_path), true).unwrap();
+        let default = Branch::default(cmd).unwrap();
         assert_eq!(default, "main");
     }
 

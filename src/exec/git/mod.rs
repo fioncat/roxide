@@ -28,6 +28,11 @@ impl<'a> GitCmd<'a> {
         }
     }
 
+    pub fn mute(mut self) -> Self {
+        self.mute = true;
+        self
+    }
+
     pub fn execute<I, S>(&self, args: I, message: impl ToString) -> Result<()>
     where
         I: IntoIterator<Item = S>,

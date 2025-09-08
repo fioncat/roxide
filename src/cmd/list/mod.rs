@@ -8,6 +8,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::config::context::ConfigContext;
+
 use super::Command;
 
 #[derive(Args)]
@@ -27,13 +29,13 @@ pub enum ListCommands {
 
 #[async_trait]
 impl Command for ListCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
-            ListCommands::Branch(cmd) => cmd.run().await,
-            ListCommands::Owner(cmd) => cmd.run().await,
-            ListCommands::Remote(cmd) => cmd.run().await,
-            ListCommands::Repo(cmd) => cmd.run().await,
-            ListCommands::Tag(cmd) => cmd.run().await,
+            ListCommands::Branch(cmd) => cmd.run(ctx).await,
+            ListCommands::Owner(cmd) => cmd.run(ctx).await,
+            ListCommands::Remote(cmd) => cmd.run(ctx).await,
+            ListCommands::Repo(cmd) => cmd.run(ctx).await,
+            ListCommands::Tag(cmd) => cmd.run(ctx).await,
         }
     }
 

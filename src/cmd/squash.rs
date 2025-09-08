@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::complete;
+use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RepoOperator, SquashOptions};
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
 pub struct SquashCommand {
@@ -21,21 +22,17 @@ pub struct SquashCommand {
 
     #[arg(long, short)]
     pub message: Option<String>,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for SquashCommand {
-    async fn run(self) -> Result<()> {
-        let ctx = self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run display command: {:?}", self);
         ctx.lock()?;
 
-        let repo = get_current_repo(ctx.clone())?;
+        let repo = get_current_repo(&ctx)?;
 
-        let op = RepoOperator::new(ctx.as_ref(), &repo, false)?;
+        let op = RepoOperator::new(&ctx, &repo, false)?;
         op.squash(SquashOptions {
             target: self.target.as_deref().unwrap_or_default(),
             upstream: self.upstream,

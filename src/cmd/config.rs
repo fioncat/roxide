@@ -4,26 +4,22 @@ use clap::Args;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::config::context::ConfigContext;
 use crate::config::hook::HooksConfig;
 use crate::config::remote::RemoteConfig;
 
-use super::{Command, ConfigArgs};
+use super::Command;
 
 #[derive(Debug, Args)]
-pub struct ConfigCommand {
-    #[clap(flatten)]
-    pub config: ConfigArgs,
-}
+pub struct ConfigCommand {}
 
 #[async_trait]
 impl Command for ConfigCommand {
-    async fn run(self) -> Result<()> {
-        let cfg = self.config.build_config()?;
-
-        let remotes = cfg.remotes.clone();
-        let hooks = cfg.hooks.clone();
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
+        let remotes = ctx.cfg.remotes.clone();
+        let hooks = ctx.cfg.hooks.clone();
         let display = ConfigDisplay {
-            base: cfg,
+            base: ctx.cfg,
             remotes,
             hooks,
         };

@@ -199,7 +199,7 @@ mod tests {
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
             default_branch: "main".to_string(),
             fzf: None,
-            git: None,
+            git: Config::default_git(),
             bash: Some(CmdConfig {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],

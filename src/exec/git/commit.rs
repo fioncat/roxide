@@ -24,6 +24,7 @@ pub fn count_uncommitted_changes(cmd: GitCmd) -> Result<usize> {
 mod tests {
     use std::fs;
 
+    use crate::config::context::ConfigContext;
     use crate::exec::git;
 
     use super::*;
@@ -33,25 +34,25 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        assert_eq!(count_uncommitted_changes(Some(repo_path), true).unwrap(), 0);
-        assert!(ensure_no_uncommitted_changes(Some(repo_path), true).is_ok());
+        assert_eq!(count_uncommitted_changes(cmd).unwrap(), 0);
+        assert!(ensure_no_uncommitted_changes(cmd).is_ok());
 
         // Try to add a new file, which should cause uncommitted changes
-        let path = format!("{repo_path}/new_file.txt");
+        let path = format!("{}/new_file.txt", repo_path.display());
         fs::write(&path, "Hello, world!").unwrap();
 
-        assert_eq!(count_uncommitted_changes(Some(repo_path), true).unwrap(), 1);
+        assert_eq!(count_uncommitted_changes(cmd).unwrap(), 1);
         assert_eq!(
-            ensure_no_uncommitted_changes(Some(repo_path), true)
-                .unwrap_err()
-                .to_string(),
+            ensure_no_uncommitted_changes(cmd).unwrap_err().to_string(),
             "uncommitted changes found, please commit them first"
         );
 
         fs::remove_file(&path).unwrap();
 
-        assert_eq!(count_uncommitted_changes(Some(repo_path), true).unwrap(), 0);
-        assert!(ensure_no_uncommitted_changes(Some(repo_path), true).is_ok());
+        assert_eq!(count_uncommitted_changes(cmd).unwrap(), 0);
+        assert!(ensure_no_uncommitted_changes(cmd).is_ok());
     }
 }

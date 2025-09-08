@@ -183,6 +183,7 @@ impl UpdateTagRule {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::context::ConfigContext;
     use crate::exec::git;
 
     use super::*;
@@ -192,8 +193,10 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let tags = Tag::list(Some(repo_path), true).unwrap();
+        let tags = Tag::list(cmd).unwrap();
         let mut targets = Vec::new();
         for tag in tags {
             match tag.name.as_str() {
@@ -220,8 +223,10 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let tag = Tag::get(Some(repo_path), true, "v0.3.0").unwrap();
+        let tag = Tag::get(cmd, "v0.3.0").unwrap();
         assert_eq!(tag.name, "v0.3.0");
     }
 
@@ -230,9 +235,11 @@ mod tests {
         let Some(repo_path) = git::tests::setup() else {
             return;
         };
+        let ctx = ConfigContext::new_mock();
+        let cmd = ctx.git_work_dir(&repo_path);
 
-        let tags = Tag::list(Some(repo_path), true).unwrap();
-        let latest = Tag::get_latest(Some(repo_path), true).unwrap();
+        let tags = Tag::list(cmd).unwrap();
+        let latest = Tag::get_latest(cmd).unwrap();
         assert_eq!(latest, tags[0]);
     }
 

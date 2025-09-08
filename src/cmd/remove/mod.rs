@@ -6,6 +6,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::config::context::ConfigContext;
+
 use super::Command;
 
 #[derive(Args)]
@@ -23,11 +25,11 @@ pub enum RemoveCommands {
 
 #[async_trait]
 impl Command for RemoveCommand {
-    async fn run(self) -> Result<()> {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
-            RemoveCommands::Branch(cmd) => cmd.run().await,
-            RemoveCommands::Repo(cmd) => cmd.run().await,
-            RemoveCommands::Tag(cmd) => cmd.run().await,
+            RemoveCommands::Branch(cmd) => cmd.run(ctx).await,
+            RemoveCommands::Repo(cmd) => cmd.run(ctx).await,
+            RemoveCommands::Tag(cmd) => cmd.run(ctx).await,
         }
     }
 

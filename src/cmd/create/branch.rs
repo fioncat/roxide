@@ -2,26 +2,22 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{Command, ConfigArgs};
-use crate::exec::git;
+use crate::cmd::Command;
+use crate::config::context::ConfigContext;
 use crate::exec::git::branch::Branch;
 use crate::{debug, output};
 
 #[derive(Debug, Args)]
 pub struct CreateBranchCommand {
     pub branch: String,
-
-    #[clap(flatten)]
-    pub config: ConfigArgs,
 }
 
 #[async_trait]
 impl Command for CreateBranchCommand {
-    async fn run(self) -> Result<()> {
-        self.config.build_ctx()?;
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run create branch command: {:?}", self);
 
-        let branches = Branch::list(None::<&str>, true)?;
+        let branches = Branch::list(ctx.git())?;
         for branch in branches {
             if branch.name == self.branch {
                 output!("Branch {:?} already exists", self.branch);
@@ -29,21 +25,15 @@ impl Command for CreateBranchCommand {
             }
         }
 
-        git::new(
+        ctx.git().execute(
             ["checkout", "-b", &self.branch],
-            None::<&str>,
             format!("Create branch {}", self.branch),
-            false,
-        )
-        .execute()?;
+        )?;
 
-        git::new(
+        ctx.git().execute(
             ["push", "--set-upstream", "origin", &self.branch],
-            None::<&str>,
             format!("Push branch {} to remote", self.branch),
-            true,
-        )
-        .execute()?;
+        )?;
 
         Ok(())
     }
