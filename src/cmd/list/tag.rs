@@ -16,8 +16,9 @@ pub struct ListTagCommand {
 
 #[async_trait]
 impl Command for ListTagCommand {
-    async fn run(self, ctx: ConfigContext) -> Result<()> {
+    async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list tag command: {:?}", self);
+        ctx.mute();
 
         let tags = Tag::list(ctx.git())?;
         let (tags, total) = pagination(tags, self.list.limit());

@@ -50,7 +50,7 @@ impl Command for HomeCommand {
         };
 
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new_static(&ctx, remote, owner, &repo, path, false);
+        let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
         op.ensure_create(self.thin, None)?;
 
         debug!("[cmd] Home path: {:?}", op.path().display());

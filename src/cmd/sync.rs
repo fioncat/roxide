@@ -52,7 +52,7 @@ impl Command for SyncCommand {
 }
 
 impl SyncCommand {
-    async fn sync_many(self, ctx: ConfigContext) -> Result<()> {
+    async fn sync_many(self, mut ctx: ConfigContext) -> Result<()> {
         let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
         let mut opts = SelectManyReposOptions::default();
         if !self.force {
@@ -68,6 +68,7 @@ impl SyncCommand {
         confirm_items(&names, "Sync", "synchronization", "Repo", "Repos")?;
 
         let mut tasks = Vec::with_capacity(list.items.len());
+        ctx.mute();
         let ctx = Arc::new(ctx);
         for (idx, repo) in list.items.into_iter().enumerate() {
             let task = SyncTask {
@@ -103,7 +104,7 @@ impl SyncCommand {
     }
 
     fn sync_one(self, ctx: ConfigContext, repo: Repository) -> Result<()> {
-        let op = RepoOperator::new(&ctx, &repo, false)?;
+        let op = RepoOperator::load(&ctx, &repo)?;
         let result = op.sync()?;
         let text = result.render(false);
         if text.is_empty() {
@@ -129,6 +130,6 @@ impl Task<SyncResult> for SyncTask {
     }
 
     async fn run(&self) -> Result<SyncResult> {
-        RepoOperator::new(self.ctx.as_ref(), &self.repo, true)?.sync()
+        RepoOperator::load(self.ctx.as_ref(), &self.repo)?.sync()
     }
 }

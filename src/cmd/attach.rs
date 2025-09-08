@@ -53,7 +53,7 @@ impl Command for AttachCommand {
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().insert(&repo))?;
 
-        let op = RepoOperator::new_static(&ctx, remote, owner, &repo, path, false);
+        let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
         op.ensure_remote()?;
         op.ensure_user()?;
 

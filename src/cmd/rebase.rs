@@ -28,7 +28,7 @@ impl Command for RebaseCommand {
 
         let repo = get_current_repo(&ctx)?;
 
-        let op = RepoOperator::new(&ctx, &repo, false)?;
+        let op = RepoOperator::load(&ctx, &repo)?;
         op.rebase(RebaseOptions {
             target: self.target.as_deref().unwrap_or_default(),
             upstream: self.upstream,

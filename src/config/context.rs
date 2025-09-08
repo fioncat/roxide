@@ -20,8 +20,8 @@ use super::Config;
 pub struct ConfigContext {
     pub cfg: Config,
     pub current_dir: PathBuf,
-    pub mute: bool,
 
+    mute: bool,
     db: OnceLock<Result<Arc<Database>>>,
     apis: Mutex<HashMap<String, Arc<dyn RemoteAPI>>>,
     file_lock: OnceLock<Result<FileLock>>,
@@ -148,6 +148,14 @@ impl ConfigContext {
             bail!("failed to acquire global file lock: {e:#}");
         }
         Ok(())
+    }
+
+    pub fn mute(&mut self) {
+        self.mute = true;
+    }
+
+    pub fn is_mute(&self) -> bool {
+        self.mute
     }
 
     #[inline]

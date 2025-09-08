@@ -66,7 +66,7 @@ impl Command for RemoveRepoCommand {
 impl RemoveRepoCommand {
     fn remove(&self, ctx: &ConfigContext, repo: Repository) -> Result<()> {
         let db = ctx.get_db()?;
-        let op = RepoOperator::new(ctx, &repo, false)?;
+        let op = RepoOperator::load(ctx, &repo)?;
         op.remove()?;
         db.with_transaction(|tx| tx.repo().delete(&repo))?;
         info!(

@@ -32,7 +32,7 @@ impl Command for SquashCommand {
 
         let repo = get_current_repo(&ctx)?;
 
-        let op = RepoOperator::new(&ctx, &repo, false)?;
+        let op = RepoOperator::load(&ctx, &repo)?;
         op.squash(SquashOptions {
             target: self.target.as_deref().unwrap_or_default(),
             upstream: self.upstream,

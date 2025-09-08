@@ -291,7 +291,7 @@ mod tests {
         let mut repos = vec![];
         let mut expect = vec![];
         for case in cases {
-            let op = RepoOperator::new(&ctx, &case.repo, true).unwrap();
+            let op = RepoOperator::load(&ctx, &case.repo).unwrap();
             op.ensure_create(false, None).unwrap();
             let path = op.path();
             for dir in case.dirs {

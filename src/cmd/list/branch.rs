@@ -16,8 +16,9 @@ pub struct ListBranchCommand {
 
 #[async_trait]
 impl Command for ListBranchCommand {
-    async fn run(self, ctx: ConfigContext) -> Result<()> {
+    async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list branch command: {:?}", self);
+        ctx.mute();
 
         let branches = Branch::list(ctx.git())?;
         let (branches, total) = pagination(branches, self.list.limit());

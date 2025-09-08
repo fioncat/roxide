@@ -15,7 +15,7 @@ use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
     ($self:ident, $($arg:tt)*) => {
-        if !$self.mute {
+        if !$self.ctx.is_mute() {
             info!($($arg)*);
         }
     };
@@ -29,8 +29,6 @@ pub struct RepoOperator<'a, 'b> {
     repo: &'b Repository,
 
     path: PathBuf,
-
-    mute: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -76,7 +74,7 @@ pub struct SquashOptions<'a> {
 }
 
 impl<'a, 'b> RepoOperator<'a, 'b> {
-    pub fn new(ctx: &'a ConfigContext, repo: &'b Repository, mute: bool) -> Result<Self> {
+    pub fn load(ctx: &'a ConfigContext, repo: &'b Repository) -> Result<Self> {
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -85,16 +83,15 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             repo.full_name(),
             path
         );
-        Ok(Self::new_static(ctx, remote, owner, repo, path, mute))
+        Ok(Self::new(ctx, remote, owner, repo, path))
     }
 
-    pub fn new_static(
+    pub fn new(
         ctx: &'a ConfigContext,
         remote: &'a RemoteConfig,
         owner: OwnerConfigRef<'a>,
         repo: &'b Repository,
         path: PathBuf,
-        mute: bool,
     ) -> Self {
         Self {
             ctx,
@@ -102,7 +99,6 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             owner,
             repo,
             path,
-            mute,
         }
     }
 
@@ -306,7 +302,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         );
         debug!("[op] Upstream url: {upstream_url:?}");
 
-        if !self.mute {
+        if !self.ctx.is_mute() {
             confirm!(
                 "Do you want to set upstream to {}/{}: {upstream_url}",
                 upstream.owner,
@@ -516,7 +512,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             return Ok(());
         }
 
-        if !self.mute {
+        if !self.ctx.is_mute() {
             info!("Found {} commits to squash:", commits.len());
             for commit in commits.iter() {
                 outputln!("  * {commit}");
@@ -627,7 +623,7 @@ mod tests {
         let args = ["roxide".to_string()];
         let selector = RepoSelector::from_args(&ctx, &args);
         let repo = selector.select_one(false, true).await.unwrap();
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let git_remote = git::remote::Remote::origin(op.git()).unwrap().unwrap();
@@ -651,7 +647,7 @@ mod tests {
         };
         let ctx = context::tests::build_test_context("create_empty");
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         op.git().execute(["status"], "").unwrap();
@@ -671,7 +667,7 @@ mod tests {
         };
         let ctx = context::tests::build_test_context("remove");
         let path = repo.get_path(&ctx.cfg.workspace);
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         fs::write(Path::new(&ctx.cfg.workspace).join("test.txt"), "test").unwrap();
@@ -696,7 +692,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -719,7 +715,7 @@ mod tests {
             name: "nvimdots".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -745,7 +741,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -835,7 +831,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -869,7 +865,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
         assert!(!path.exists());
@@ -901,7 +897,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -960,7 +956,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
@@ -1044,7 +1040,7 @@ mod tests {
             name: "example".to_string(),
             ..Default::default()
         };
-        let op = RepoOperator::new(&ctx, &repo, true).unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(false, None).unwrap();
 
         let path = repo.get_path(&ctx.cfg.workspace);
