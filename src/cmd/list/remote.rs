@@ -7,8 +7,7 @@ use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{RemoteDiskUsage, RemoteDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_remotes};
 use crate::term::list::{ListArgs, pagination};
-
-use crate::{debug, output};
+use crate::{debug, outputln};
 
 #[derive(Debug, Args)]
 pub struct ListRemoteCommand {
@@ -37,7 +36,7 @@ impl Command for ListRemoteCommand {
             let list = select_remotes(&ctx, limit)?;
             self.list.render(list)?
         };
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 

@@ -6,7 +6,7 @@ use crate::cmd::Command;
 use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, TagList};
 use crate::term::list::{ListArgs, pagination};
-use crate::{debug, output};
+use crate::{debug, outputln};
 
 #[derive(Debug, Args)]
 pub struct ListTagCommand {
@@ -26,7 +26,7 @@ impl Command for ListTagCommand {
         let list = TagList { tags, total };
         let text = self.list.render(list)?;
 
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 

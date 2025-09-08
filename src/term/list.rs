@@ -47,10 +47,10 @@ impl TableArgs {
     {
         if self.json {
             let json = serde_json::to_string_pretty(items)?;
-            return Ok(format!("{json}\n"));
+            return Ok(json);
         }
         if items.is_empty() {
-            return Ok(String::from("<empty list>\n"));
+            return Ok(String::from("<empty list>"));
         }
 
         let mut table = Table::with_capacity(items.len(), self.headless);
@@ -211,7 +211,7 @@ mod tests {
                          | 1  | Alice   | test1@123.com |\n\
                          | 2  | Bob     | test2@123.com |\n\
                          | 3  | Charlie | test3@33.com  |\n\
-                         +----+---------+---------------+\n",
+                         +----+---------+---------------+",
             },
             Case {
                 users: vec![
@@ -239,7 +239,7 @@ mod tests {
                          +---+-------+-------------------+\n\
                          | 1 | Alice | alice@example.com |\n\
                          | 2 | Bob   | bob@example.com   |\n\
-                         +---+-------+-------------------+\n",
+                         +---+-------+-------------------+",
             },
         ];
 

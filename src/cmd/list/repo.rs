@@ -5,10 +5,11 @@ use clap::Args;
 use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
+use crate::debug;
+use crate::outputln;
 use crate::repo::disk_usage::{RepoDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::list::{ListArgs, pagination};
-use crate::{debug, output};
 
 #[derive(Debug, Args)]
 pub struct ListRepoCommand {
@@ -64,7 +65,7 @@ impl Command for ListRepoCommand {
             self.list.render(list)?
         };
 
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 

@@ -8,7 +8,7 @@ use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{OwnerDiskUsage, OwnerDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_owners};
 use crate::term::list::{ListArgs, pagination};
-use crate::{debug, output};
+use crate::{debug, outputln};
 
 #[derive(Debug, Args)]
 pub struct ListOwnerCommand {
@@ -44,7 +44,7 @@ impl Command for ListOwnerCommand {
             self.list.render(list)?
         };
 
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 

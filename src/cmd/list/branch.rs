@@ -6,7 +6,7 @@ use crate::cmd::Command;
 use crate::config::context::ConfigContext;
 use crate::exec::git::branch::{Branch, BranchList};
 use crate::term::list::{ListArgs, pagination};
-use crate::{debug, output};
+use crate::{debug, outputln};
 
 #[derive(Debug, Args)]
 pub struct ListBranchCommand {
@@ -26,7 +26,7 @@ impl Command for ListBranchCommand {
         let list = BranchList { branches, total };
         let text = self.list.render(list)?;
 
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 

@@ -106,8 +106,6 @@ impl<'a> Table<'a> {
         }
 
         result.push_str(&split);
-        result.push('\n');
-
         result
     }
 }
@@ -131,7 +129,7 @@ mod tests {
                          | Name  | Age |\n\
                          +-------+-----+\n\
                          | Alice | 20  |\n\
-                         +-------+-----+\n",
+                         +-------+-----+",
             },
             Case {
                 rows: vec![vec!["名字", "年龄"], vec!["张三", "20"]],
@@ -140,14 +138,14 @@ mod tests {
                          | 名字 | 年龄 |\n\
                          +------+------+\n\
                          | 张三 | 20   |\n\
-                         +------+------+\n",
+                         +------+------+",
             },
             Case {
                 rows: vec![vec!["Data1", "Data2"], vec!["Value1", "Value2"]],
                 headless: true,
                 expect: "+--------+--------+\n\
                          | Value1 | Value2 |\n\
-                         +--------+--------+\n",
+                         +--------+--------+",
             },
             Case {
                 rows: vec![
@@ -165,7 +163,7 @@ mod tests {
                          | Bob   | 25  | London   |\n\
                          | Carol | 30  | Tokyo    |\n\
                          | David | 35  | Paris    |\n\
-                         +-------+-----+----------+\n",
+                         +-------+-----+----------+",
             },
         ];
 
