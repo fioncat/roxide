@@ -213,19 +213,10 @@ pub async fn run() -> CommandResult {
         }
     };
 
-    if !termion::is_tty(&io::stderr()) {
-        // We don't allow stderr been redirected, this will cause message been dismissed.
-        // Another reason we do this check is that the terminal control characters will be
-        // printed in stderr, redirecting it to non-tty will cause confusion.
-        // The embed commands are special conditions, their output will be captured by other
-        // programs so we should skip this check.
-        return CommandResult {
-            code: 3,
-            message: None,
-        };
+    if termion::is_tty(&io::stderr()) {
+        // We only print styled message in stderr, so it is safe to enable colors forcibly
+        console::set_colors_enabled(true);
     }
-    // We only print styled message in stderr, so it is safe to enable colors forcibly
-    console::set_colors_enabled(true);
 
     let result = app.run().await;
     let result = match result {
