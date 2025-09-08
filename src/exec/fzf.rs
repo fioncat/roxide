@@ -1,30 +1,15 @@
-use std::sync::OnceLock;
-
 use anyhow::{Result, bail};
 
 use crate::config::CmdConfig;
 use crate::debug;
 
-use super::{Cmd, SilentExit};
+use super::SilentExit;
 
-static FZF_COMMAND_CONFIG: OnceLock<CmdConfig> = OnceLock::new();
-
-pub fn set_cmd(cfg: CmdConfig) {
-    let _ = FZF_COMMAND_CONFIG.set(cfg);
-}
-
-pub fn get_cmd() -> Cmd {
-    FZF_COMMAND_CONFIG
-        .get()
-        .map(|cfg| Cmd::new(&cfg.name).args(&cfg.args))
-        .unwrap_or(Cmd::new("fzf"))
-}
-
-pub fn search<S>(desc: &str, items: &[S], filter: Option<&str>) -> Result<usize>
+pub fn search<S>(cfg: &CmdConfig, desc: &str, items: &[S], filter: Option<&str>) -> Result<usize>
 where
     S: AsRef<str> + std::fmt::Debug,
 {
-    let mut cmd = get_cmd();
+    let mut cmd = cfg.new_cmd();
     if let Some(f) = filter {
         cmd = cmd.args(["--filter", f]);
     }
@@ -62,6 +47,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::config::Config;
+
     use super::*;
 
     #[test]
@@ -71,8 +58,9 @@ mod tests {
             (vec!["dog", "cat", "mouse"], "elephant", None),
             (vec![], "anything", None),
         ];
+        let cfg = Config::default_fzf();
         for (items, filter, expected) in test_cases {
-            let result = search("Test search", &items, Some(filter));
+            let result = search(&cfg, "Test search", &items, Some(filter));
             match expected {
                 Some(index) => {
                     assert!(result.is_ok());

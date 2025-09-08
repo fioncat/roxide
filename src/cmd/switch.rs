@@ -5,7 +5,6 @@ use clap::Args;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
-use crate::exec::fzf;
 use crate::exec::git::branch::Branch;
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
 
@@ -44,7 +43,7 @@ impl Command for SwitchCommand {
             return self.switch(&ctx, &branches[0]);
         }
 
-        let idx = fzf::search("Search branch to switch", &branches, None)?;
+        let idx = ctx.fzf_search("Search branch to switch", &branches, None)?;
         debug!("[cmd] Selected branch: {:?}", branches[idx]);
         self.switch(&ctx, &branches[idx])
     }

@@ -9,7 +9,6 @@ use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
 };
 use crate::debug;
-use crate::exec::fzf;
 use crate::term::list::List;
 
 pub struct RepoSelector<'a, 'b> {
@@ -146,7 +145,9 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             );
         }
 
-        let idx = fzf::search("Search remote repos", &remote_repos, self.fzf_filter)?;
+        let idx = self
+            .ctx
+            .fzf_search("Search remote repos", &remote_repos, self.fzf_filter)?;
         let name = &remote_repos[idx];
         let repo = self.get_or_create(&remote.name, self.owner, name)?;
         debug!("[select] Select remote repo: {repo:?}");
@@ -402,7 +403,9 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         let items = merge_sorted(locals, remote_repos);
 
         debug!("[select] Use fzf to select items: {items:?}");
-        let idx = fzf::search("Search repos", &items, self.fzf_filter)?;
+        let idx = self
+            .ctx
+            .fzf_search("Search repos", &items, self.fzf_filter)?;
         let name = &items[idx];
         let repo = self.get_or_create(&remote.name, self.owner, name)?;
         debug!("[select] Select repo: {repo:?}");
@@ -521,7 +524,9 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             .map(|r| r.search_item(level))
             .collect::<Vec<_>>();
         debug!("[select] Use fzf to select items: {items:?}");
-        let idx = fzf::search("Select one repo from database", &items, self.fzf_filter)?;
+        let idx = self
+            .ctx
+            .fzf_search("Select one repo from database", &items, self.fzf_filter)?;
         debug!("[select] Select repo: {:?}", repos[idx]);
         Ok(repos.remove(idx))
     }

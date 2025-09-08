@@ -7,7 +7,6 @@ use console::style;
 use crate::config::context::ConfigContext;
 use crate::config::remote::{OwnerConfigRef, RemoteConfig};
 use crate::db::repo::Repository;
-use crate::exec::bash;
 use crate::exec::git::GitCmd;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
@@ -165,14 +164,14 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                     bail!("hook {hook_name:?} not found");
                 };
 
-                bash::run(
-                    &self.path,
-                    hook_path,
-                    &envs,
-                    format!("Running create hook: {hook_name}"),
-                    self.mute,
-                )
-                .with_context(|| format!("failed to run create hook {hook_name:?}"))?;
+                self.ctx
+                    .run_bash(
+                        &self.path,
+                        hook_path,
+                        &envs,
+                        format!("Running create hook: {hook_name}"),
+                    )
+                    .with_context(|| format!("failed to run create hook {hook_name:?}"))?;
             }
         }
 

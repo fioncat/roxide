@@ -1,20 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use anyhow::Result;
 
 use crate::config::CmdConfig;
 use crate::debug;
 
-use super::Cmd;
-
-static BASH_COMMAND_CONFIG: OnceLock<CmdConfig> = OnceLock::new();
-
-pub fn set_cmd(cfg: CmdConfig) {
-    let _ = BASH_COMMAND_CONFIG.set(cfg);
-}
-
 pub fn run<P, F>(
+    cfg: &CmdConfig,
     path: P,
     file: F,
     envs: &[(&str, &str)],
@@ -36,10 +28,8 @@ where
         path.as_ref().display(),
         file.as_ref().display()
     );
-    let mut cmd = BASH_COMMAND_CONFIG
-        .get()
-        .map(|cfg| Cmd::new(&cfg.name).args(&cfg.args))
-        .unwrap_or(Cmd::new("bash"))
+    let mut cmd = cfg
+        .new_cmd()
         .args([file.as_ref()])
         .current_dir(path.as_ref());
     if mute {
@@ -62,6 +52,8 @@ where
 #[cfg(test)]
 mod tests {
     use std::fs;
+
+    use crate::config::Config;
 
     use super::*;
 
@@ -92,8 +84,9 @@ mod tests {
 
         let envs = [("TEST_ENV", "Hello, World!")];
 
-        run(base_dir, bash0_path, &envs, "Test", true).unwrap();
-        run(base_dir, bash1_path, &envs, "Test", true).unwrap();
+        let cfg = Config::default_bash();
+        run(&cfg, base_dir, bash0_path, &envs, "Test", true).unwrap();
+        run(&cfg, base_dir, bash1_path, &envs, "Test", true).unwrap();
 
         assert_eq!(
             fs::read(format!("{base_dir}/test_env",)).unwrap(),

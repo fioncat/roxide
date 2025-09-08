@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env;
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -9,8 +10,8 @@ use semver::Version;
 use crate::api::{self, RemoteAPI};
 use crate::db::Database;
 use crate::debug;
-use crate::exec::fzf;
 use crate::exec::git::GitCmd;
+use crate::exec::{bash, fzf};
 use crate::filelock::FileLock;
 use crate::term::{confirm, output};
 
@@ -67,10 +68,7 @@ impl ConfigContext {
     pub fn new_mock() -> Self {
         let current_dir = env::current_dir().unwrap();
         Self {
-            cfg: Config {
-                git: Config::default_git(),
-                ..Default::default()
-            },
+            cfg: Config::default(),
             current_dir,
             mute: true,
             db: OnceLock::new(),
@@ -155,6 +153,30 @@ impl ConfigContext {
         GitCmd::new(&self.cfg.git, work_dir, self.mute)
     }
 
+    pub fn fzf_search<S>(&self, desc: &str, items: &[S], filter: Option<&str>) -> Result<usize>
+    where
+        S: AsRef<str> + Debug,
+    {
+        if self.mute && filter.is_none() {
+            bail!("cannot run fzf search in mute mode");
+        }
+        fzf::search(&self.cfg.fzf, desc, items, filter)
+    }
+
+    pub fn run_bash<P, F>(
+        &self,
+        path: P,
+        file: F,
+        envs: &[(&str, &str)],
+        message: impl ToString,
+    ) -> Result<()>
+    where
+        P: AsRef<Path>,
+        F: AsRef<Path>,
+    {
+        bash::run(&self.cfg.bash, path, file, envs, message, self.mute)
+    }
+
     pub fn get_git_version(&self) -> Result<Version> {
         let version = self
             .git()
@@ -171,7 +193,10 @@ impl ConfigContext {
     }
 
     pub fn get_fzf_version(&self) -> Result<Version> {
-        let version = fzf::get_cmd()
+        let version = self
+            .cfg
+            .fzf
+            .new_cmd()
             .mute()
             .args(["--version"])
             .output()
@@ -280,7 +305,6 @@ pub mod tests {
             data_dir: format!("{}", data_dir.display()),
             remotes,
             hooks,
-            git: Config::default_git(),
             ..Default::default()
         };
         let home_dir = dirs::home_dir().unwrap();

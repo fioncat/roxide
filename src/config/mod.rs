@@ -13,7 +13,7 @@ use crate::debug;
 use crate::exec::Cmd;
 use crate::repo::ensure_dir;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
     pub workspace: String,
@@ -24,12 +24,14 @@ pub struct Config {
     #[serde(default = "Config::default_branch")]
     pub default_branch: String,
 
-    pub fzf: Option<CmdConfig>,
+    #[serde(default = "Config::default_fzf")]
+    pub fzf: CmdConfig,
 
     #[serde(default = "Config::default_git")]
     pub git: CmdConfig,
 
-    pub bash: Option<CmdConfig>,
+    #[serde(default = "Config::default_bash")]
+    pub bash: CmdConfig,
 
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
@@ -132,16 +134,16 @@ impl Config {
             self.default_branch = Self::default_branch();
         }
 
-        if let Some(ref mut fzf) = self.fzf {
-            fzf.validate().context("failed to validate fzf config")?;
+        if self.fzf.name.is_empty() {
+            bail!("fzf command name cannot be empty");
         }
 
         if self.git.name.is_empty() {
             bail!("git command name cannot be empty");
         }
 
-        if let Some(ref mut bash) = self.bash {
-            bash.validate().context("failed to validate bash config")?;
+        if self.bash.name.is_empty() {
+            bail!("bash command name cannot be empty");
         }
 
         debug!("[config] Config validated: {:?}", self);
@@ -152,10 +154,39 @@ impl Config {
         String::from("main")
     }
 
-    fn default_git() -> CmdConfig {
+    pub fn default_fzf() -> CmdConfig {
+        CmdConfig {
+            name: "fzf".to_string(),
+            args: vec![],
+        }
+    }
+
+    pub fn default_git() -> CmdConfig {
         CmdConfig {
             name: "git".to_string(),
             args: vec![],
+        }
+    }
+
+    pub fn default_bash() -> CmdConfig {
+        CmdConfig {
+            name: "bash".to_string(),
+            args: vec![],
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            workspace: String::new(),
+            data_dir: String::new(),
+            default_branch: Self::default_branch(),
+            fzf: Self::default_fzf(),
+            git: Self::default_git(),
+            bash: Self::default_bash(),
+            remotes: vec![],
+            hooks: hook::HooksConfig::default(),
         }
     }
 }
@@ -163,15 +194,6 @@ impl Config {
 impl CmdConfig {
     pub fn new_cmd(&self) -> Cmd {
         Cmd::new(&self.name).args(&self.args)
-    }
-
-    fn validate(&mut self) -> Result<()> {
-        self.name = expandenv(take(&mut self.name));
-        if self.name.is_empty() {
-            bail!("command name cannot be empty");
-        }
-
-        Ok(())
     }
 }
 
@@ -198,12 +220,12 @@ mod tests {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
             default_branch: "main".to_string(),
-            fzf: None,
+            fzf: Config::default_fzf(),
             git: Config::default_git(),
-            bash: Some(CmdConfig {
+            bash: CmdConfig {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],
-            }),
+            },
             remotes: super::remote::tests::expect_remotes(),
             hooks: super::hook::tests::expect_hooks(),
         };

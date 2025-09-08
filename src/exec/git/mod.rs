@@ -67,7 +67,7 @@ impl<'a> GitCmd<'a> {
             .new_cmd()
             .args(args)
             .message(message)
-            .current_dir(&self.work_dir);
+            .current_dir(self.work_dir);
         if self.mute {
             return cmd.mute();
         }

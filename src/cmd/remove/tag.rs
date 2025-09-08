@@ -8,7 +8,6 @@ use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
-use crate::exec::fzf;
 use crate::exec::git::tag::Tag;
 
 #[derive(Debug, Args)]
@@ -28,7 +27,7 @@ impl Command for RemoveTagCommand {
                     .into_iter()
                     .map(|t| t.name)
                     .collect::<Vec<_>>();
-                let idx = fzf::search("Select a tag to remove", &tags, None)?;
+                let idx = ctx.fzf_search("Select a tag to remove", &tags, None)?;
                 take(&mut tags[idx])
             }
         };
