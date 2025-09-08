@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use semver::Version;
 
 use crate::api::{self, RemoteAPI};
+use crate::config::CmdConfig;
 use crate::db::Database;
 use crate::debug;
 use crate::exec::{fzf, git};
@@ -19,49 +20,48 @@ pub struct ConfigContext {
 
     pub current_dir: PathBuf,
 
-    pub git_version: Version,
-
-    pub fzf_version: Version,
-
+    work_dir: Mutex<Option<PathBuf>>,
     db: OnceLock<Result<Arc<Database>>>,
-
     apis: Mutex<HashMap<String, Arc<dyn RemoteAPI>>>,
-
     file_lock: OnceLock<Result<FileLock>>,
 }
 
 impl ConfigContext {
-    pub fn new(cfg: Config) -> Result<Arc<Self>> {
+    pub fn new(cfg: Config) -> Result<Self> {
         let current_dir = env::current_dir().context("failed to get current directory")?;
-        Ok(Arc::new(Self {
+        Ok(Self {
             cfg,
             current_dir,
-            git_version: Self::get_git_version()?,
-            fzf_version: Self::get_fzf_version()?,
+            work_dir: Mutex::new(None),
             db: OnceLock::new(),
             apis: Mutex::new(HashMap::new()),
             file_lock: OnceLock::new(),
-        }))
+        })
     }
 
     #[cfg(test)]
-    pub fn new_mock(
-        cfg: Config,
-        api: Arc<dyn RemoteAPI>,
-        current_dir: Option<PathBuf>,
-    ) -> Arc<Self> {
-        let current_dir = current_dir.unwrap_or(env::current_dir().unwrap());
+    pub fn new_mock_api(cfg: Config, api: Arc<dyn RemoteAPI>) -> Self {
+        let current_dir = env::current_dir().unwrap();
         let mut apis = HashMap::new();
         apis.insert("github".to_string(), api);
-        Arc::new(Self {
+        Self {
             cfg,
             current_dir,
-            git_version: Self::get_git_version().unwrap(),
-            fzf_version: Self::get_fzf_version().unwrap(),
+            work_dir: Mutex::new(None),
             db: OnceLock::new(),
             apis: Mutex::new(apis),
             file_lock: OnceLock::new(),
-        })
+        }
+    }
+
+    pub fn set_work_dir(&self, dir: PathBuf) {
+        let mut work_dir = self.work_dir.lock().unwrap();
+        work_dir.replace(work_dir);
+    }
+
+    pub fn reset_work_dir(&self) {
+        let mut work_dir = self.work_dir.lock().unwrap();
+        *work_dir = None;
     }
 
     pub fn get_db(&self) -> Result<Arc<Database>> {
@@ -243,7 +243,7 @@ pub mod tests {
         let home_dir = dirs::home_dir().unwrap();
         cfg.validate(&home_dir).unwrap();
 
-        let ctx = ConfigContext::new_mock(cfg, Arc::new(MockAPI {}), current_dir);
+        let ctx = ConfigContext::new_mock_api(cfg, Arc::new(MockAPI {}), current_dir);
 
         let repos = db::tests::test_repos();
 

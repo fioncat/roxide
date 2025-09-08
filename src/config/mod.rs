@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::debug;
+use crate::exec::Cmd;
 use crate::repo::ensure_dir;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -25,7 +26,8 @@ pub struct Config {
 
     pub fzf: Option<CmdConfig>,
 
-    pub git: Option<CmdConfig>,
+    #[serde(default = "Config::default_git")]
+    pub git: CmdConfig,
 
     pub bash: Option<CmdConfig>,
 
@@ -134,8 +136,8 @@ impl Config {
             fzf.validate().context("failed to validate fzf config")?;
         }
 
-        if let Some(ref mut git) = self.git {
-            git.validate().context("failed to validate git config")?;
+        if self.git.name.is_empty() {
+            bail!("git command name cannot be empty");
         }
 
         if let Some(ref mut bash) = self.bash {
@@ -149,9 +151,21 @@ impl Config {
     fn default_branch() -> String {
         String::from("main")
     }
+
+    fn default_git() -> CmdConfig {
+        CmdConfig {
+            name: "git".to_string(),
+            args: vec![],
+        }
+    }
 }
 
 impl CmdConfig {
+    #[inline]
+    pub fn new_cmd(&self) -> Cmd {
+        Cmd::new(&self.name).args(&self.args)
+    }
+
     fn validate(&mut self) -> Result<()> {
         self.name = expandenv(take(&mut self.name));
         if self.name.is_empty() {
