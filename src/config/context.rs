@@ -200,6 +200,8 @@ impl ConfigContext {
             .output(["--version"], "")
             .context("failed to check git command")?;
         let version = version.trim_start_matches("git version").trim();
+        let mut fields = version.split_whitespace();
+        let version = fields.next().unwrap_or("").trim();
         if version.is_empty() {
             bail!("`git --version` command does not report anything");
         }
@@ -299,6 +301,15 @@ pub mod tests {
             }
 
             Ok(repo)
+        }
+
+        async fn list_pull_requests(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _head: Option<api::PullRequestHead>,
+        ) -> Result<Vec<api::PullRequest>> {
+            Ok(vec![])
         }
     }
 

@@ -38,6 +38,7 @@ shellexpand = "^3"
 termion = "^4"
 tokio = { version = "^1", features = ["full"] }
 toml = "^0"
+which = "^8"
 
 [build-dependencies]
 simple-error = "^0"
