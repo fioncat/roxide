@@ -9,7 +9,7 @@ use crate::config::context::ConfigContext;
 use crate::scan::code_stats::get_code_stats;
 use crate::scan::ignore::Ignore;
 use crate::term::list::TableArgs;
-use crate::{debug, output, report_scan_process_done};
+use crate::{debug, outputln, report_scan_process_done};
 
 use super::Command;
 
@@ -49,7 +49,7 @@ impl Command for StatsCommand {
             vec!["Lang", "Files", "Code", "Comment", "Blank", "Total"],
             &stats.items,
         )?;
-        output!("{text}");
+        outputln!("{text}");
         Ok(())
     }
 
