@@ -19,7 +19,7 @@ macro_rules! generate_simple_parser {
 }
 
 generate_simple_parser!(LuaLike, "--");
-generate_simple_parser!(Script, '-');
+generate_simple_parser!(Script, '#');
 generate_simple_parser!(Semicolon, ';');
 generate_simple_parser!(Percent, '%');
 generate_simple_parser!(Quote, '"');

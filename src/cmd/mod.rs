@@ -133,27 +133,13 @@ pub async fn run() -> CommandResult {
         }
     }
 
-    if env::var("ROXIDE_WRAP").is_err() {
-        match get_shell_type() {
-            Some(shell) if shell == "zsh" || shell == "bash" => {
-                warn!(
-                    "Please do not use `roxide` command directly, add `source <(ROXIDE_INIT='{shell}' roxide)` to your profile and use `rox` command instead"
-                );
-            }
-            Some(shell) => {
-                warn!("Now we do not support shell {shell:?}, please use `bash` or `zsh` instead")
-            }
-            None => {
-                warn!(
-                    "Cannot detect your shell type, please make sure you are using `bash` or `zsh`"
-                );
-            }
-        }
-    }
-
+    let warn_wrap = env::var("ROXIDE_WRAP").is_err();
     let app = match App::try_parse() {
         Ok(app) => app,
         Err(err) => {
+            if warn_wrap {
+                print_wrap_warn();
+            }
             err.use_stderr();
             err.print().expect("write help message to stderr");
             if matches!(
@@ -170,6 +156,11 @@ pub async fn run() -> CommandResult {
             };
         }
     };
+
+    let skip_check_wrap = matches!(app.command, Commands::Check(_));
+    if !skip_check_wrap && warn_wrap {
+        print_wrap_warn();
+    }
 
     if termion::is_tty(&io::stderr()) {
         // We only print styled message in stderr, so it is safe to enable colors forcibly
@@ -204,4 +195,20 @@ fn get_shell_type() -> Option<String> {
     let shell = env::var("SHELL").ok()?;
     let name = Path::new(&shell).file_name()?.to_str()?;
     Some(name.to_string())
+}
+
+fn print_wrap_warn() {
+    match get_shell_type() {
+        Some(shell) if shell == "zsh" || shell == "bash" => {
+            warn!(
+                "Please do not use `roxide` command directly, add `source <(ROXIDE_INIT='{shell}' roxide)` to your profile and use `rox` command instead"
+            );
+        }
+        Some(shell) => {
+            warn!("Now we do not support shell {shell:?}, please use `bash` or `zsh` instead")
+        }
+        None => {
+            warn!("Cannot detect your shell type, please make sure you are using `bash` or `zsh`");
+        }
+    }
 }

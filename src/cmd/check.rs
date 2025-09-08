@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
@@ -5,7 +7,7 @@ use console::style;
 
 use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, QueryOptions};
-use crate::{cursor_up, debug, outputln};
+use crate::{cursor_up, debug, output, outputln};
 
 use super::Command;
 
@@ -20,6 +22,41 @@ impl Command for CheckCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run check command: {:?}", self);
 
+        let shell = super::get_shell_type();
+        match shell {
+            Some(shell) => {
+                if shell == "zsh" || shell == "bash" {
+                    output!("shell: {}, ", style(&shell).green());
+                    if env::var("ROXIDE_WRAP").is_ok() {
+                        outputln!("wrap: {}", style("enabled").green());
+                    } else {
+                        let message = format!(
+                            "please add `source <(ROXIDE_INIT='{shell}' roxide)` to your profile and use `rox` command instead"
+                        );
+                        outputln!(
+                            "wrap: {}, {}",
+                            style("disabled").red(),
+                            style(message).yellow()
+                        );
+                    }
+                } else {
+                    outputln!(
+                        "shell: {}, {}",
+                        style(shell).yellow(),
+                        style("now we does not support your shell, please issue us").red()
+                    );
+                }
+            }
+            None => {
+                outputln!(
+                    "shell: {}, {}",
+                    style("unknown").red(),
+                    style("cannot determine your shell").yellow()
+                );
+            }
+        }
+
+        outputln!();
         outputln!("git version: {}", ctx.get_git_version()?);
         outputln!("fzf version: {}", ctx.get_fzf_version()?);
         outputln!();
