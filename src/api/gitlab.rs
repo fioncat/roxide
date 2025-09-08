@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::remote_repo::RemoteRepository;
 use crate::debug;
 
-use super::{RemoteAPI, RemoteInfo};
+use super::{HeadRepository, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
 
 pub struct GitLab {
     host: String,
@@ -115,6 +115,15 @@ impl RemoteAPI for GitLab {
 
         debug!("[gitlab] Result: {remote_repo:?}");
         Ok(remote_repo)
+    }
+
+    async fn list_pull_requests(
+        &self,
+        _owner: &str,
+        _name: &str,
+        _head: Option<PullRequestHead>,
+    ) -> Result<Vec<PullRequest>> {
+        todo!()
     }
 }
 

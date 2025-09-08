@@ -3,11 +3,12 @@ use std::borrow::Cow;
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use octocrab::Octocrab;
+use octocrab::params::State;
 
 use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
 use crate::{debug, warn};
 
-use super::{RemoteAPI, RemoteInfo};
+use super::{HeadRepository, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
 
 pub struct GitHub {
     client: Octocrab,
@@ -16,6 +17,7 @@ pub struct GitHub {
 
 impl GitHub {
     const LIST_LIMIT: u8 = 100;
+    const PULLS_LIMIT: u8 = 20;
 
     pub fn new(token: &str) -> Result<Self> {
         let mut has_token = false;
@@ -129,6 +131,73 @@ impl RemoteAPI for GitHub {
         };
         debug!("[github] Result: {remote_repo:?}");
         Ok(remote_repo)
+    }
+
+    async fn list_pull_requests(
+        &self,
+        owner: &str,
+        name: &str,
+        head: Option<PullRequestHead>,
+    ) -> Result<Vec<PullRequest>> {
+        debug!("[github] List pull requests for: {owner}/{name}, head: {head:?}");
+        let pulls_handler = self.client.pulls(owner, name);
+        let mut builder = pulls_handler
+            .list()
+            .state(State::Open)
+            .per_page(Self::PULLS_LIMIT);
+        if let Some(head) = head {
+            let head = match head {
+                PullRequestHead::Branch(branch) => format!("{owner}:{branch}"),
+                PullRequestHead::Repository(repo) => format!("{}:{}", repo.owner, repo.branch),
+            };
+            debug!("[github] Filter head: {head:?}");
+            builder = builder.head(head);
+        }
+
+        let pulls = builder
+            .send()
+            .await
+            .context("failed to fetch github pull requests")?;
+        let mut results = vec![];
+        for pull in pulls {
+            let id = pull.number;
+            let Some(web_url) = pull.html_url else {
+                bail!("github pull request {id} html url is empty");
+            };
+            let web_url = web_url.to_string();
+            let base = pull.base.ref_field;
+            let head_branch = pull.head.ref_field;
+            let head = match pull.head.repo {
+                Some(repo) => {
+                    let Some(head_owner) = repo.owner else {
+                        bail!("github pull request {id} head repo owner is empty");
+                    };
+                    if owner != head_owner.login {
+                        PullRequestHead::Repository(HeadRepository {
+                            owner: head_owner.login,
+                            name: repo.name,
+                            branch: head_branch,
+                        })
+                    } else {
+                        PullRequestHead::Branch(head_branch)
+                    }
+                }
+                None => PullRequestHead::Branch(head_branch),
+            };
+            let Some(title) = pull.title else {
+                bail!("github pull request {id} title is empty");
+            };
+            results.push(PullRequest {
+                id,
+                base,
+                head,
+                title,
+                web_url,
+            });
+        }
+
+        debug!("[github] Results: {results:?}");
+        Ok(results)
     }
 }
 

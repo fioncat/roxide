@@ -1,5 +1,6 @@
 mod branch;
 mod owner;
+mod pull_request;
 mod remote;
 mod repo;
 mod tag;
@@ -22,6 +23,8 @@ pub struct ListCommand {
 pub enum ListCommands {
     Branch(branch::ListBranchCommand),
     Owner(owner::ListOwnerCommand),
+    #[command(alias = "pr")]
+    PullRequest(pull_request::ListPullRequestCommand),
     Remote(remote::ListRemoteCommand),
     Repo(repo::ListRepoCommand),
     Tag(tag::ListTagCommand),
@@ -33,6 +36,7 @@ impl Command for ListCommand {
         match self.command {
             ListCommands::Branch(cmd) => cmd.run(ctx).await,
             ListCommands::Owner(cmd) => cmd.run(ctx).await,
+            ListCommands::PullRequest(cmd) => cmd.run(ctx).await,
             ListCommands::Remote(cmd) => cmd.run(ctx).await,
             ListCommands::Repo(cmd) => cmd.run(ctx).await,
             ListCommands::Tag(cmd) => cmd.run(ctx).await,
@@ -47,6 +51,7 @@ impl Command for ListCommand {
             .subcommands([
                 branch::ListBranchCommand::complete_command(),
                 owner::ListOwnerCommand::complete_command(),
+                pull_request::ListPullRequestCommand::complete_command(),
                 remote::ListRemoteCommand::complete_command(),
                 repo::ListRepoCommand::complete_command(),
                 tag::ListTagCommand::complete_command(),

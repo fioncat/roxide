@@ -9,7 +9,7 @@ use crate::db::remote_owner::RemoteOwner;
 use crate::db::remote_repo::RemoteRepository;
 use crate::debug;
 
-use super::{RemoteAPI, RemoteInfo};
+use super::{PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
 
 pub struct Cache {
     pub upstream: Arc<dyn RemoteAPI>,
@@ -98,11 +98,21 @@ impl RemoteAPI for Cache {
             .with_transaction(|tx| tx.remote_repo().insert(&repo))?;
         Ok(repo)
     }
+
+    async fn list_pull_requests(
+        &self,
+        owner: &str,
+        name: &str,
+        head: Option<PullRequestHead>,
+    ) -> Result<Vec<PullRequest>> {
+        self.upstream.list_pull_requests(owner, name, head).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, fs};
+    use std::cell::RefCell;
+    use std::fs;
 
     use tokio::sync::Mutex;
 
@@ -179,6 +189,15 @@ mod tests {
                 .take()
                 .unwrap_or(self.update_repo.clone());
             Ok(repo)
+        }
+
+        async fn list_pull_requests(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _head: Option<PullRequestHead>,
+        ) -> Result<Vec<PullRequest>> {
+            Ok(vec![])
         }
     }
 
