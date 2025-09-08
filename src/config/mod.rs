@@ -33,6 +33,9 @@ pub struct Config {
     #[serde(default = "Config::default_bash")]
     pub bash: CmdConfig,
 
+    #[serde(default)]
+    pub stats_ignore: Vec<String>,
+
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
 
@@ -185,6 +188,7 @@ impl Default for Config {
             fzf: Self::default_fzf(),
             git: Self::default_git(),
             bash: Self::default_bash(),
+            stats_ignore: vec![],
             remotes: vec![],
             hooks: hook::HooksConfig::default(),
         }
@@ -226,6 +230,7 @@ mod tests {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],
             },
+            stats_ignore: vec![],
             remotes: super::remote::tests::expect_remotes(),
             hooks: super::hook::tests::expect_hooks(),
         };

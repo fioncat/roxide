@@ -26,16 +26,20 @@ pub struct StatsCommand {
 
 #[async_trait]
 impl Command for StatsCommand {
-    async fn run(self, _: ConfigContext) -> Result<()> {
+    async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run stats command: {:?}", self);
 
         let path = match self.path {
             Some(path) => PathBuf::from(path),
             None => env::current_dir().context("failed to get current directory")?,
         };
-        let ignore = match self.ignore {
-            Some(ignores) => Ignore::parse(&path, &ignores)?,
-            None => Ignore::default(),
+        let mut ignore_patterns = self.ignore.unwrap_or_default();
+        ignore_patterns.extend(ctx.cfg.stats_ignore);
+
+        let ignore = if ignore_patterns.is_empty() {
+            Ignore::default()
+        } else {
+            Ignore::parse(&path, &ignore_patterns)?
         };
 
         let stats = get_code_stats(path, ignore).await?;

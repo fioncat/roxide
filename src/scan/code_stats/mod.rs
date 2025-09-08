@@ -82,18 +82,22 @@ impl CodeStatsItem {
     where
         P: AsRef<Path>,
     {
-        let path = path.as_ref();
-        let Some(Some(extension)) = path.extension().map(|e| e.to_str()) else {
+        let Some((name, mut parser)) = Self::get_parser(path.as_ref()) else {
             return Ok(None);
         };
 
-        let Some((name, mut parser)) = parse::new_parser(extension) else {
-            return Ok(None);
-        };
-
-        let stats = read_file(path, parser.as_mut())
-            .with_context(|| format!("failed to read file {:?}", path.display()))?;
+        let stats = read_file(path.as_ref(), parser.as_mut())
+            .with_context(|| format!("failed to read file {:?}", path.as_ref().display()))?;
         Ok(Some((name, stats)))
+    }
+
+    fn get_parser(path: &Path) -> Option<(&'static str, Box<dyn CodeParser>)> {
+        let Some(Some(extension)) = path.extension().map(|e| e.to_str()) else {
+            let name = path.file_name()?.to_str()?;
+            let special = parse::get_special_file(name)?;
+            return parse::new_parser(special);
+        };
+        parse::new_parser(extension)
     }
 }
 
