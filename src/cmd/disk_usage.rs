@@ -54,6 +54,6 @@ impl Command for DiskUsageCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("disk-usage"))
+        Self::augment_args(clap::Command::new("disk-usage").alias("du"))
     }
 }

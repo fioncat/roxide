@@ -10,6 +10,7 @@ use semver::Version;
 use crate::api::{self, RemoteAPI};
 use crate::db::Database;
 use crate::debug;
+use crate::exec::edit::edit;
 use crate::exec::git::GitCmd;
 use crate::exec::{bash, fzf};
 use crate::filelock::FileLock;
@@ -227,6 +228,13 @@ impl ConfigContext {
         let version = Version::parse(version)
             .with_context(|| format!("failed to parse fzf version {version:?}"))?;
         Ok(version)
+    }
+
+    pub fn edit<P>(&self, file: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        edit(&self.cfg.edit, file)
     }
 }
 

@@ -41,6 +41,7 @@ impl Command for ListCommand {
 
     fn complete_command() -> clap::Command {
         clap::Command::new("list")
+            .alias("ls")
             .disable_help_flag(true)
             .disable_version_flag(true)
             .subcommands([

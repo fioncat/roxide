@@ -33,6 +33,9 @@ pub struct Config {
     #[serde(default = "Config::default_bash")]
     pub bash: CmdConfig,
 
+    #[serde(default = "Config::default_edit")]
+    pub edit: CmdConfig,
+
     #[serde(default)]
     pub stats_ignore: Vec<String>,
 
@@ -41,6 +44,18 @@ pub struct Config {
 
     #[serde(skip)]
     pub hooks: hook::HooksConfig,
+
+    #[serde(skip)]
+    pub dir: PathBuf,
+
+    #[serde(skip)]
+    pub path: PathBuf,
+
+    #[serde(skip)]
+    pub remotes_dir: PathBuf,
+
+    #[serde(skip)]
+    pub hooks_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -87,11 +102,15 @@ impl Config {
                 });
             }
         };
+        cfg.path = file_path;
+        cfg.dir = path;
+        cfg.remotes_dir = cfg.dir.join("remotes");
+        cfg.hooks_dir = cfg.dir.join("hooks");
         cfg.validate(&home_dir)
             .context("failed to validate base config")?;
 
-        let hooks = hook::HooksConfig::read(&path.join("hooks"))?;
-        let remotes = remote::RemoteConfig::read(&path.join("remotes"), &hooks)?;
+        let hooks = hook::HooksConfig::read(&cfg.hooks_dir)?;
+        let remotes = remote::RemoteConfig::read(&cfg.remotes_dir, &hooks)?;
 
         cfg.hooks = hooks;
         cfg.remotes = remotes;
@@ -149,6 +168,10 @@ impl Config {
             bail!("bash command name cannot be empty");
         }
 
+        if self.edit.name.is_empty() {
+            bail!("edit command name cannot be empty");
+        }
+
         debug!("[config] Config validated: {:?}", self);
         Ok(())
     }
@@ -177,6 +200,14 @@ impl Config {
             args: vec![],
         }
     }
+
+    pub fn default_edit() -> CmdConfig {
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+        CmdConfig {
+            name: editor,
+            args: vec![],
+        }
+    }
 }
 
 impl Default for Config {
@@ -188,9 +219,14 @@ impl Default for Config {
             fzf: Self::default_fzf(),
             git: Self::default_git(),
             bash: Self::default_bash(),
+            edit: Self::default_edit(),
             stats_ignore: vec![],
             remotes: vec![],
             hooks: hook::HooksConfig::default(),
+            path: PathBuf::new(),
+            dir: PathBuf::new(),
+            remotes_dir: PathBuf::new(),
+            hooks_dir: PathBuf::new(),
         }
     }
 }
@@ -219,7 +255,7 @@ mod tests {
     fn test_config() {
         let home_dir = dirs::home_dir().unwrap();
         let path = fs::canonicalize("src/config/tests").unwrap();
-        let cfg = Config::read(Some(path)).unwrap();
+        let cfg = Config::read(Some(path.clone())).unwrap();
         let expect = Config {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
@@ -230,9 +266,14 @@ mod tests {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],
             },
+            edit: Config::default_edit(),
             stats_ignore: vec![],
             remotes: super::remote::tests::expect_remotes(),
             hooks: super::hook::tests::expect_hooks(),
+            dir: path.clone(),
+            path: path.join("config.toml"),
+            remotes_dir: path.join("remotes"),
+            hooks_dir: path.join("hooks"),
         };
         assert_eq!(cfg, expect);
     }

@@ -1,4 +1,5 @@
 pub mod bash;
+pub mod edit;
 pub mod fzf;
 pub mod git;
 

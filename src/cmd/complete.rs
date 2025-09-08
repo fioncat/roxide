@@ -84,7 +84,17 @@ macro_rules! register_complete {
     };
 }
 
-register_complete!(head, remote, owner, name, branch, tag, tag_method);
+register_complete!(
+    head,
+    remote,
+    owner,
+    name,
+    branch,
+    tag,
+    tag_method,
+    config_type,
+    config_name,
+);
 
 fn complete_head(
     ctx: &ConfigContext,
@@ -245,6 +255,57 @@ fn complete_tag_method(
         .map(CompletionCandidate::new)
         .collect::<Vec<_>>();
 
+    debug!("[complete] Results: {candidates:?}");
+    Ok(candidates)
+}
+
+fn complete_config_type(
+    _ctx: &ConfigContext,
+    _args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete config type, current: {current:?}");
+    let candidates = vec!["remote", "hook"]
+        .into_iter()
+        .filter(|m| m.starts_with(current))
+        .map(CompletionCandidate::new)
+        .collect::<Vec<_>>();
+    debug!("[complete] Results: {candidates:?}");
+    Ok(candidates)
+}
+
+fn complete_config_name(
+    ctx: &ConfigContext,
+    mut args: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete config name, current: {current:?}");
+    let Some(config_type) = args.pop() else {
+        debug!("[complete] Config type is required to complete config name, skip");
+        return Ok(vec![]);
+    };
+    let mut candidates = match config_type.as_str() {
+        "remote" => ctx
+            .cfg
+            .remotes
+            .iter()
+            .filter(|r| r.name.starts_with(current))
+            .map(|r| CompletionCandidate::new(r.name.clone()))
+            .collect::<Vec<_>>(),
+        "hook" => ctx
+            .cfg
+            .hooks
+            .hooks
+            .keys()
+            .filter(|h| h.starts_with(current))
+            .map(|h| CompletionCandidate::new(h.clone()))
+            .collect::<Vec<_>>(),
+        _ => {
+            debug!("[complete] Unknown config type: {config_type}, skip");
+            vec![]
+        }
+    };
+    candidates.sort_by(|a, b| a.get_value().cmp(b.get_value()));
     debug!("[complete] Results: {candidates:?}");
     Ok(candidates)
 }
@@ -463,5 +524,43 @@ mod tests {
         ];
 
         run_cases("name", cases, complete_name);
+    }
+
+    #[test]
+    fn test_complete_config_name() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "git",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["remote"],
+                current: "",
+                expect: vec!["github", "gitlab", "test"],
+            },
+            CompleteCase {
+                args: vec!["remote"],
+                current: "git",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec!["hook"],
+                current: "",
+                expect: vec!["cargo-init", "gomod-init"],
+            },
+            CompleteCase {
+                args: vec!["hook"],
+                current: "go",
+                expect: vec!["gomod-init"],
+            },
+        ];
+
+        run_cases("config_name", cases, complete_config_name);
     }
 }

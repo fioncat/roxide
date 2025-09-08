@@ -47,10 +47,10 @@ impl TableArgs {
     {
         if self.json {
             let json = serde_json::to_string_pretty(items)?;
-            return Ok(json);
+            return Ok(format!("{json}\n"));
         }
         if items.is_empty() {
-            return Ok(String::from("<empty list>"));
+            return Ok(String::from("<empty list>\n"));
         }
 
         let mut table = Table::with_capacity(items.len(), self.headless);
