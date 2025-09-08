@@ -176,11 +176,10 @@ pub async fn run() -> CommandResult {
         console::set_colors_enabled(true);
     }
 
-    let result = async move || -> Result<()> {
-        let ctx = ConfigContext::setup()?;
-        app.run(ctx).await
-    }()
-    .await;
+    let result = match ConfigContext::setup() {
+        Ok(ctx) => app.run(ctx).await,
+        Err(e) => Err(e),
+    };
     let result = match result {
         Ok(()) => CommandResult::default(),
         Err(err) => match err.downcast::<SilentExit>() {

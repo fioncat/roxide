@@ -25,7 +25,7 @@ struct User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Project {
-    name: String,
+    path: String,
     default_branch: String,
     web_url: String,
 }
@@ -85,7 +85,7 @@ impl RemoteAPI for GitLab {
         let projects: Vec<Project> = api::paged(endpoint, Pagination::Limit(Self::DEFAULT_LIMIT))
             .query_async(&client)
             .await?;
-        let repos: Vec<_> = projects.into_iter().map(|p| p.name).collect();
+        let repos: Vec<_> = projects.into_iter().map(|p| p.path).collect();
         debug!("[gitlab] Results: {repos:?}");
         Ok(repos)
     }

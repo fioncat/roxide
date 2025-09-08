@@ -38,6 +38,7 @@ impl ConfigContext {
             output::set_debug(debug);
         }
         if env::var(Self::NO_CONFIRM_ENV).is_ok() {
+            debug!("[context] User set no confirm mode");
             confirm::set_no_confirm(true);
         }
 
@@ -46,13 +47,19 @@ impl ConfigContext {
 
         let current_dir = match env::var(Self::WORK_ENV) {
             Ok(dir) => {
+                let dir = dir.trim().trim_end_matches("/");
                 let path = PathBuf::from(dir);
                 if !path.exists() {
                     bail!("user set work dir {:?} does not exists", path.display());
                 }
+                debug!("[context] User set work dir to: {:?}", path.display());
                 path
             }
-            Err(_) => env::current_dir().context("failed to get current directory")?,
+            Err(_) => {
+                let dir = env::current_dir().context("failed to get current directory")?;
+                debug!("[context] Current work dir: {:?}", dir.display());
+                dir
+            }
         };
         Ok(Self {
             cfg,

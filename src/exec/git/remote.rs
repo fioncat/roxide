@@ -43,10 +43,7 @@ impl Remote {
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
         debug!("[remote] List remotes, cmd: {cmd:?}");
         let lines = cmd.lines(["remote"], "List remote")?;
-        let remotes = lines
-            .into_iter()
-            .map(|name| Remote(name))
-            .collect::<Vec<_>>();
+        let remotes = lines.into_iter().map(Remote).collect::<Vec<_>>();
         debug!("[remote] Remotes: {remotes:?}");
         Ok(remotes)
     }
