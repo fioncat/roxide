@@ -3,7 +3,7 @@ mod parse;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::ops::Add;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -163,7 +163,14 @@ where
 
     for line in reader.lines() {
         stats.total += 1;
-        let line = line?;
+        let line = match line {
+            Ok(line) => line,
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                // Skip those files that are not valid UTF-8
+                return Ok(CodeStatsItem::default());
+            }
+            Err(e) => return Err(e).context("failed to read file content"),
+        };
         let line = line.trim();
         if line.is_empty() {
             stats.blank += 1;
