@@ -1,42 +1,69 @@
 use std::collections::HashMap;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{Context, Result, bail};
 use semver::Version;
 
 use crate::api::{self, RemoteAPI};
-use crate::config::CmdConfig;
 use crate::db::Database;
 use crate::debug;
+use crate::exec::git::GitCmd;
 use crate::exec::{fzf, git};
 use crate::filelock::FileLock;
+use crate::term::{confirm, output};
 
 use super::Config;
 
 pub struct ConfigContext {
     pub cfg: Config,
-
     pub current_dir: PathBuf,
+    pub mute: bool,
 
-    work_dir: Mutex<Option<PathBuf>>,
     db: OnceLock<Result<Arc<Database>>>,
     apis: Mutex<HashMap<String, Arc<dyn RemoteAPI>>>,
     file_lock: OnceLock<Result<FileLock>>,
 }
 
 impl ConfigContext {
-    pub fn new(cfg: Config) -> Result<Self> {
+    const CONFIG_ENV: &'static str = "ROXIDE_CONFIG";
+    const DEBUG_ENV: &'static str = "ROXIDE_DEBUG";
+    const NO_CONFIRM_ENV: &'static str = "ROXIDE_NO_CONFIRM";
+
+    pub fn setup() -> Result<Self> {
+        if let Ok(debug) = env::var(Self::DEBUG_ENV) {
+            output::set_debug(debug);
+        }
+        if env::var(Self::CONFIG_ENV).is_ok() {
+            confirm::set_no_confirm(true);
+        }
+
+        let config_path = env::var(Self::CONFIG_ENV).ok();
+        let cfg = Config::read(config_path)?;
+
         let current_dir = env::current_dir().context("failed to get current directory")?;
         Ok(Self {
             cfg,
             current_dir,
-            work_dir: Mutex::new(None),
+            mute: false,
             db: OnceLock::new(),
             apis: Mutex::new(HashMap::new()),
             file_lock: OnceLock::new(),
         })
+    }
+
+    #[cfg(test)]
+    pub fn new_mock() -> Self {
+        let current_dir = env::current_dir().unwrap();
+        Self {
+            cfg: Config::default(),
+            current_dir,
+            mute: true,
+            db: OnceLock::new(),
+            apis: Mutex::new(HashMap::new()),
+            file_lock: OnceLock::new(),
+        }
     }
 
     #[cfg(test)]
@@ -47,21 +74,11 @@ impl ConfigContext {
         Self {
             cfg,
             current_dir,
-            work_dir: Mutex::new(None),
+            mute: true,
             db: OnceLock::new(),
             apis: Mutex::new(apis),
             file_lock: OnceLock::new(),
         }
-    }
-
-    pub fn set_work_dir(&self, dir: PathBuf) {
-        let mut work_dir = self.work_dir.lock().unwrap();
-        work_dir.replace(work_dir);
-    }
-
-    pub fn reset_work_dir(&self) {
-        let mut work_dir = self.work_dir.lock().unwrap();
-        *work_dir = None;
     }
 
     pub fn get_db(&self) -> Result<Arc<Database>> {
@@ -113,6 +130,16 @@ impl ConfigContext {
             bail!("failed to acquire global file lock: {e:#}");
         }
         Ok(())
+    }
+
+    #[inline]
+    pub fn git(&self) -> GitCmd {
+        GitCmd::new(&self.cfg.git, &self.current_dir, self.mute)
+    }
+
+    #[inline]
+    pub fn git_work_dir<'a>(&'a self, work_dir: &'a Path) -> GitCmd<'a> {
+        GitCmd::new(&self.cfg.git, work_dir, self.mute)
     }
 
     fn get_git_version() -> Result<Version> {

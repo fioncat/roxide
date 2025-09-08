@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::path::Path;
 use std::sync::OnceLock;
 
 use anyhow::{Result, bail};
@@ -8,6 +7,8 @@ use serde::Serialize;
 
 use crate::debug;
 use crate::term::list::{List, ListItem};
+
+use super::GitCmd;
 
 const HEAD_BRANCH_PREFIX: &str = "HEAD branch:";
 const BRANCH_REMOTE_PREFIX: &str = "remotes/";
@@ -52,12 +53,9 @@ fn get_branch_re() -> &'static Regex {
 }
 
 impl Branch {
-    pub fn list<P>(path: Option<P>, mute: bool) -> Result<Vec<Self>>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[branch] List branch for {path:?}");
-        let lines = super::new(["branch", "-vv"], path, "List git branch", mute).lines()?;
+    pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
+        debug!("[branch] List branch, cmd: {cmd:?}");
+        let lines = cmd.lines(["branch", "-vv"], "List git branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
             let branch = Self::parse(&line)?;
@@ -68,12 +66,9 @@ impl Branch {
         Ok(branches)
     }
 
-    pub fn list_remote<P>(path: Option<P>, mute: bool) -> Result<Vec<String>>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[branch] List remote branch for {path:?}");
-        let lines = super::new(["branch", "-al"], path, "List git remote branch", mute).lines()?;
+    pub fn list_remote(cmd: GitCmd) -> Result<Vec<String>> {
+        debug!("[branch] List remote branch, cmd: {cmd:?}");
+        let lines = cmd.lines(["branch", "-al"], "List git remote branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
             debug!("[branch] Remote branch line: {line:?}");
@@ -100,29 +95,21 @@ impl Branch {
         Ok(branches)
     }
 
-    pub fn default<P>(path: Option<P>, mute: bool) -> Result<String>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        Self::remote_default(path, mute, "origin")
+    pub fn default(cmd: GitCmd) -> Result<String> {
+        Self::remote_default(cmd, "origin")
     }
 
-    pub fn remote_default<P>(path: Option<P>, mute: bool, remote: &str) -> Result<String>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[branch] Get remote default branch for {path:?}, remote: {remote}");
+    pub fn remote_default(cmd: GitCmd, remote: &str) -> Result<String> {
+        debug!("[branch] Get remote default branch, cmd: {cmd:?}, remote: {remote}");
 
         let head_ref = format!("refs/remotes/{remote}/HEAD");
         let remote_ref = format!("refs/remotes/{remote}/");
 
-        let mut git = super::new(
+        let result = cmd.output(
             ["symbolic-ref", head_ref.as_str()],
-            path.as_ref(),
             "Get default branch by symbolic-ref",
-            mute,
         );
-        if let Ok(out) = git.output() {
+        if let Ok(out) = result {
             debug!("[branch] Use symbolic-ref to get default branch ok, output: {out:?}");
             let branch = out.trim_start_matches(remote_ref.as_str()).trim();
             if branch.is_empty() {
@@ -133,13 +120,10 @@ impl Branch {
             return Ok(branch.to_string());
         }
 
-        let lines = super::new(
+        let lines = cmd.lines(
             ["remote", "show", remote],
-            path,
             "Get default branch by remote show",
-            mute,
-        )
-        .lines()?;
+        )?;
 
         for line in lines {
             if !line.starts_with(HEAD_BRANCH_PREFIX) {
@@ -156,18 +140,9 @@ impl Branch {
         bail!("no default branch found by command `git remote show`");
     }
 
-    pub fn current<P>(path: Option<P>, mute: bool) -> Result<String>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[branch] Get current branch for {path:?}");
-        let branch = super::new(
-            ["branch", "--show-current"],
-            path,
-            "Get current branch",
-            mute,
-        )
-        .output()?;
+    pub fn current(cmd: GitCmd) -> Result<String> {
+        debug!("[branch] Get current branch, cmd: {cmd:?}");
+        let branch = cmd.output(["branch", "--show-current"], "Get current branch")?;
         if branch.is_empty() {
             bail!("current branch is empty");
         }

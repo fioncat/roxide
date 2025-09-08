@@ -1,26 +1,20 @@
-use std::path::Path;
-
 use anyhow::{Result, bail};
 
 use crate::debug;
 
-pub fn ensure_no_uncommitted_changes<P>(path: Option<P>, mute: bool) -> Result<()>
-where
-    P: AsRef<Path> + std::fmt::Debug,
-{
-    if count_uncommitted_changes(path, mute)? > 0 {
+use super::GitCmd;
+
+pub fn ensure_no_uncommitted_changes(cmd: GitCmd) -> Result<()> {
+    if count_uncommitted_changes(cmd)? > 0 {
         bail!("uncommitted changes found, please commit them first");
     }
     Ok(())
 }
 
-pub fn count_uncommitted_changes<P>(path: Option<P>, mute: bool) -> Result<usize>
-where
-    P: AsRef<Path> + std::fmt::Debug,
-{
-    debug!("[commit] Count uncommitted changes for {path:?}");
-    let count = super::new(["status", "-s"], path, "Count uncommitted changes", mute)
-        .lines()?
+pub fn count_uncommitted_changes(cmd: GitCmd) -> Result<usize> {
+    debug!("[commit] Count uncommitted changes, cmd: {cmd:?}");
+    let count = cmd
+        .lines(["status", "-s"], "Count uncommitted changes")?
         .len();
     debug!("[commit] Uncommitted changes count: {count}");
     Ok(count)

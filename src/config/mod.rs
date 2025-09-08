@@ -161,7 +161,6 @@ impl Config {
 }
 
 impl CmdConfig {
-    #[inline]
     pub fn new_cmd(&self) -> Cmd {
         Cmd::new(&self.name).args(&self.args)
     }

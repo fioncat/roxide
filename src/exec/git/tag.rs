@@ -1,15 +1,14 @@
 use std::borrow::Cow;
-use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use chrono::{Local, NaiveDate};
 use semver::{Prerelease, Version};
 use serde::Serialize;
 
-use crate::{
-    debug,
-    term::list::{List, ListItem},
-};
+use crate::debug;
+use crate::term::list::{List, ListItem};
+
+use super::GitCmd;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Tag {
@@ -24,23 +23,17 @@ pub struct TagList {
 }
 
 impl Tag {
-    pub fn list<P>(path: Option<P>, mute: bool) -> Result<Vec<Self>>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[tag] List tags for {path:?}");
-        let lines = super::new(
+    pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
+        debug!("[tag] List tags, cmd: {cmd:?}");
+        let lines = cmd.lines(
             [
                 "for-each-ref",
                 "--sort=-creatordate",
                 "refs/tags/",
                 "--format=%(refname:short) %(objectname:short) %(subject)",
             ],
-            path,
             "List tags",
-            mute,
-        )
-        .lines()?;
+        )?;
 
         let mut tags = Vec::with_capacity(lines.len());
         for line in lines {
@@ -59,12 +52,9 @@ impl Tag {
         Ok(tags)
     }
 
-    pub fn get<P>(path: Option<P>, mute: bool, name: &str) -> Result<Self>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[tag] Get tag {name} for {path:?}");
-        let tags = Self::list(path, mute)?;
+    pub fn get(cmd: GitCmd, name: &str) -> Result<Self> {
+        debug!("[tag] Get tag {name}, cmd: {cmd:?}");
+        let tags = Self::list(cmd)?;
         for tag in tags {
             if tag.name == name {
                 debug!("[tag] Found tag: {tag:?}");
@@ -74,22 +64,13 @@ impl Tag {
         bail!("tag {name:?} not found");
     }
 
-    pub fn get_latest<P>(path: Option<P>, mute: bool) -> Result<Self>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        debug!("[tag] Get latest tag for {path:?}");
-        let name = super::new(
-            ["describe", "--tags", "--abbrev=0"],
-            path.as_ref(),
-            "Get latest tag",
-            mute,
-        )
-        .output()?;
+    pub fn get_latest(cmd: GitCmd) -> Result<Self> {
+        debug!("[tag] Get latest tag, cmd: {cmd:?}");
+        let name = cmd.output(["describe", "--tags", "--abbrev=0"], "Get latest tag")?;
         if name.is_empty() {
             bail!("no latest tag");
         }
-        Self::get(path, mute, &name)
+        Self::get(cmd, &name)
     }
 }
 

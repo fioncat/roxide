@@ -17,7 +17,6 @@ mod switch;
 mod sync;
 
 use std::path::Path;
-use std::sync::Arc;
 use std::{env, io};
 
 use anyhow::Result;
@@ -26,10 +25,7 @@ use clap::Args;
 use clap::error::ErrorKind as ArgsErrorKind;
 use clap::{Parser, Subcommand};
 
-use crate::config::Config;
-use crate::config::context::ConfigContext;
-use crate::exec::{SilentExit, bash, fzf, git};
-use crate::term::{confirm, output};
+use crate::exec::SilentExit;
 use crate::{debug, warn};
 
 #[async_trait]
@@ -115,45 +111,6 @@ impl Command for App {
                 switch::SwitchCommand::complete_command(),
                 sync::SyncCommand::complete_command(),
             ])
-    }
-}
-
-#[derive(Debug, Args)]
-pub struct ConfigArgs {
-    /// The config path to use, default is `$HOME/.config/roxide`.
-    #[arg(long)]
-    pub config_path: Option<String>,
-
-    #[arg(long)]
-    pub debug: Option<String>,
-
-    #[arg(long, short)]
-    pub yes: bool,
-}
-
-impl ConfigArgs {
-    pub fn build_ctx(&self) -> Result<Arc<ConfigContext>> {
-        ConfigContext::new(self.build_config()?)
-    }
-
-    pub fn build_config(&self) -> Result<Config> {
-        if let Some(ref file) = self.debug {
-            output::set_debug(file.clone());
-        }
-        if self.yes {
-            confirm::set_no_confirm(true);
-        }
-        let cfg = Config::read(self.config_path.as_deref())?;
-        if let Some(ref fzf) = cfg.fzf {
-            fzf::set_cmd(fzf.clone());
-        }
-        if let Some(ref git) = cfg.git {
-            git::set_cmd(git.clone());
-        }
-        if let Some(ref bash) = cfg.bash {
-            bash::set_cmd(bash.clone());
-        }
-        Ok(cfg)
     }
 }
 

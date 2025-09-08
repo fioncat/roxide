@@ -1,104 +1,88 @@
 use std::borrow::Cow;
-use std::path::Path;
+use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, bail};
 
 use crate::debug;
 use crate::exec::git::branch::Branch;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Remote<'a> {
-    pub name: String,
-    pub path: Option<&'a Path>,
-    mute: bool,
+use super::GitCmd;
+
+#[derive(Debug, Clone)]
+pub struct Remote(String);
+
+impl Deref for Remote {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
-impl<'a> Remote<'a> {
-    pub fn new<P>(name: String, path: Option<&'a P>, mute: bool) -> Self
-    where
-        P: AsRef<Path>,
-    {
-        Self {
-            name,
-            path: path.map(|p| p.as_ref()),
-            mute,
-        }
+impl DerefMut for Remote {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
+}
 
-    pub fn origin<P>(path: Option<&'a P>, mute: bool) -> Result<Option<Self>>
-    where
-        P: AsRef<Path> + std::fmt::Debug + ?Sized,
-    {
-        let remotes = Self::list(path, mute)?;
+impl Remote {
+    pub fn origin(cmd: GitCmd) -> Result<Option<Self>> {
+        let remotes = Self::list(cmd)?;
         for remote in remotes {
-            if remote.name == "origin" {
+            if remote.as_str() == "origin" {
                 return Ok(Some(remote));
             }
         }
         Ok(None)
     }
 
-    pub fn list<P>(path: Option<&'a P>, mute: bool) -> Result<Vec<Self>>
-    where
-        P: AsRef<Path> + std::fmt::Debug + ?Sized,
-    {
-        debug!("[remote] List remotes for {path:?}");
-        let lines = super::new(["remote"], path.as_ref(), "List remote", mute).lines()?;
-        let mut remotes = Vec::with_capacity(lines.len());
-        debug!("[remote] Remotes: {lines:?}");
-        for line in lines {
-            remotes.push(Remote {
-                name: line,
-                path: path.map(|p| p.as_ref()),
-                mute,
-            })
-        }
-
+    pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
+        debug!("[remote] List remotes, cmd: {cmd:?}");
+        let lines = cmd.lines(["remote"], "List remote")?;
+        let remotes = lines
+            .into_iter()
+            .map(|name| Remote(name))
+            .collect::<Vec<_>>();
+        debug!("[remote] Remotes: {remotes:?}");
         Ok(remotes)
     }
 
-    pub fn get_url(&self) -> Result<String> {
-        debug!("[remote] Get url for remote {:?}", self.name);
-        let url = super::new(
-            ["remote", "get-url", &self.name],
-            self.path,
-            format!("Get url for remote {}", self.name),
-            self.mute,
-        )
-        .output()?;
+    pub fn get_url(&self, cmd: GitCmd) -> Result<String> {
+        debug!("[remote] Get url for remote {:?}", self.as_str());
+        let url = cmd.output(
+            ["remote", "get-url", self.as_str()],
+            format!("Get url for remote {}", self.as_str()),
+        )?;
         if url.is_empty() {
-            bail!("empty url for remote {:?}", self.name);
+            bail!("empty url for remote {:?}", self.as_str());
         }
         debug!("[remote] URL result: {url}");
         Ok(url)
     }
 
-    pub fn get_target(&self, branch: &str) -> Result<String> {
+    pub fn get_target(&self, cmd: GitCmd, branch: &str) -> Result<String> {
         debug!("[remote] Get target for {:?}, branch: {branch}", self);
         let branch = if branch.is_empty() {
-            let default_branch = Branch::remote_default(self.path, self.mute, &self.name)?;
+            let default_branch = Branch::remote_default(cmd, self.as_str())?;
             Cow::Owned(default_branch)
         } else {
             Cow::Borrowed(branch)
         };
 
-        let target = format!("{}/{branch}", self.name);
-        super::new(
-            ["fetch", &self.name, branch.as_ref()],
-            self.path,
+        let target = format!("{}/{branch}", self.as_str());
+        cmd.execute(
+            ["fetch", self.as_str(), branch.as_ref()],
             format!("Fetch target {target}"),
-            self.mute,
-        )
-        .execute()?;
+        )?;
         debug!("[remote] Target: {target}");
         Ok(target)
     }
 
-    pub fn commits_between(&self, branch: &str, with_id: bool) -> Result<Vec<String>> {
-        let target = self.get_target(branch)?;
+    pub fn commits_between(&self, cmd: GitCmd, branch: &str, with_id: bool) -> Result<Vec<String>> {
+        let target = self.get_target(cmd, branch)?;
 
         let compare = format!("HEAD...{target}");
-        let lines = super::new(
+        let lines = cmd.lines(
             [
                 "log",
                 "--left-right",
@@ -106,11 +90,8 @@ impl<'a> Remote<'a> {
                 "--oneline",
                 &compare,
             ],
-            self.path,
             format!("Get commits between {target}"),
-            self.mute,
-        )
-        .lines()?;
+        )?;
         let mut commits = Vec::with_capacity(lines.len());
         for line in lines {
             if !line.starts_with('<') {
