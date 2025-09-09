@@ -70,6 +70,7 @@ impl GitHub {
             head,
             title,
             web_url,
+            body: None,
         })
     }
 }
@@ -171,6 +172,32 @@ impl RemoteAPI for GitHub {
         };
         debug!("[github] Result: {remote_repo:?}");
         Ok(remote_repo)
+    }
+
+    async fn create_pull_request(
+        &self,
+        owner: &str,
+        name: &str,
+        pr: &PullRequest,
+    ) -> Result<String> {
+        debug!("[github] Create pull request: {owner}/{name}, pr: {pr:?}");
+
+        let pulls_handler = self.client.pulls(owner, name);
+        let head = match pr.head {
+            PullRequestHead::Branch(ref branch) => format!("{owner}:{branch}"),
+            PullRequestHead::Repository(ref repo) => format!("{}:{}", repo.owner, repo.branch),
+        };
+        let mut builder = pulls_handler.create(&pr.title, head, &pr.base);
+        if let Some(ref body) = pr.body {
+            builder = builder.body(body);
+        }
+
+        let pr = builder.send().await?;
+        let Some(web_url) = pr.html_url else {
+            bail!("github pull request html url is empty");
+        };
+        debug!("[github] Create pull request success, url: {web_url:?}");
+        Ok(web_url.to_string())
     }
 
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {

@@ -1,4 +1,5 @@
 mod branch;
+mod pull_request;
 mod tag;
 
 use anyhow::Result;
@@ -18,6 +19,8 @@ pub struct CreateCommand {
 #[derive(Subcommand)]
 pub enum CreateCommands {
     Branch(branch::CreateBranchCommand),
+    #[command(alias = "pr")]
+    PullRequest(pull_request::CreatePullRequestCommand),
     Tag(tag::CreateTagCommand),
 }
 
@@ -26,6 +29,7 @@ impl Command for CreateCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             CreateCommands::Branch(cmd) => cmd.run(ctx).await,
+            CreateCommands::PullRequest(cmd) => cmd.run(ctx).await,
             CreateCommands::Tag(cmd) => cmd.run(ctx).await,
         }
     }
@@ -36,6 +40,7 @@ impl Command for CreateCommand {
             .disable_version_flag(true)
             .subcommands([
                 branch::CreateBranchCommand::complete_command(),
+                pull_request::CreatePullRequestCommand::complete_command(),
                 tag::CreateTagCommand::complete_command(),
             ])
     }

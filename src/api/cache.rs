@@ -99,6 +99,15 @@ impl RemoteAPI for Cache {
         Ok(repo)
     }
 
+    async fn create_pull_request(
+        &self,
+        owner: &str,
+        name: &str,
+        pr: &PullRequest,
+    ) -> Result<String> {
+        self.upstream.create_pull_request(owner, name, pr).await
+    }
+
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
         self.upstream.list_pull_requests(opts).await
     }
@@ -184,6 +193,15 @@ mod tests {
                 .take()
                 .unwrap_or(self.update_repo.clone());
             Ok(repo)
+        }
+
+        async fn create_pull_request(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _pr: &PullRequest,
+        ) -> Result<String> {
+            Ok("https://example.com/pull/1".to_string())
         }
 
         async fn list_pull_requests(

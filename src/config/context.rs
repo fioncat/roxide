@@ -303,6 +303,15 @@ pub mod tests {
             Ok(repo)
         }
 
+        async fn create_pull_request(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _pr: &api::PullRequest,
+        ) -> Result<String> {
+            Ok("https://example.com/pull/1".to_string())
+        }
+
         async fn list_pull_requests(
             &self,
             _opts: ListPullRequestsOptions,

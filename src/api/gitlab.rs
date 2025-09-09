@@ -33,6 +33,11 @@ struct Project {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct CreateMergeRequestResponse {
+    web_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct MergeRequest {
     iid: u64,
     target_branch: String,
@@ -128,6 +133,41 @@ impl RemoteAPI for GitLab {
         Ok(remote_repo)
     }
 
+    async fn create_pull_request(
+        &self,
+        owner: &str,
+        name: &str,
+        pr: &PullRequest,
+    ) -> Result<String> {
+        debug!("[gitlab] Create pull request: {owner}/{name}, pr: {pr:?}");
+
+        let client = self.client_builder.build_async().await?;
+        let id = format!("{owner}/{name}");
+
+        let mut builder = merge_requests::CreateMergeRequest::builder();
+        builder.project(id).title(&pr.title).target_branch(&pr.base);
+        if let Some(ref body) = pr.body {
+            builder.description(body);
+        }
+        match pr.head {
+            PullRequestHead::Branch(ref branch) => {
+                builder.source_branch(branch);
+            }
+            PullRequestHead::Repository(_) => {
+                bail!("gitlab does not support cross-repo Merge requests yet");
+            }
+        }
+
+        // TODO: Allow user to set this
+        builder.squash(true);
+        builder.remove_source_branch(true);
+
+        let endpoint = builder.build()?;
+        let resp: CreateMergeRequestResponse = endpoint.query_async(&client).await?;
+        debug!("[gitlab] Response: {resp:?}");
+        Ok(resp.web_url)
+    }
+
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
         debug!("[gitlab] List pull requests: {opts:?}");
 
@@ -167,6 +207,7 @@ impl RemoteAPI for GitLab {
                 head: PullRequestHead::Branch(mr.source_branch),
                 title: mr.title,
                 web_url: mr.web_url,
+                body: None,
             });
         }
 

@@ -32,6 +32,12 @@ pub trait RemoteAPI: Send + Sync {
         name: &str,
     ) -> Result<RemoteRepository<'static>>;
 
+    async fn create_pull_request(
+        &self,
+        owner: &str,
+        name: &str,
+        pr: &PullRequest,
+    ) -> Result<String>;
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>>;
 }
 
@@ -64,6 +70,9 @@ pub struct PullRequest {
     pub title: String,
 
     pub web_url: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
 }
 
 impl PullRequest {

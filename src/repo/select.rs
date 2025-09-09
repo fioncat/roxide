@@ -5,7 +5,9 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 use reqwest::Url;
 
-use crate::api::{HeadRepository, ListPullRequestsOptions, PullRequest, PullRequestHead};
+use crate::api::{
+    HeadRepository, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
+};
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
@@ -793,20 +795,42 @@ impl SelectPullRequestsArgs {
         force_no_cache: bool,
     ) -> Result<Vec<PullRequest>> {
         debug!("[select] Select pull requests, args: {:?}", self);
-
         let repo = get_current_repo(ctx)?;
-        debug!("[select] Current repo: {repo:?}");
-
         let api = ctx.get_api(&repo.remote, force_no_cache)?;
+        let opts = self
+            .build_list_options(ctx, &repo, api.as_ref(), false)
+            .await?;
+        let prs = api.list_pull_requests(opts).await?;
+        debug!("[select] Pull requests: {prs:?}");
+        Ok(prs)
+    }
 
-        let (owner, name) = if self.upstream {
+    pub async fn build_list_options(
+        self,
+        ctx: &ConfigContext,
+        repo: &Repository,
+        api: &dyn RemoteAPI,
+        must_base: bool,
+    ) -> Result<ListPullRequestsOptions> {
+        let (owner, name, base) = if self.upstream {
             let api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
             let Some(upstream) = api_repo.upstream else {
                 bail!("repo has no upstream");
             };
-            (upstream.owner, upstream.name)
+            if must_base && self.base.is_none() {
+                (upstream.owner, upstream.name, Some(upstream.default_branch))
+            } else {
+                (upstream.owner, upstream.name, self.base)
+            }
         } else {
-            (repo.owner.clone(), repo.name.clone())
+            let owner = repo.owner.clone();
+            let name = repo.name.clone();
+            if must_base && self.base.is_none() {
+                let default_branch = Branch::default(ctx.git().mute())?;
+                (owner, name, Some(default_branch))
+            } else {
+                (owner, name, self.base)
+            }
         };
 
         let head = if self.all {
@@ -815,8 +839,8 @@ impl SelectPullRequestsArgs {
             let current_branch = Branch::current(ctx.git().mute())?;
             if self.upstream {
                 Some(PullRequestHead::Repository(HeadRepository {
-                    owner: repo.owner,
-                    name: repo.name,
+                    owner: repo.owner.clone(),
+                    name: repo.name.clone(),
                     branch: current_branch,
                 }))
             } else {
@@ -824,16 +848,13 @@ impl SelectPullRequestsArgs {
             }
         };
 
-        let opts = ListPullRequestsOptions {
+        Ok(ListPullRequestsOptions {
             owner,
             name,
             id: self.id,
             head,
-            base: self.base,
-        };
-        let prs = api.list_pull_requests(opts).await?;
-        debug!("[select] Pull requests: {prs:?}");
-        Ok(prs)
+            base,
+        })
     }
 }
 
