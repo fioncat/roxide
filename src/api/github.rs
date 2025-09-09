@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use octocrab::models::{pulls, workflows};
 use octocrab::params::State;
 use octocrab::{Octocrab, Page};
 use serde::Serialize;
+use tokio::sync::mpsc;
 
 use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
 use crate::{debug, warn};
@@ -257,93 +259,205 @@ impl RemoteAPI for GitHub {
         let path = format!("/repos/{owner}/{name}/actions/runs");
         let runs: Page<workflows::Run> = self.client.get(path, Some(&req)).await?;
 
-        let mut web_url = None;
-        let mut commit_id = None;
-        let mut commit_message = None;
-        let mut user = None;
-        let mut email = None;
-        let mut job_groups = vec![];
-        // TODO: Use multiple threads to speed up
-        for run in runs.items {
-            debug!(
-                "[github] List jobs for workflow run, id: {}, name: {}",
-                run.id, run.name
-            );
-
-            let run_jobs = self
-                .client
-                .workflows(owner, name)
-                .list_jobs(run.id)
-                .per_page(Self::LIST_LIMIT)
-                .send()
-                .await?;
-
-            if web_url.is_none() {
-                web_url = Some(run.html_url.to_string());
-                commit_id = Some(run.head_sha);
-                commit_message = Some(run.head_commit.message);
-                user = Some(run.head_commit.author.name);
-                email = Some(run.head_commit.author.email);
-            }
-
-            let mut job_group = JobGroup {
-                name: run.name,
-                web_url: run.html_url.to_string(),
-                jobs: vec![],
-            };
-            for run_job in run_jobs.items {
-                let status = match run_job.status {
-                    workflows::Status::Pending | workflows::Status::Queued => JobStatus::Pending,
-                    workflows::Status::InProgress => JobStatus::Running,
-                    workflows::Status::Completed => {
-                        let Some(conclusion) = run_job.conclusion else {
-                            bail!("when job status is completed, conclusion should not be none");
-                        };
-                        match conclusion {
-                            workflows::Conclusion::Success => JobStatus::Success,
-                            workflows::Conclusion::Failure
-                            | workflows::Conclusion::Cancelled
-                            | workflows::Conclusion::TimedOut
-                            | workflows::Conclusion::Neutral => JobStatus::Failed,
-                            workflows::Conclusion::Skipped => JobStatus::Skipped,
-                            workflows::Conclusion::ActionRequired => JobStatus::Manual,
-                            _ => JobStatus::Failed,
-                        }
-                    }
-                    workflows::Status::Failed => JobStatus::Failed,
-                    _ => JobStatus::Failed,
-                };
-                let job = Job {
-                    id: run_job.id.0,
-                    name: run_job.name,
-                    status,
-                    web_url: run_job.html_url.to_string(),
-                };
-                debug!("[github] Found job: {job:?}");
-                job_group.jobs.push(job);
-            }
-
-            if job_group.jobs.is_empty() {
-                continue;
-            }
-            job_groups.push(job_group);
-        }
-
-        if web_url.is_none() {
-            bail!("no action run found for commit: {commit:?}");
-        }
-
-        let action = Action {
-            web_url: web_url.unwrap(),
-            commit_id: commit_id.unwrap(),
-            commit_message: commit_message.unwrap(),
-            user: user.unwrap(),
-            email: email.unwrap(),
-            job_groups,
-        };
+        let action = fetch_jobs(
+            owner,
+            name,
+            self.client.clone(),
+            runs.items,
+            Self::LIST_LIMIT,
+        )
+        .await?;
         debug!("[github] Result: {action:?}");
         Ok(action)
     }
+}
+
+async fn fetch_jobs(
+    owner: &str,
+    name: &str,
+    client: Octocrab,
+    workflow_runs: Vec<workflows::Run>,
+    list_limit: u8,
+) -> Result<Action> {
+    let jobs_count = workflow_runs.len();
+    let (results_tx, mut results_rx) = mpsc::channel(jobs_count);
+
+    let tasks = workflow_runs.into_iter().enumerate().collect::<Vec<_>>();
+    let tasks = Arc::new(Mutex::new(tasks));
+    let action: Arc<Mutex<Option<Action>>> = Arc::new(Mutex::new(None));
+
+    let worker = num_cpus::get();
+
+    let owner = Arc::new(String::from(owner));
+    let name = Arc::new(String::from(name));
+
+    let mut handlers = vec![];
+    for idx in 0..worker {
+        let task = ConvertWorkflowTask {
+            idx,
+            results_tx: results_tx.clone(),
+            client: client.clone(),
+            owner: owner.clone(),
+            name: name.clone(),
+            action: action.clone(),
+            tasks: tasks.clone(),
+            list_limit,
+        };
+        let handler = tokio::spawn(async move {
+            task.run().await;
+        });
+        handlers.push(handler);
+    }
+
+    let mut job_groups = vec![];
+    loop {
+        let result = results_rx.recv().await.unwrap();
+        let (idx, job_group) = match result {
+            Ok((idx, job_group)) => (idx, job_group),
+            Err(e) => return Err(e),
+        };
+        job_groups.push((idx, job_group));
+        if job_groups.len() == jobs_count {
+            break;
+        }
+    }
+    for handler in handlers {
+        handler.await.unwrap();
+    }
+    debug!("[github] Fetch workflow jobs done, job groups: {job_groups:?}");
+    let action = Arc::try_unwrap(action).unwrap().into_inner().unwrap();
+    let Some(mut action) = action else {
+        bail!("no job found for this workflow");
+    };
+
+    job_groups.sort_unstable_by(|(idx0, _), (idx1, _)| idx0.cmp(idx1));
+    let job_groups = job_groups
+        .into_iter()
+        .map(|(_, job)| job)
+        .collect::<Vec<_>>();
+    action.job_groups = job_groups;
+    Ok(action)
+}
+
+struct ConvertWorkflowTask {
+    idx: usize,
+    client: Octocrab,
+    results_tx: mpsc::Sender<Result<(usize, JobGroup)>>,
+    owner: Arc<String>,
+    name: Arc<String>,
+    action: Arc<Mutex<Option<Action>>>,
+    tasks: Arc<Mutex<Vec<(usize, workflows::Run)>>>,
+    list_limit: u8,
+}
+
+impl ConvertWorkflowTask {
+    async fn run(&self) {
+        debug!("[github] Worker {} start to fetch workflow job", self.idx);
+        loop {
+            let (workflow_idx, workflow_run) = {
+                let mut tasks = self.tasks.lock().unwrap();
+                let task = tasks.pop();
+                match task {
+                    Some(task) => task,
+                    None => {
+                        debug!("[github] Worker {} stop", self.idx);
+                        return;
+                    }
+                }
+            };
+            debug!(
+                "[github] Worker {}: list jobs for workflow run, id: {}, name: {}",
+                self.idx, workflow_run.id, workflow_run.name
+            );
+
+            let result = self
+                .client
+                .workflows(self.owner.as_ref(), self.name.as_ref())
+                .list_jobs(workflow_run.id)
+                .per_page(self.list_limit)
+                .send()
+                .await;
+
+            let run_jobs = match result {
+                Ok(jobs) => jobs,
+                Err(e) => {
+                    self.results_tx
+                        .send(Err(e).context("failed to fetch workflow job"))
+                        .await
+                        .unwrap();
+                    continue;
+                }
+            };
+            let mut job_group = JobGroup {
+                name: workflow_run.name,
+                web_url: workflow_run.html_url.to_string(),
+                jobs: vec![],
+            };
+            for run_job in run_jobs.items {
+                let job = match convert_workflow_job(run_job) {
+                    Ok(job) => job,
+                    Err(e) => {
+                        self.results_tx
+                            .send(Err(e).context("failed to convert workflow job"))
+                            .await
+                            .unwrap();
+                        continue;
+                    }
+                };
+                job_group.jobs.push(job);
+            }
+            {
+                let mut action_share = self.action.lock().unwrap();
+                if action_share.is_none() {
+                    let action = Action {
+                        web_url: workflow_run.html_url.to_string(),
+                        commit_id: workflow_run.head_sha,
+                        commit_message: workflow_run.head_commit.message,
+                        user: workflow_run.head_commit.author.name,
+                        email: workflow_run.head_commit.author.email,
+                        job_groups: vec![],
+                    };
+                    action_share.replace(action);
+                }
+            }
+            self.results_tx
+                .send(Ok((workflow_idx, job_group)))
+                .await
+                .unwrap();
+        }
+    }
+}
+
+fn convert_workflow_job(workflow_job: workflows::Job) -> Result<Job> {
+    let status = match workflow_job.status {
+        workflows::Status::Pending | workflows::Status::Queued => JobStatus::Pending,
+        workflows::Status::InProgress => JobStatus::Running,
+        workflows::Status::Completed => {
+            let Some(conclusion) = workflow_job.conclusion else {
+                bail!("when job status is completed, conclusion should not be none");
+            };
+            match conclusion {
+                workflows::Conclusion::Success => JobStatus::Success,
+                workflows::Conclusion::Failure
+                | workflows::Conclusion::Cancelled
+                | workflows::Conclusion::TimedOut
+                | workflows::Conclusion::Neutral => JobStatus::Failed,
+                workflows::Conclusion::Skipped => JobStatus::Skipped,
+                workflows::Conclusion::ActionRequired => JobStatus::Manual,
+                _ => JobStatus::Failed,
+            }
+        }
+        workflows::Status::Failed => JobStatus::Failed,
+        _ => JobStatus::Failed,
+    };
+    let job = Job {
+        id: workflow_job.id.0,
+        name: workflow_job.name,
+        status,
+        web_url: workflow_job.html_url.to_string(),
+    };
+    debug!("[github] Convert workflow job done: {job:?}");
+    Ok(job)
 }
 
 #[cfg(test)]
