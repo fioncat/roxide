@@ -8,16 +8,14 @@ use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::outputln;
 use crate::repo::disk_usage::{RepoDiskUsageList, repo_disk_usage};
+use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::list::{ListArgs, pagination};
 
 #[derive(Debug, Args)]
 pub struct ListRepoCommand {
-    pub remote: Option<String>,
-
-    pub owner: Option<String>,
-
-    pub name: Option<String>,
+    #[clap(flatten)]
+    pub select_repo: SelectRepoArgs,
 
     #[arg(long)]
     pub sync: bool,
@@ -37,7 +35,7 @@ impl Command for ListRepoCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list repo command: {:?}", self);
 
-        let selector = RepoSelector::new(&ctx, &self.remote, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.select_repo);
         let limit = self.list.limit();
         let mut opts = SelectManyReposOptions::default();
         if self.sync {

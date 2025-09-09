@@ -43,6 +43,15 @@ pub fn repo_args() -> [Arg; 3] {
     [head_arg(), owner_arg(), name_arg()]
 }
 
+#[inline]
+pub fn list_pull_requests_args() -> [Arg; 3] {
+    [
+        branch_arg().short('b').long("base"),
+        Arg::new("all").short('a').long("all"),
+        Arg::new("upstream").short('u').long("upstream"),
+    ]
+}
+
 fn setup_complete() -> Result<(ConfigContext, Vec<String>)> {
     let ctx = ConfigContext::setup()?;
     let mut args = env::args().collect::<Vec<_>>();

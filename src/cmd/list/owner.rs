@@ -6,6 +6,7 @@ use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{OwnerDiskUsage, OwnerDiskUsageList, repo_disk_usage};
+use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_owners};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
@@ -28,13 +29,17 @@ impl Command for ListOwnerCommand {
 
         let limit = self.list.limit();
         let text = if self.disk_usage {
-            let selector = RepoSelector::new(&ctx, &self.remote, &None, &None);
+            let args = SelectRepoArgs {
+                head: self.remote,
+                ..Default::default()
+            };
+            let selector = RepoSelector::new(&ctx, &args);
             let repos = selector.select_many(SelectManyReposOptions::default())?;
             let usages = repo_disk_usage(&ctx, repos.items).await?;
             let usages = OwnerDiskUsage::group_by_repo_usages(usages);
             let (usages, total) = pagination(usages, limit);
             let list = OwnerDiskUsageList {
-                show_remote: self.remote.is_none(),
+                show_remote: args.head.is_none(),
                 usages,
                 total,
             };

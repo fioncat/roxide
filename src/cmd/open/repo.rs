@@ -6,9 +6,9 @@ use clap::Args;
 
 use crate::cmd::{Command, complete};
 use crate::config::context::ConfigContext;
+use crate::debug;
 use crate::exec::git::branch::Branch;
 use crate::repo::current::get_current_repo;
-use crate::{debug, info};
 
 #[derive(Debug, Args)]
 pub struct OpenRepoCommand {
@@ -52,7 +52,6 @@ impl Command for OpenRepoCommand {
             web_url = format!("{}", path.display());
         }
 
-        info!("Open: {web_url:?}");
         open::that(&web_url).with_context(|| format!("cannot open repo web url {web_url:?}"))?;
         Ok(())
     }

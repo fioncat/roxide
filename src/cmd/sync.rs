@@ -11,7 +11,7 @@ use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::{RepoOperator, SyncResult};
-use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 use crate::term::confirm::confirm_items;
 use crate::{debug, outputln};
 
@@ -19,11 +19,8 @@ use super::Command;
 
 #[derive(Debug, Args)]
 pub struct SyncCommand {
-    pub head: Option<String>,
-
-    pub owner: Option<String>,
-
-    pub name: Option<String>,
+    #[clap(flatten)]
+    pub select_repo: SelectRepoArgs,
 
     #[arg(long, short)]
     pub recursive: bool,
@@ -53,7 +50,7 @@ impl Command for SyncCommand {
 
 impl SyncCommand {
     async fn sync_many(self, mut ctx: ConfigContext) -> Result<()> {
-        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.select_repo);
         let mut opts = SelectManyReposOptions::default();
         if !self.force {
             opts.sync = Some(true);

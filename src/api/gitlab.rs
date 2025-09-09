@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use gitlab::GitlabBuilder;
+use gitlab::api::merge_requests::MergeRequestState;
+use gitlab::api::projects::merge_requests;
 use gitlab::api::{self, groups, projects, users};
 use gitlab::api::{AsyncQuery, Pagination};
 use serde::{Deserialize, Serialize};
@@ -10,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::remote_repo::RemoteRepository;
 use crate::debug;
 
-use super::{HeadRepository, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
+use super::{ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
 
 pub struct GitLab {
     host: String,
@@ -27,6 +29,15 @@ struct User {
 struct Project {
     path: String,
     default_branch: String,
+    web_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MergeRequest {
+    iid: u64,
+    target_branch: String,
+    source_branch: String,
+    title: String,
     web_url: String,
 }
 
@@ -117,13 +128,50 @@ impl RemoteAPI for GitLab {
         Ok(remote_repo)
     }
 
-    async fn list_pull_requests(
-        &self,
-        _owner: &str,
-        _name: &str,
-        _head: Option<PullRequestHead>,
-    ) -> Result<Vec<PullRequest>> {
-        todo!()
+    async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
+        debug!("[gitlab] List pull requests: {opts:?}");
+
+        let client = self.client_builder.build_async().await?;
+        let id = format!("{}/{}", opts.owner, opts.name);
+
+        let mut builder = merge_requests::MergeRequests::builder();
+        builder.state(MergeRequestState::Opened).project(id);
+        if let Some(id) = opts.id {
+            builder.iid(id);
+        } else {
+            if let Some(head) = opts.head {
+                match head {
+                    PullRequestHead::Branch(branch) => {
+                        builder.source_branch(branch);
+                    }
+                    PullRequestHead::Repository(_) => {
+                        bail!("gitlab does not support cross-repo Merge requests yet");
+                    }
+                }
+            }
+            if let Some(base) = opts.base {
+                builder.target_branch(base);
+            }
+        }
+
+        let endpoint = builder.build()?;
+
+        let mrs: Vec<MergeRequest> = endpoint.query_async(&client).await?;
+        debug!("[gitlab] MRs: {mrs:?}");
+
+        let mut results = Vec::with_capacity(mrs.len());
+        for mr in mrs {
+            results.push(PullRequest {
+                id: mr.iid,
+                base: mr.target_branch,
+                head: PullRequestHead::Branch(mr.source_branch),
+                title: mr.title,
+                web_url: mr.web_url,
+            });
+        }
+
+        debug!("[gitlab] Results: {results:?}");
+        Ok(results)
     }
 }
 

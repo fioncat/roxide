@@ -7,17 +7,15 @@ use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::ops::RepoOperator;
+use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::confirm::confirm_items;
 use crate::{confirm, debug, info};
 
 #[derive(Debug, Args)]
 pub struct RemoveRepoCommand {
-    pub head: Option<String>,
-
-    pub owner: Option<String>,
-
-    pub name: Option<String>,
+    #[clap(flatten)]
+    pub select_repo: SelectRepoArgs,
 
     #[arg(long, short)]
     pub recursive: bool,
@@ -31,7 +29,7 @@ impl Command for RemoveRepoCommand {
         debug!("[cmd] Run remove repo command: {:?}", self);
         ctx.lock()?;
 
-        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.select_repo);
         if !self.recursive {
             let repo = selector.select_one(false, true).await?;
             confirm!("Are you sure to remove repository {}", repo.full_name());

@@ -5,7 +5,7 @@ use clap::Args;
 use crate::cmd::Command;
 use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{RemoteDiskUsage, RemoteDiskUsageList, repo_disk_usage};
-use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_remotes};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs, select_remotes};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
 
@@ -25,7 +25,8 @@ impl Command for ListRemoteCommand {
 
         let limit = self.list.limit();
         let text = if self.disk_usage {
-            let selector = RepoSelector::new(&ctx, &None, &None, &None);
+            let args = SelectRepoArgs::default();
+            let selector = RepoSelector::new(&ctx, &args);
             let repos = selector.select_many(SelectManyReposOptions::default())?;
             let usages = repo_disk_usage(&ctx, repos.items).await?;
             let usages = RemoteDiskUsage::group_by_repo_usages(usages);

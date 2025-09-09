@@ -5,18 +5,15 @@ use clap::Args;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::repo::ops::RepoOperator;
-use crate::repo::select::RepoSelector;
+use crate::repo::select::{RepoSelector, SelectRepoArgs};
 use crate::{confirm, debug};
 
 use super::Command;
 
 #[derive(Debug, Args)]
 pub struct HomeCommand {
-    pub head: Option<String>,
-
-    pub owner: Option<String>,
-
-    pub name: Option<String>,
+    #[clap(flatten)]
+    pub select_repo: SelectRepoArgs,
 
     #[arg(long, short)]
     pub force_no_cache: bool,
@@ -34,7 +31,7 @@ impl Command for HomeCommand {
         debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
 
-        let selector = RepoSelector::new(&ctx, &self.head, &self.owner, &self.name);
+        let selector = RepoSelector::new(&ctx, &self.select_repo);
         let mut repo = selector.select_one(self.force_no_cache, self.local).await?;
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;

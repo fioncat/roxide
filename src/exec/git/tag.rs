@@ -76,11 +76,10 @@ impl Tag {
 
 impl ListItem for Tag {
     fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
-        let message = super::short_message(&self.commit_message);
         match title {
             "Name" => Cow::Borrowed(&self.name),
             "CommitID" => Cow::Borrowed(&self.commit_id),
-            "Message" => message,
+            "Message" => Cow::Borrowed(&self.commit_message),
             _ => Cow::Borrowed(""),
         }
     }

@@ -1,25 +1,18 @@
 use anyhow::Result;
-use anyhow::bail;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::api::HeadRepository;
-use crate::api::PullRequestHead;
 use crate::cmd::Command;
+use crate::cmd::complete;
 use crate::config::context::ConfigContext;
-use crate::debug;
-use crate::exec::git::branch::Branch;
-use crate::outputln;
-use crate::repo::current::get_current_repo;
+use crate::repo::select::SelectPullRequestsArgs;
 use crate::term::list::TableArgs;
+use crate::{debug, outputln};
 
 #[derive(Debug, Args)]
 pub struct ListPullRequestCommand {
-    #[arg(long, short)]
-    pub upstream: bool,
-
-    #[arg(long, short)]
-    pub all: bool,
+    #[clap(flatten)]
+    pub select_pull_requests: SelectPullRequestsArgs,
 
     #[arg(long, short)]
     pub force_no_cache: bool,
@@ -33,45 +26,33 @@ impl Command for ListPullRequestCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list pull request command: {:?}", self);
 
-        let repo = get_current_repo(&ctx)?;
-        let api = ctx.get_api(&repo.remote, false)?;
-
-        let (owner, name) = if self.upstream {
-            let api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
-            let Some(upstream) = api_repo.upstream else {
-                bail!("repo has no upstream");
-            };
-            (upstream.owner, upstream.name)
+        let mut titles = vec![];
+        if self.select_pull_requests.id.is_some() {
+            titles.push("Head");
+            titles.push("Base");
         } else {
-            (repo.owner.clone(), repo.name.clone())
-        };
-
-        let head = if self.all {
-            None
-        } else {
-            let current_branch = Branch::current(ctx.git())?;
-            if self.upstream {
-                Some(PullRequestHead::Repository(HeadRepository {
-                    owner: repo.owner,
-                    name: repo.name,
-                    branch: current_branch,
-                }))
-            } else {
-                Some(PullRequestHead::Branch(current_branch))
+            titles.push("ID");
+            if self.select_pull_requests.all {
+                titles.push("Head");
             }
-        };
+            if self.select_pull_requests.base.is_none() {
+                titles.push("Base");
+            }
+        }
+        titles.push("Title");
 
-        let prs = api.list_pull_requests(&owner, &name, head).await?;
+        let prs = self
+            .select_pull_requests
+            .select_many(&ctx, self.force_no_cache)
+            .await?;
         debug!("[cmd] Pull requests: {prs:?}");
 
-        let text = self
-            .table
-            .render(vec!["ID", "Base", "Head", "Title"], &prs)?;
+        let text = self.table.render(titles, &prs)?;
         outputln!("{text}");
         Ok(())
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("pull-request").alias("pr"))
+        clap::Command::new("pull-request").args(complete::list_pull_requests_args())
     }
 }

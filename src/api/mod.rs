@@ -3,11 +3,13 @@ mod github;
 mod gitlab;
 
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
+use pad::PadStr;
 use serde::Serialize;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -30,12 +32,7 @@ pub trait RemoteAPI: Send + Sync {
         name: &str,
     ) -> Result<RemoteRepository<'static>>;
 
-    async fn list_pull_requests(
-        &self,
-        owner: &str,
-        name: &str,
-        head: Option<PullRequestHead>,
-    ) -> Result<Vec<PullRequest>>;
+    async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +41,17 @@ pub struct RemoteInfo {
     pub auth_user: Option<String>,
     pub ping: bool,
     pub cache: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ListPullRequestsOptions {
+    pub owner: String,
+    pub name: String,
+
+    pub id: Option<u64>,
+
+    pub head: Option<PullRequestHead>,
+    pub base: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -58,12 +66,50 @@ pub struct PullRequest {
     pub web_url: String,
 }
 
+impl PullRequest {
+    pub fn search_items(prs: &[PullRequest]) -> Vec<String> {
+        let mut items = Vec::with_capacity(prs.len());
+        let mut id_len = 0;
+        let mut link_len = 0;
+        for pr in prs.iter() {
+            let id = pr.id.to_string();
+            if id.len() > id_len {
+                id_len = id.len();
+            }
+            let link = format!("{} -> {}", pr.head, pr.base);
+            if link.len() > link_len {
+                link_len = link.len();
+            }
+            items.push((id, link));
+        }
+
+        let mut search_items = Vec::with_capacity(prs.len());
+        for (idx, (id, link)) in items.into_iter().enumerate() {
+            let id = id.pad_to_width_with_alignment(id_len, pad::Alignment::Left);
+            let link = link.pad_to_width_with_alignment(link_len, pad::Alignment::Left);
+            search_items.push(format!("[{id}] {link}  {}", prs[idx].title));
+        }
+        search_items
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum PullRequestHead {
     #[serde(rename = "branch")]
     Branch(String),
     #[serde(rename = "repository")]
     Repository(HeadRepository),
+}
+
+impl Display for PullRequestHead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PullRequestHead::Branch(branch) => write!(f, "{branch}"),
+            PullRequestHead::Repository(repo) => {
+                write!(f, "{}/{}:{}", repo.owner, repo.name, repo.branch)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -73,26 +119,13 @@ pub struct HeadRepository {
     pub branch: String,
 }
 
-const PULL_TITLE_LIMIT: usize = 50;
-
 impl ListItem for PullRequest {
     fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
         match title {
             "ID" => self.id.to_string().into(),
-            "Title" => {
-                if self.title.len() > PULL_TITLE_LIMIT {
-                    format!("{}...", &self.title[..PULL_TITLE_LIMIT]).into()
-                } else {
-                    Cow::Borrowed(&self.title)
-                }
-            }
+            "Title" => Cow::Borrowed(&self.title),
             "Base" => Cow::Borrowed(&self.base),
-            "Head" => match &self.head {
-                PullRequestHead::Branch(branch) => Cow::Borrowed(branch),
-                PullRequestHead::Repository(repo) => {
-                    format!("{}/{}:{}", repo.owner, repo.name, repo.branch).into()
-                }
-            },
+            "Head" => format!("{}", self.head).into(),
             "Web URL" => Cow::Borrowed(&self.web_url),
             _ => Cow::Borrowed(""),
         }

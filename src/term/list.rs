@@ -5,6 +5,7 @@ use clap::Args;
 use serde::Serialize;
 
 use crate::db::repo::LimitOptions;
+use crate::term;
 use crate::term::table::Table;
 
 pub trait List<T: ListItem> {
@@ -54,6 +55,11 @@ impl TableArgs {
         }
 
         let mut table = Table::with_capacity(items.len(), self.headless);
+
+        if !cfg!(test) {
+            table.set_term_width(term::width());
+        }
+
         table.add_static(titles.clone());
 
         for item in items {

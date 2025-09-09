@@ -225,12 +225,11 @@ impl ListItem for Branch {
         } else {
             Cow::Borrowed(self.name.as_str())
         };
-        let message = super::short_message(&self.commit_message);
         match title {
             "Name" => name,
             "Status" => format!("{:?}", self.status).into(),
             "CommitID" => Cow::Borrowed(&self.commit_id),
-            "Message" => message,
+            "Message" => Cow::Borrowed(&self.commit_message),
             _ => Cow::Borrowed(""),
         }
     }

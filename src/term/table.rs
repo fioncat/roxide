@@ -2,6 +2,8 @@ use std::borrow::Cow;
 
 use pad::PadStr;
 
+use crate::term::truncate_by_width;
+
 /// A utility for rendering data in an ASCII table format.
 ///
 /// The table supports:
@@ -13,6 +15,7 @@ pub struct Table<'a> {
     ncol: usize,
     rows: Vec<Vec<Cow<'a, str>>>,
     headless: bool,
+    term_width: Option<usize>,
 }
 
 impl<'a> Table<'a> {
@@ -26,6 +29,7 @@ impl<'a> Table<'a> {
             ncol: 0,
             rows: Vec::with_capacity(size),
             headless,
+            term_width: None,
         }
     }
 
@@ -56,6 +60,10 @@ impl<'a> Table<'a> {
         self.add(cow_row);
     }
 
+    pub fn set_term_width(&mut self, width: usize) {
+        self.term_width = Some(width);
+    }
+
     /// Renders the table to a string.
     ///
     /// # Returns
@@ -81,6 +89,11 @@ impl<'a> Table<'a> {
             }
             split.push('+');
         }
+        if let Some(term_width) = self.term_width
+            && console::measure_text_width(&split) > term_width
+        {
+            split = truncate_by_width(&split, term_width);
+        }
 
         let mut result = String::new();
         for (rowi, row) in self.rows.into_iter().enumerate() {
@@ -88,15 +101,23 @@ impl<'a> Table<'a> {
                 result.push_str(&split);
                 result.push('\n');
             }
-            result.push('|');
+            let mut line = String::new();
+            line.push('|');
             for (coli, cell) in row.into_iter().enumerate() {
                 let pad = pads[coli];
                 let text = cell.pad_to_width_with_alignment(pad, pad::Alignment::Left);
 
-                result.push(' ');
-                result.push_str(&text);
-                result.push_str(" |");
+                line.push(' ');
+                line.push_str(&text);
+                line.push_str(" |");
             }
+            if let Some(term_width) = self.term_width
+                && console::measure_text_width(&line) > term_width
+            {
+                line = truncate_by_width(&line, term_width);
+            }
+
+            result.push_str(&line);
             result.push('\n');
 
             if !self.headless && rowi == 0 {

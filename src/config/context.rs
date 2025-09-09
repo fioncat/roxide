@@ -245,7 +245,7 @@ pub mod tests {
     use std::borrow::Cow;
     use std::fs;
 
-    use crate::api::RemoteInfo;
+    use crate::api::{ListPullRequestsOptions, RemoteInfo};
     use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
     use crate::db::repo::Repository;
     use crate::{config, db, repo};
@@ -305,9 +305,7 @@ pub mod tests {
 
         async fn list_pull_requests(
             &self,
-            _owner: &str,
-            _name: &str,
-            _head: Option<api::PullRequestHead>,
+            _opts: ListPullRequestsOptions,
         ) -> Result<Vec<api::PullRequest>> {
             Ok(vec![])
         }

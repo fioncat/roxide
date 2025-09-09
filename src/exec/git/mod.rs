@@ -3,7 +3,6 @@ pub mod commit;
 pub mod remote;
 pub mod tag;
 
-use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::Path;
 
@@ -72,16 +71,6 @@ impl<'a> GitCmd<'a> {
             return cmd.mute();
         }
         cmd
-    }
-}
-
-const MAX_COMMIT_MESSAGE_LEN: usize = 40;
-
-fn short_message<'a>(message: &'a str) -> Cow<'a, str> {
-    if message.len() > MAX_COMMIT_MESSAGE_LEN {
-        format!("{}...", &message[..MAX_COMMIT_MESSAGE_LEN]).into()
-    } else {
-        Cow::Borrowed(message)
     }
 }
 

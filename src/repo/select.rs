@@ -2,14 +2,27 @@ use std::collections::HashSet;
 use std::hash::Hash;
 
 use anyhow::{Context, Result, bail};
+use clap::Args;
 use reqwest::Url;
 
+use crate::api::{HeadRepository, ListPullRequestsOptions, PullRequest, PullRequestHead};
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
 };
 use crate::debug;
+use crate::exec::git::branch::Branch;
+use crate::repo::current::get_current_repo;
 use crate::term::list::List;
+
+#[derive(Debug, Args, Default)]
+pub struct SelectRepoArgs {
+    pub head: Option<String>,
+
+    pub owner: Option<String>,
+
+    pub name: Option<String>,
+}
 
 pub struct RepoSelector<'a, 'b> {
     ctx: &'a ConfigContext,
@@ -43,18 +56,13 @@ enum SelectOneType<'a> {
 }
 
 impl<'a, 'b> RepoSelector<'a, 'b> {
-    pub fn new(
-        ctx: &'a ConfigContext,
-        head: &'b Option<String>,
-        owner: &'b Option<String>,
-        name: &'b Option<String>,
-    ) -> Self {
-        debug!("[select] Create repo selector, head: {head:?}, owner: {owner:?}, name: {name:?}");
+    pub fn new(ctx: &'a ConfigContext, args: &'b SelectRepoArgs) -> Self {
+        debug!("[select] Create repo selector, args: {args:?}");
         Self {
             ctx,
-            head: head.as_deref().unwrap_or(""),
-            owner: owner.as_deref().unwrap_or(""),
-            name: name.as_deref().unwrap_or(""),
+            head: args.head.as_deref().unwrap_or(""),
+            owner: args.owner.as_deref().unwrap_or(""),
+            name: args.name.as_deref().unwrap_or(""),
             fzf_filter: None,
         }
     }
@@ -740,6 +748,93 @@ pub fn select_owners(
     };
     debug!("[select] Result: {list:?}");
     Ok(list)
+}
+
+#[derive(Debug, Args, Default)]
+pub struct SelectPullRequestsArgs {
+    pub id: Option<u64>,
+
+    #[arg(long, short)]
+    pub upstream: bool,
+
+    #[arg(long, short)]
+    pub all: bool,
+
+    #[arg(long, short)]
+    pub base: Option<String>,
+}
+
+impl SelectPullRequestsArgs {
+    pub async fn select_one(
+        self,
+        ctx: &ConfigContext,
+        force_no_cache: bool,
+        filter: Option<&str>,
+    ) -> Result<PullRequest> {
+        debug!("[select] Select one pull request, args: {:?}", self);
+        let mut prs = self.select_many(ctx, force_no_cache).await?;
+        if prs.is_empty() {
+            bail!("no pull request found");
+        }
+
+        if prs.len() == 1 {
+            return Ok(prs.remove(0));
+        }
+
+        let items = PullRequest::search_items(&prs);
+        debug!("[select] Multiple pull requests found, use fzf to select one");
+        let idx = ctx.fzf_search("Select one pull request", &items, filter)?;
+        Ok(prs.remove(idx))
+    }
+
+    pub async fn select_many(
+        self,
+        ctx: &ConfigContext,
+        force_no_cache: bool,
+    ) -> Result<Vec<PullRequest>> {
+        debug!("[select] Select pull requests, args: {:?}", self);
+
+        let repo = get_current_repo(ctx)?;
+        debug!("[select] Current repo: {repo:?}");
+
+        let api = ctx.get_api(&repo.remote, force_no_cache)?;
+
+        let (owner, name) = if self.upstream {
+            let api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
+            let Some(upstream) = api_repo.upstream else {
+                bail!("repo has no upstream");
+            };
+            (upstream.owner, upstream.name)
+        } else {
+            (repo.owner.clone(), repo.name.clone())
+        };
+
+        let head = if self.all {
+            None
+        } else {
+            let current_branch = Branch::current(ctx.git().mute())?;
+            if self.upstream {
+                Some(PullRequestHead::Repository(HeadRepository {
+                    owner: repo.owner,
+                    name: repo.name,
+                    branch: current_branch,
+                }))
+            } else {
+                Some(PullRequestHead::Branch(current_branch))
+            }
+        };
+
+        let opts = ListPullRequestsOptions {
+            owner,
+            name,
+            id: self.id,
+            head,
+            base: self.base,
+        };
+        let prs = api.list_pull_requests(opts).await?;
+        debug!("[select] Pull requests: {prs:?}");
+        Ok(prs)
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+mod pull_request;
 mod repo;
 
 use anyhow::Result;
@@ -11,11 +12,13 @@ use super::Command;
 #[derive(Args)]
 pub struct OpenCommand {
     #[command(subcommand)]
-    pub command: CreateCommands,
+    pub command: OpenCommands,
 }
 
 #[derive(Subcommand)]
-pub enum CreateCommands {
+pub enum OpenCommands {
+    #[command(alias = "pr")]
+    PullRequest(pull_request::OpenPullRequestCommand),
     Repo(repo::OpenRepoCommand),
 }
 
@@ -23,7 +26,8 @@ pub enum CreateCommands {
 impl Command for OpenCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
-            CreateCommands::Repo(cmd) => cmd.run(ctx).await,
+            OpenCommands::PullRequest(cmd) => cmd.run(ctx).await,
+            OpenCommands::Repo(cmd) => cmd.run(ctx).await,
         }
     }
 
@@ -31,6 +35,9 @@ impl Command for OpenCommand {
         clap::Command::new("open")
             .disable_help_flag(true)
             .disable_version_flag(true)
-            .subcommands([repo::OpenRepoCommand::complete_command()])
+            .subcommands([
+                pull_request::OpenPullRequestCommand::complete_command(),
+                repo::OpenRepoCommand::complete_command(),
+            ])
     }
 }
