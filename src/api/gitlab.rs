@@ -339,7 +339,13 @@ impl RemoteAPI for GitLab {
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
-        todo!()
+        debug!("[gitlab] Get job log: {owner}/{name}, job id: {id}");
+        let project = format!("{owner}/{name}");
+        let client = self.client_builder.build_async().await?;
+        let endpoint = jobs::JobTrace::builder().project(project).job(id).build()?;
+        let logs: String = endpoint.query_async(&client).await?;
+        debug!("[gitlab] Get job logs done, size: {}", logs.len());
+        Ok(logs)
     }
 }
 

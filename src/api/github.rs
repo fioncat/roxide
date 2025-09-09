@@ -273,9 +273,11 @@ impl RemoteAPI for GitHub {
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
+        debug!("[github] Get job log: {owner}/{name}, job id: {id}");
         let path = format!("/repos/{owner}/{name}/actions/jobs/{id}/logs");
         let data = self.client.download(&path, "").await?;
         let logs = String::from_utf8(data).context("parse job log to string")?;
+        debug!("[github] Get job log done, size: {}", logs.len());
         Ok(logs)
     }
 }
