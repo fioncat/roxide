@@ -53,6 +53,8 @@ impl Command for ListPullRequestCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("pull-request").args(complete::list_pull_requests_args())
+        clap::Command::new("pull-request")
+            .alias("pr")
+            .args(complete::list_pull_requests_args())
     }
 }

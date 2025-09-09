@@ -57,7 +57,7 @@ impl Command for RemoveBranchCommand {
         {
             ctx.git().execute(
                 ["push", "origin", "--delete", &branch.name],
-                format!("Remove remote branch {branch:?}"),
+                format!("Remove remote branch {:?}", branch.name),
             )?;
         }
 

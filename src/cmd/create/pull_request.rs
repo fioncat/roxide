@@ -153,6 +153,8 @@ impl Command for CreatePullRequestCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("pull-request").args([complete::branch_arg().short('b').long("base")])
+        clap::Command::new("pull-request")
+            .alias("pr")
+            .args([complete::branch_arg().short('b').long("base")])
     }
 }
