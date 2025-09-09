@@ -6,7 +6,7 @@ use clap::Args;
 use reqwest::Url;
 
 use crate::api::{
-    HeadRepository, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
+    Action, HeadRepository, Job, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
 };
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
@@ -856,6 +856,41 @@ impl SelectPullRequestsArgs {
             base,
         })
     }
+}
+
+pub fn select_job_from_action(
+    ctx: &ConfigContext,
+    action: Action,
+    id: Option<u64>,
+    filter: Option<&str>,
+) -> Result<Job> {
+    if let Some(id) = id {
+        for group in action.job_groups {
+            for job in group.jobs {
+                if job.id == id {
+                    return Ok(job);
+                }
+            }
+        }
+        bail!("no job found with id {id}");
+    }
+
+    let mut items = vec![];
+    let mut jobs = vec![];
+    for group in action.job_groups {
+        for job in group.jobs {
+            let item = format!("{}/{}", group.name, job.name);
+            items.push(item);
+            jobs.push(job);
+        }
+    }
+
+    if items.is_empty() {
+        bail!("no job found in action");
+    }
+
+    let idx = ctx.fzf_search("Select one job", &items, filter)?;
+    Ok(jobs.remove(idx))
 }
 
 #[cfg(test)]

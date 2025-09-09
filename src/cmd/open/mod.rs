@@ -1,4 +1,5 @@
 mod action;
+mod job;
 mod pull_request;
 mod repo;
 
@@ -19,6 +20,7 @@ pub struct OpenCommand {
 #[derive(Subcommand)]
 pub enum OpenCommands {
     Action(action::OpenActionCommand),
+    Job(job::OpenJobCommand),
     #[command(alias = "pr")]
     PullRequest(pull_request::OpenPullRequestCommand),
     Repo(repo::OpenRepoCommand),
@@ -29,6 +31,7 @@ impl Command for OpenCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             OpenCommands::Action(cmd) => cmd.run(ctx).await,
+            OpenCommands::Job(cmd) => cmd.run(ctx).await,
             OpenCommands::PullRequest(cmd) => cmd.run(ctx).await,
             OpenCommands::Repo(cmd) => cmd.run(ctx).await,
         }
@@ -40,6 +43,7 @@ impl Command for OpenCommand {
             .disable_version_flag(true)
             .subcommands([
                 action::OpenActionCommand::complete_command(),
+                job::OpenJobCommand::complete_command(),
                 pull_request::OpenPullRequestCommand::complete_command(),
                 repo::OpenRepoCommand::complete_command(),
             ])

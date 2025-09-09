@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use gitlab::GitlabBuilder;
 use gitlab::api::merge_requests::MergeRequestState;
-use gitlab::api::projects::{merge_requests, pipelines};
+use gitlab::api::projects::{jobs, merge_requests, pipelines};
 use gitlab::api::{self, groups, projects, users};
 use gitlab::api::{AsyncQuery, Pagination};
 use serde::{Deserialize, Serialize};
@@ -336,6 +336,10 @@ impl RemoteAPI for GitLab {
         };
         debug!("[gitlab] Result: {action:?}");
         Ok(action)
+    }
+
+    async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
+        todo!()
     }
 }
 

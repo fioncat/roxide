@@ -1,5 +1,6 @@
 mod action;
 mod branch;
+mod job;
 mod owner;
 mod pull_request;
 mod remote;
@@ -24,6 +25,7 @@ pub struct ListCommand {
 pub enum ListCommands {
     Action(action::ListActionCommand),
     Branch(branch::ListBranchCommand),
+    Job(job::ListJobCommand),
     Owner(owner::ListOwnerCommand),
     #[command(alias = "pr")]
     PullRequest(pull_request::ListPullRequestCommand),
@@ -38,6 +40,7 @@ impl Command for ListCommand {
         match self.command {
             ListCommands::Action(cmd) => cmd.run(ctx).await,
             ListCommands::Branch(cmd) => cmd.run(ctx).await,
+            ListCommands::Job(cmd) => cmd.run(ctx).await,
             ListCommands::Owner(cmd) => cmd.run(ctx).await,
             ListCommands::PullRequest(cmd) => cmd.run(ctx).await,
             ListCommands::Remote(cmd) => cmd.run(ctx).await,
@@ -54,6 +57,7 @@ impl Command for ListCommand {
             .subcommands([
                 action::ListActionCommand::complete_command(),
                 branch::ListBranchCommand::complete_command(),
+                job::ListJobCommand::complete_command(),
                 owner::ListOwnerCommand::complete_command(),
                 pull_request::ListPullRequestCommand::complete_command(),
                 remote::ListRemoteCommand::complete_command(),

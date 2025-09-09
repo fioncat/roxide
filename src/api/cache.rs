@@ -115,6 +115,10 @@ impl RemoteAPI for Cache {
     async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
         self.upstream.get_action(owner, name, commit).await
     }
+
+    async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
+        self.upstream.get_job_log(owner, name, id).await
+    }
 }
 
 #[cfg(test)]
@@ -216,6 +220,10 @@ mod tests {
         }
 
         async fn get_action(&self, _owner: &str, _name: &str, _commit: &str) -> Result<Action> {
+            unimplemented!()
+        }
+
+        async fn get_job_log(&self, _owner: &str, _name: &str, _id: u64) -> Result<String> {
             unimplemented!()
         }
     }

@@ -327,6 +327,10 @@ pub mod tests {
         ) -> Result<api::Action> {
             todo!()
         }
+
+        async fn get_job_log(&self, _owner: &str, _name: &str, _id: u64) -> Result<String> {
+            todo!()
+        }
     }
 
     pub fn build_test_context(name: &str) -> ConfigContext {
