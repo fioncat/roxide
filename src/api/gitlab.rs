@@ -1,10 +1,11 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use gitlab::GitlabBuilder;
 use gitlab::api::merge_requests::MergeRequestState;
-use gitlab::api::projects::merge_requests;
+use gitlab::api::projects::{merge_requests, pipelines};
 use gitlab::api::{self, groups, projects, users};
 use gitlab::api::{AsyncQuery, Pagination};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use crate::db::remote_repo::RemoteRepository;
 use crate::debug;
 
-use super::{ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo};
+use super::{
+    Action, Job, JobGroup, JobStatus, ListPullRequestsOptions, PullRequest, PullRequestHead,
+    RemoteAPI, RemoteInfo,
+};
 
 pub struct GitLab {
     host: String,
@@ -44,6 +48,30 @@ struct MergeRequest {
     source_branch: String,
     title: String,
     web_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Pipeline {
+    id: u64,
+    web_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PipelineJob {
+    id: u64,
+    name: String,
+    stage: String,
+    status: String,
+    web_url: String,
+    commit: PipelineJobCommit,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PipelineJobCommit {
+    id: String,
+    title: String,
+    author_name: String,
+    author_email: String,
 }
 
 impl GitLab {
@@ -196,7 +224,9 @@ impl RemoteAPI for GitLab {
 
         let endpoint = builder.build()?;
 
-        let mrs: Vec<MergeRequest> = endpoint.query_async(&client).await?;
+        let mrs: Vec<MergeRequest> = api::paged(endpoint, Pagination::Limit(Self::DEFAULT_LIMIT))
+            .query_async(&client)
+            .await?;
         debug!("[gitlab] MRs: {mrs:?}");
 
         let mut results = Vec::with_capacity(mrs.len());
@@ -213,6 +243,99 @@ impl RemoteAPI for GitLab {
 
         debug!("[gitlab] Results: {results:?}");
         Ok(results)
+    }
+
+    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
+        debug!("[gitlab] Get action: {owner}/{name}, commit: {commit}");
+
+        let client = self.client_builder.build_async().await?;
+        let id = format!("{owner}/{name}");
+
+        let endpoint = pipelines::Pipelines::builder()
+            .project(&id)
+            .sha(commit)
+            .build()?;
+        let mut pipline: Vec<Pipeline> = endpoint.query_async(&client).await?;
+        if pipline.is_empty() {
+            bail!("no pipeline found for commit {commit:?}");
+        }
+        let pipline = pipline.remove(0);
+        debug!("[gitlab] Pipeline: {pipline:?}");
+
+        let endpoint = pipelines::PipelineJobs::builder()
+            .project(id)
+            .pipeline(pipline.id)
+            .build()?;
+
+        let mut pipeline_jobs: Vec<PipelineJob> =
+            api::paged(endpoint, Pagination::Limit(Self::DEFAULT_LIMIT))
+                .query_async(&client)
+                .await?;
+        pipeline_jobs.reverse();
+        debug!("[gitlab] Pipeline jobs: {pipeline_jobs:?}");
+
+        let mut commit = None;
+        let mut message = None;
+        let mut user = None;
+        let mut email = None;
+        let mut stage_indexes: HashMap<String, usize> = HashMap::new();
+        let mut job_groups: Vec<JobGroup> = Vec::new();
+        for pipeline_job in pipeline_jobs {
+            if commit.is_none() {
+                commit = Some(pipeline_job.commit.id);
+                message = Some(pipeline_job.commit.title);
+                user = Some(pipeline_job.commit.author_name);
+                email = Some(pipeline_job.commit.author_email);
+            }
+
+            let status = match pipeline_job.status.as_str() {
+                "created" | "pending" | "waiting_for_resource" => JobStatus::Pending,
+                "running" => JobStatus::Running,
+                "failed" => JobStatus::Failed,
+                "success" => JobStatus::Success,
+                "canceled" => JobStatus::Canceled,
+                "skipped" => JobStatus::Skipped,
+                "manual" => JobStatus::Manual,
+                _ => JobStatus::Failed,
+            };
+
+            let job = Job {
+                id: pipeline_job.id,
+                name: pipeline_job.name,
+                status,
+                web_url: pipeline_job.web_url,
+            };
+            debug!("[gitlab] Convert job: {job:?}");
+            match stage_indexes.get(&pipeline_job.stage) {
+                Some(idx) => {
+                    job_groups.get_mut(*idx).unwrap().jobs.push(job);
+                }
+                None => {
+                    let group = JobGroup {
+                        name: pipeline_job.stage.clone(),
+                        web_url: pipline.web_url.clone(),
+                        jobs: vec![job],
+                    };
+                    let idx = job_groups.len();
+                    job_groups.push(group);
+                    stage_indexes.insert(pipeline_job.stage, idx);
+                }
+            }
+        }
+        if commit.is_none() {
+            bail!("no commit info found for action");
+        }
+
+        let action = Action {
+            web_url: pipline.web_url,
+            commit_id: commit.unwrap(),
+            commit_message: message.unwrap(),
+            user: user.unwrap(),
+            email: email.unwrap(),
+            job_groups,
+        };
+        debug!("[gitlab] Result: {action:?}");
+        Ok(action)
     }
 }
 

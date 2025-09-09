@@ -9,7 +9,7 @@ use crate::db::remote_owner::RemoteOwner;
 use crate::db::remote_repo::RemoteRepository;
 use crate::debug;
 
-use super::{ListPullRequestsOptions, PullRequest, RemoteAPI, RemoteInfo};
+use super::{Action, ListPullRequestsOptions, PullRequest, RemoteAPI, RemoteInfo};
 
 pub struct Cache {
     pub upstream: Arc<dyn RemoteAPI>,
@@ -111,6 +111,10 @@ impl RemoteAPI for Cache {
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
         self.upstream.list_pull_requests(opts).await
     }
+
+    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
+        self.upstream.get_action(owner, name, commit).await
+    }
 }
 
 #[cfg(test)]
@@ -209,6 +213,10 @@ mod tests {
             _opts: ListPullRequestsOptions,
         ) -> Result<Vec<PullRequest>> {
             Ok(vec![])
+        }
+
+        async fn get_action(&self, _owner: &str, _name: &str, _commit: &str) -> Result<Action> {
+            unimplemented!()
         }
     }
 

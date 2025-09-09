@@ -1,3 +1,4 @@
+mod action;
 mod pull_request;
 mod repo;
 
@@ -17,6 +18,7 @@ pub struct OpenCommand {
 
 #[derive(Subcommand)]
 pub enum OpenCommands {
+    Action(action::OpenActionCommand),
     #[command(alias = "pr")]
     PullRequest(pull_request::OpenPullRequestCommand),
     Repo(repo::OpenRepoCommand),
@@ -26,6 +28,7 @@ pub enum OpenCommands {
 impl Command for OpenCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
+            OpenCommands::Action(cmd) => cmd.run(ctx).await,
             OpenCommands::PullRequest(cmd) => cmd.run(ctx).await,
             OpenCommands::Repo(cmd) => cmd.run(ctx).await,
         }
@@ -36,6 +39,7 @@ impl Command for OpenCommand {
             .disable_help_flag(true)
             .disable_version_flag(true)
             .subcommands([
+                action::OpenActionCommand::complete_command(),
                 pull_request::OpenPullRequestCommand::complete_command(),
                 repo::OpenRepoCommand::complete_command(),
             ])

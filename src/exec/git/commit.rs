@@ -20,6 +20,13 @@ pub fn count_uncommitted_changes(cmd: GitCmd) -> Result<usize> {
     Ok(count)
 }
 
+pub fn get_current_commit(cmd: GitCmd) -> Result<String> {
+    debug!("[commit] Get current commit, cmd: {cmd:?}");
+    let commit = cmd.output(["rev-parse", "HEAD"], "Get current commit")?;
+    debug!("[commit] Current commit: {commit}");
+    Ok(commit)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

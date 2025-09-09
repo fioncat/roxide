@@ -2,6 +2,7 @@ pub mod current;
 pub mod disk_usage;
 pub mod ops;
 pub mod select;
+pub mod wait_action;
 
 use std::fs;
 use std::path::Path;

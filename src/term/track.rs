@@ -6,7 +6,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio::time::Instant;
 
 use crate::format::format_elapsed;
-use crate::{cursor_up, debug, outputln};
+use crate::{cursor_up, debug, outputln, term};
 
 /// Used by [`Tracker`] for reporting the execution results of tasks from worker
 /// threads to the main thread.
@@ -50,12 +50,7 @@ pub struct Tracker<R> {
 
 impl<R> Tracker<R> {
     const SPACE: &'static str = " ";
-    const SEP: &'static str = ", ";
-    const OMIT: &'static str = ", ...";
-
     const SPACE_SIZE: usize = Self::SPACE.len();
-    const SEP_SIZE: usize = Self::SEP.len();
-    const OMIT_SIZE: usize = Self::OMIT.len();
 
     /// Create a Tracker, call [`Tracker::wait`] later to start tracking.
     ///
@@ -260,34 +255,13 @@ impl<R> Tracker<R> {
 
     /// The running items, `item0, item1, ...`.
     fn render_list(&self, size: usize) -> String {
-        let mut list = String::with_capacity(size);
-        for (idx, (_, name)) in self.running.iter().enumerate() {
-            let add_size = if idx == 0 {
-                console::measure_text_width(name)
-            } else {
-                console::measure_text_width(name) + Self::SEP_SIZE
-            };
-            let is_last = idx == self.running.len() - 1;
-            let list_size = console::measure_text_width(&list);
-            let new_size = list_size + add_size;
-            if new_size > size || (!is_last && new_size == size) {
-                let delta = size - list_size;
-                if delta == 0 {
-                    break;
-                }
-                if delta < Self::OMIT_SIZE {
-                    list.push_str(&".".repeat(delta));
-                } else {
-                    list.push_str(Self::OMIT);
-                }
-                break;
-            }
-            if idx != 0 {
-                list.push_str(Self::SEP);
-            }
-            list.push_str(name);
-        }
-        list
+        let list = self
+            .running
+            .iter()
+            .map(|(_, name)| name.as_str())
+            .collect::<Vec<_>>();
+        let count = list.len();
+        term::render_list(list, count, size)
     }
 
     /// Return the progress bar size for current terminal.

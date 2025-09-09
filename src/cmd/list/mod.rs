@@ -1,3 +1,4 @@
+mod action;
 mod branch;
 mod owner;
 mod pull_request;
@@ -21,6 +22,7 @@ pub struct ListCommand {
 
 #[derive(Subcommand)]
 pub enum ListCommands {
+    Action(action::ListActionCommand),
     Branch(branch::ListBranchCommand),
     Owner(owner::ListOwnerCommand),
     #[command(alias = "pr")]
@@ -34,6 +36,7 @@ pub enum ListCommands {
 impl Command for ListCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
+            ListCommands::Action(cmd) => cmd.run(ctx).await,
             ListCommands::Branch(cmd) => cmd.run(ctx).await,
             ListCommands::Owner(cmd) => cmd.run(ctx).await,
             ListCommands::PullRequest(cmd) => cmd.run(ctx).await,
@@ -49,6 +52,7 @@ impl Command for ListCommand {
             .disable_help_flag(true)
             .disable_version_flag(true)
             .subcommands([
+                action::ListActionCommand::complete_command(),
                 branch::ListBranchCommand::complete_command(),
                 owner::ListOwnerCommand::complete_command(),
                 pull_request::ListPullRequestCommand::complete_command(),

@@ -2,20 +2,28 @@ use std::borrow::Cow;
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use octocrab::Octocrab;
-use octocrab::models::pulls;
+use octocrab::models::{pulls, workflows};
 use octocrab::params::State;
+use octocrab::{Octocrab, Page};
+use serde::Serialize;
 
 use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
 use crate::{debug, warn};
 
 use super::{
-    HeadRepository, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI, RemoteInfo,
+    Action, HeadRepository, Job, JobGroup, JobStatus, ListPullRequestsOptions, PullRequest,
+    PullRequestHead, RemoteAPI, RemoteInfo,
 };
 
 pub struct GitHub {
     client: Octocrab,
     has_token: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct GetActionRunRequest<'a> {
+    head_sha: &'a str,
+    per_page: u8,
 }
 
 impl GitHub {
@@ -237,6 +245,104 @@ impl RemoteAPI for GitHub {
 
         debug!("[github] Results: {results:?}");
         Ok(results)
+    }
+
+    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
+        debug!("[github] Get action for {owner}/{name}, commit: {commit}");
+
+        let req = GetActionRunRequest {
+            head_sha: commit,
+            per_page: Self::LIST_LIMIT,
+        };
+        let path = format!("/repos/{owner}/{name}/actions/runs");
+        let runs: Page<workflows::Run> = self.client.get(path, Some(&req)).await?;
+
+        let mut web_url = None;
+        let mut commit_id = None;
+        let mut commit_message = None;
+        let mut user = None;
+        let mut email = None;
+        let mut job_groups = vec![];
+        // TODO: Use multiple threads to speed up
+        for run in runs.items {
+            debug!(
+                "[github] List jobs for workflow run, id: {}, name: {}",
+                run.id, run.name
+            );
+
+            let run_jobs = self
+                .client
+                .workflows(owner, name)
+                .list_jobs(run.id)
+                .per_page(Self::LIST_LIMIT)
+                .send()
+                .await?;
+
+            if web_url.is_none() {
+                web_url = Some(run.html_url.to_string());
+                commit_id = Some(run.head_sha);
+                commit_message = Some(run.head_commit.message);
+                user = Some(run.head_commit.author.name);
+                email = Some(run.head_commit.author.email);
+            }
+
+            let mut job_group = JobGroup {
+                name: run.name,
+                web_url: run.html_url.to_string(),
+                jobs: vec![],
+            };
+            for run_job in run_jobs.items {
+                let status = match run_job.status {
+                    workflows::Status::Pending | workflows::Status::Queued => JobStatus::Pending,
+                    workflows::Status::InProgress => JobStatus::Running,
+                    workflows::Status::Completed => {
+                        let Some(conclusion) = run_job.conclusion else {
+                            bail!("when job status is completed, conclusion should not be none");
+                        };
+                        match conclusion {
+                            workflows::Conclusion::Success => JobStatus::Success,
+                            workflows::Conclusion::Failure
+                            | workflows::Conclusion::Cancelled
+                            | workflows::Conclusion::TimedOut
+                            | workflows::Conclusion::Neutral => JobStatus::Failed,
+                            workflows::Conclusion::Skipped => JobStatus::Skipped,
+                            workflows::Conclusion::ActionRequired => JobStatus::Manual,
+                            _ => JobStatus::Failed,
+                        }
+                    }
+                    workflows::Status::Failed => JobStatus::Failed,
+                    _ => JobStatus::Failed,
+                };
+                let job = Job {
+                    id: run_job.id.0,
+                    name: run_job.name,
+                    status,
+                    web_url: run_job.html_url.to_string(),
+                };
+                debug!("[github] Found job: {job:?}");
+                job_group.jobs.push(job);
+            }
+
+            if job_group.jobs.is_empty() {
+                continue;
+            }
+            job_groups.push(job_group);
+        }
+
+        if web_url.is_none() {
+            bail!("no action run found for commit: {commit:?}");
+        }
+
+        let action = Action {
+            web_url: web_url.unwrap(),
+            commit_id: commit_id.unwrap(),
+            commit_message: commit_message.unwrap(),
+            user: user.unwrap(),
+            email: email.unwrap(),
+            job_groups,
+        };
+        debug!("[github] Result: {action:?}");
+        Ok(action)
     }
 }
 

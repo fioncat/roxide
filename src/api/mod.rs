@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
+use console::style;
 use pad::PadStr;
 use serde::Serialize;
 use tokio::net::TcpStream;
@@ -39,6 +40,8 @@ pub trait RemoteAPI: Send + Sync {
         pr: &PullRequest,
     ) -> Result<String>;
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>>;
+
+    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +140,70 @@ impl ListItem for PullRequest {
             "Head" => format!("{}", self.head).into(),
             "Web URL" => Cow::Borrowed(&self.web_url),
             _ => Cow::Borrowed(""),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Action {
+    pub web_url: String,
+
+    pub commit_id: String,
+    pub commit_message: String,
+
+    pub user: String,
+    pub email: String,
+
+    pub job_groups: Vec<JobGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JobGroup {
+    pub name: String,
+    pub web_url: String,
+    pub jobs: Vec<Job>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum JobStatus {
+    Pending,
+    Running,
+    Success,
+    Failed,
+    Canceled,
+    Skipped,
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Job {
+    pub id: u64,
+    pub name: String,
+    pub status: JobStatus,
+    pub web_url: String,
+}
+
+impl ListItem for Job {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "ID" => self.id.to_string().into(),
+            "Name" => Cow::Borrowed(&self.name),
+            "Status" => self.status.styled_string().into(),
+            _ => Cow::Borrowed(""),
+        }
+    }
+}
+
+impl JobStatus {
+    pub fn styled_string(&self) -> String {
+        match self {
+            JobStatus::Pending => style("Pending").blue().to_string(),
+            JobStatus::Running => style("Running").blue().to_string(),
+            JobStatus::Success => style("Success").green().to_string(),
+            JobStatus::Failed => style("Failed").red().to_string(),
+            JobStatus::Canceled => style("Canceled").yellow().to_string(),
+            JobStatus::Skipped => style("Skipped").yellow().to_string(),
+            JobStatus::Manual => style("Manual").yellow().to_string(),
         }
     }
 }

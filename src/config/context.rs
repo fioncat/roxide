@@ -318,6 +318,15 @@ pub mod tests {
         ) -> Result<Vec<api::PullRequest>> {
             Ok(vec![])
         }
+
+        async fn get_action(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _commit: &str,
+        ) -> Result<api::Action> {
+            todo!()
+        }
     }
 
     pub fn build_test_context(name: &str) -> ConfigContext {
