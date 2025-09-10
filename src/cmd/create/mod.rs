@@ -10,6 +10,7 @@ use crate::config::context::ConfigContext;
 
 use super::Command;
 
+/// Create commands.
 #[derive(Args)]
 pub struct CreateCommand {
     #[command(subcommand)]

@@ -10,8 +10,10 @@ use crate::repo::select::select_job_from_action;
 use crate::repo::wait_action::WaitActionArgs;
 use crate::term::list::TableArgs;
 
+/// Print logs for a specific job.
 #[derive(Debug, Args)]
 pub struct ListJobCommand {
+    /// Job ID to get logs for. If not specified, select one from current action.
     pub id: Option<u64>,
 
     #[clap(flatten)]

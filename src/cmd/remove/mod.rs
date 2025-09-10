@@ -10,6 +10,7 @@ use crate::config::context::ConfigContext;
 
 use super::Command;
 
+/// Remove commands (alias `rm`)
 #[derive(Args)]
 pub struct RemoveCommand {
     #[command(subcommand)]

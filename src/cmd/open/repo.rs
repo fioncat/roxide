@@ -4,22 +4,25 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{Command, complete};
+use crate::cmd::{CacheArgs, Command, UpstreamArgs, complete};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::Branch;
 use crate::repo::current::get_current_repo;
 
+/// Open current repository in the browser.
 #[derive(Debug, Args)]
 pub struct OpenRepoCommand {
+    /// By default, opens the repository's root directory. If specified, opens the current
+    /// branch of the repository. Can also specify a branch name.
     #[arg(long, short)]
     pub branch: Option<Option<String>>,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
-    #[arg(long, short)]
-    pub upstream: bool,
+    #[clap(flatten)]
+    pub upstream: UpstreamArgs,
 }
 
 #[async_trait]
@@ -29,10 +32,10 @@ impl Command for OpenRepoCommand {
         ctx.lock()?;
 
         let repo = get_current_repo(&ctx)?;
-        let api = ctx.get_api(&repo.remote, self.force_no_cache)?;
+        let api = ctx.get_api(&repo.remote, self.cache.force_no_cache)?;
 
         let mut api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
-        if self.upstream {
+        if self.upstream.enable {
             let Some(upstream) = api_repo.upstream else {
                 bail!("repository {} does not have an upstream", repo.full_name());
             };

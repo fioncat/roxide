@@ -9,6 +9,7 @@ use crate::repo::current::get_current_repo;
 use crate::repo::wait_action::WaitActionArgs;
 use crate::term::list::TableArgs;
 
+/// Open current action in the browser.
 #[derive(Debug, Args)]
 pub struct OpenActionCommand {
     #[clap(flatten)]

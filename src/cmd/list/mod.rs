@@ -15,6 +15,7 @@ use crate::config::context::ConfigContext;
 
 use super::Command;
 
+/// List commands (alias: `ls`)
 #[derive(Args)]
 pub struct ListCommand {
     #[command(subcommand)]
@@ -65,4 +66,13 @@ impl Command for ListCommand {
                 tag::ListTagCommand::complete_command(),
             ])
     }
+}
+
+#[derive(Debug, Args)]
+pub struct RepoDiskUsageArgs {
+    /// If enabled, calculates and displays current disk usage of repositories (or remotes,
+    /// owners) sorted in descending order by size. In this mode, some irrelevant columns
+    /// will be hidden. Use this option for convenient disk usage monitoring.
+    #[arg(name = "disk-usage", long = "du", short = 'd')]
+    pub enable: bool,
 }

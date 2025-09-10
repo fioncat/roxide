@@ -11,14 +11,17 @@ use crate::scan::ignore::Ignore;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln, report_scan_process_done};
 
-use super::Command;
+use super::{Command, IgnoreArgs};
 
+/// Quickly calculate lines of code for different languages in the repository.
 #[derive(Debug, Args)]
 pub struct StatsCommand {
+    /// Directory path to calculate statistics for. If not provided, calculates code in the
+    /// current directory.
     pub path: Option<String>,
 
-    #[arg(long, short = 'I')]
-    pub ignore: Option<Vec<String>>,
+    #[clap(flatten)]
+    pub ignore: IgnoreArgs,
 
     #[clap(flatten)]
     pub table: TableArgs,
@@ -33,7 +36,7 @@ impl Command for StatsCommand {
             Some(path) => PathBuf::from(path),
             None => env::current_dir().context("failed to get current directory")?,
         };
-        let mut ignore_patterns = self.ignore.unwrap_or_default();
+        let mut ignore_patterns = self.ignore.patterns.unwrap_or_default();
         ignore_patterns.extend(ctx.cfg.stats_ignore);
 
         let ignore = if ignore_patterns.is_empty() {

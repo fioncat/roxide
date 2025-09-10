@@ -11,12 +11,16 @@ use crate::repo::select::{RepoSelector, SelectManyReposOptions, select_owners};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
 
+use super::RepoDiskUsageArgs;
+
+/// List repository owners.
 #[derive(Debug, Args)]
 pub struct ListOwnerCommand {
+    /// Remote name. If not specified, list owners across all remotes.
     pub remote: Option<String>,
 
-    #[arg(long = "du", short)]
-    pub disk_usage: bool,
+    #[clap(flatten)]
+    pub disk_usage: RepoDiskUsageArgs,
 
     #[clap(flatten)]
     pub list: ListArgs,
@@ -28,7 +32,7 @@ impl Command for ListOwnerCommand {
         debug!("[cmd] Run list owner command: {:?}", self);
 
         let limit = self.list.limit();
-        let text = if self.disk_usage {
+        let text = if self.disk_usage.enable {
             let args = SelectRepoArgs {
                 head: self.remote,
                 ..Default::default()

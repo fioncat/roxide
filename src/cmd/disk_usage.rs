@@ -12,16 +12,21 @@ use crate::{debug, outputln, report_scan_process_done};
 
 use super::Command;
 
+/// Calculate disk usage statistics for a directory (alias `du`)
 #[derive(Debug, Args)]
 pub struct DiskUsageCommand {
+    /// Specify the directory to calculate statistics for.
     pub path: Option<String>,
 
+    /// Display directory hierarchy levels.
     #[arg(long, short, default_value = "1")]
     pub depth: usize,
 
+    /// Ignore certain files or directories during calculation.
     #[arg(long, short = 'I')]
     pub ignore: Option<Vec<String>>,
 
+    /// Display execution time and speed of the calculation.
     #[arg(long, short)]
     pub stats: bool,
 }

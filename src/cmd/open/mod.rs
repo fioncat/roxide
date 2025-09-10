@@ -11,6 +11,7 @@ use crate::config::context::ConfigContext;
 
 use super::Command;
 
+/// Open commands.
 #[derive(Args)]
 pub struct OpenCommand {
     #[command(subcommand)]

@@ -8,6 +8,7 @@ use crate::{debug, info};
 
 use super::Command;
 
+/// Detach a non-workspace repository from roxide management.
 #[derive(Debug, Args)]
 pub struct DetachCommand {}
 

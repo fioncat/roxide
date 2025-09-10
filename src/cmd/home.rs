@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
+use crate::cmd::{CacheArgs, complete};
 use crate::config::context::ConfigContext;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
@@ -10,17 +10,24 @@ use crate::{confirm, debug};
 
 use super::Command;
 
+/// Enter a repository. If the repository doesn't exist, create or clone it.
 #[derive(Debug, Args)]
 pub struct HomeCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
+    /// When searching owners, only search local repositories without calling remote API.
+    /// By default, it attempts to search repositories via remote API.
     #[arg(long, short)]
     pub local: bool,
 
+    /// Add `--depth 1` parameter when cloning repositories for faster cloning of large
+    /// repositories. Use this parameter if you only need temporary access to the repository.
+    /// Note: recommended for readonly mode only, as features like rebase and squash will not
+    /// work with shallow repositories.
     #[arg(long, short)]
     pub thin: bool,
 }
@@ -32,7 +39,9 @@ impl Command for HomeCommand {
         ctx.lock()?;
 
         let selector = RepoSelector::new(&ctx, &self.select_repo);
-        let mut repo = selector.select_one(self.force_no_cache, self.local).await?;
+        let mut repo = selector
+            .select_one(self.cache.force_no_cache, self.local)
+            .await?;
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);

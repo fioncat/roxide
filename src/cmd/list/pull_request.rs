@@ -2,20 +2,20 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::{CacheArgs, Command, complete};
 use crate::config::context::ConfigContext;
 use crate::repo::select::SelectPullRequestsArgs;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln};
 
+/// List pull requests.
 #[derive(Debug, Args)]
 pub struct ListPullRequestCommand {
     #[clap(flatten)]
     pub select_pull_requests: SelectPullRequestsArgs,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
     #[clap(flatten)]
     pub table: TableArgs,
@@ -43,7 +43,7 @@ impl Command for ListPullRequestCommand {
 
         let prs = self
             .select_pull_requests
-            .select_many(&ctx, self.force_no_cache)
+            .select_many(&ctx, self.cache.force_no_cache)
             .await?;
         debug!("[cmd] Pull requests: {prs:?}");
 

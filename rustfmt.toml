@@ -1,0 +1,6 @@
+# rustfmt.toml
+edition = "2024"
+
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+imports_layout = "Vertical"

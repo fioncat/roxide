@@ -5,16 +5,18 @@ use async_trait::async_trait;
 use clap::Args;
 use console::style;
 
+use crate::cmd::CacheArgs;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, QueryOptions, Repository};
 use crate::{cursor_up, debug, output, outputln};
 
 use super::Command;
 
+/// Check system environment and verify roxide functionality.
 #[derive(Debug, Args)]
 pub struct CheckCommand {
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 }
 
 #[async_trait]
@@ -43,7 +45,7 @@ impl Command for CheckCommand {
         }
         for remote in remotes {
             outputln!("Checking remote {} ...", remote.remote);
-            let (item, ok) = check_remote(&ctx, &remote.remote, self.force_no_cache).await;
+            let (item, ok) = check_remote(&ctx, &remote.remote, self.cache.force_no_cache).await;
             cursor_up!();
             item.show();
             if !ok {
@@ -59,7 +61,7 @@ impl Command for CheckCommand {
 
             for repo in repos {
                 outputln!("- Checking {} ...", repo.display_name(DisplayLevel::Owner));
-                let item = check_repo(&ctx, &repo, self.force_no_cache).await;
+                let item = check_repo(&ctx, &repo, self.cache.force_no_cache).await;
                 cursor_up!();
                 item.show();
             }

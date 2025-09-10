@@ -10,8 +10,11 @@ use crate::exec::git::commit::ensure_no_uncommitted_changes;
 
 use super::Command;
 
+/// Switch to a different Git branch.
 #[derive(Debug, Args)]
 pub struct SwitchCommand {
+    /// Branch name to switch to. If not provided, searches and selects from all branches
+    /// (including remote branches).
     pub branch: Option<String>,
 }
 

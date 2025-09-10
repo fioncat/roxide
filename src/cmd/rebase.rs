@@ -2,23 +2,24 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RebaseOptions, RepoOperator};
 
-use super::Command;
+use super::{CacheArgs, Command, UpstreamArgs, complete};
 
+/// Rebase the current branch.
 #[derive(Debug, Args)]
 pub struct RebaseCommand {
+    /// The target branch to rebase. If not specified, use the default branch.
     pub target: Option<String>,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
-    #[arg(long, short)]
-    pub upstream: bool,
+    #[clap(flatten)]
+    pub upstream: UpstreamArgs,
 }
 
 #[async_trait]
@@ -31,8 +32,8 @@ impl Command for RebaseCommand {
         let op = RepoOperator::load(&ctx, &repo)?;
         op.rebase(RebaseOptions {
             target: self.target.as_deref().unwrap_or_default(),
-            upstream: self.upstream,
-            force_no_cache: self.force_no_cache,
+            upstream: self.upstream.enable,
+            force_no_cache: self.cache.force_no_cache,
         })
         .await?;
 

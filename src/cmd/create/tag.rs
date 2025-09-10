@@ -9,8 +9,17 @@ use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, UpdateTagRule};
 use crate::{confirm, debug, info, output};
 
+/// Create a new tag and push it to the remote.
 #[derive(Debug, Args)]
 pub struct CreateTagCommand {
+    /// Two forms: tag name or tag rule. Available rules: [patch, minor, major, date,
+    /// date-dash, date-dot].
+    /// When using rules, applies the rule to the latest tag to generate a new tag.
+    /// First three rules are for semantic versioning, last three for date-based tags.
+    /// Examples: patch: v0.4.2 -> v0.4.3, minor: v1.5.6 -> v1.6.0, major: 2.3.4 -> 3.0.0,
+    /// date-dash: 2024-01-02, date-dot: 2024.01.02, date: auto-detects dash or dot format
+    /// from latest tag.
+    /// If not one of these rules, creates the tag directly. For example: "v1.2.3", "1.4.0"
     pub tag: String,
 }
 

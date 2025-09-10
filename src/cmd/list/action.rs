@@ -10,6 +10,7 @@ use crate::repo::wait_action::WaitActionArgs;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln};
 
+/// List actions and jobs (CI/CD) information for the current commit.
 #[derive(Debug, Args)]
 pub struct ListActionCommand {
     #[clap(flatten)]

@@ -258,6 +258,9 @@ impl RemoteAPI for GitHub {
         };
         let path = format!("/repos/{owner}/{name}/actions/runs");
         let runs: Page<workflows::Run> = self.client.get(path, Some(&req)).await?;
+        if runs.items.is_empty() {
+            bail!("no workflow run found for commit {commit}");
+        }
 
         let action = fetch_jobs(
             owner,

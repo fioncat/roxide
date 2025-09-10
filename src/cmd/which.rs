@@ -9,6 +9,7 @@ use crate::repo::current::get_current_repo;
 
 use super::Command;
 
+/// Display the name of the current repository.
 #[derive(Debug, Args)]
 pub struct WhichCommand {}
 

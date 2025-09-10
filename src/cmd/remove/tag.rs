@@ -10,8 +10,10 @@ use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::tag::Tag;
 
+/// Remove a tag from both local and remote.
 #[derive(Debug, Args)]
 pub struct RemoveTagCommand {
+    /// Specify the tag name to remove. Defaults to removing the latest tag.
     pub tag: Option<String>,
 }
 

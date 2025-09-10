@@ -9,10 +9,13 @@ use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs, 
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
 
+use super::RepoDiskUsageArgs;
+
+/// List repository remotes.
 #[derive(Debug, Args)]
 pub struct ListRemoteCommand {
-    #[arg(long = "du", short)]
-    pub disk_usage: bool,
+    #[clap(flatten)]
+    pub disk_usage: RepoDiskUsageArgs,
 
     #[clap(flatten)]
     pub list: ListArgs,
@@ -24,7 +27,7 @@ impl Command for ListRemoteCommand {
         debug!("[cmd] Run list remote command: {:?}", self);
 
         let limit = self.list.limit();
-        let text = if self.disk_usage {
+        let text = if self.disk_usage.enable {
             let args = SelectRepoArgs::default();
             let selector = RepoSelector::new(&ctx, &args);
             let repos = selector.select_many(SelectManyReposOptions::default())?;

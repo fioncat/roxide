@@ -10,8 +10,10 @@ use crate::repo::select::select_job_from_action;
 use crate::repo::wait_action::WaitActionArgs;
 use crate::term::list::TableArgs;
 
+/// Open a job in the browser.
 #[derive(Debug, Args)]
 pub struct OpenJobCommand {
+    /// Job ID to open. If not specified, select one from current action.
     pub id: Option<u64>,
 
     #[clap(flatten)]

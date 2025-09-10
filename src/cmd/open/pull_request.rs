@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::CacheArgs;
 use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
@@ -9,13 +10,14 @@ use crate::debug;
 use crate::repo::select::SelectPullRequestsArgs;
 use crate::term::list::TableArgs;
 
+/// Open current pull request in the browser.
 #[derive(Debug, Args)]
 pub struct OpenPullRequestCommand {
     #[clap(flatten)]
     pub select_pull_requests: SelectPullRequestsArgs,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
     #[clap(flatten)]
     pub table: TableArgs,
@@ -28,7 +30,7 @@ impl Command for OpenPullRequestCommand {
 
         let pr = self
             .select_pull_requests
-            .select_one(&ctx, self.force_no_cache, None)
+            .select_one(&ctx, self.cache.force_no_cache, None)
             .await?;
         debug!("[cmd] Pull request: {pr:?}");
 

@@ -8,6 +8,7 @@ use crate::exec::git::tag::{Tag, TagList};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
 
+/// List git tags.
 #[derive(Debug, Args)]
 pub struct ListTagCommand {
     #[clap(flatten)]

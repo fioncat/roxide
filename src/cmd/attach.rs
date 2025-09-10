@@ -2,22 +2,22 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
 use crate::{debug, info};
 
-use super::Command;
+use super::{CacheArgs, Command, complete};
 
+/// Attach a non-workspace git repository to roxide management.
 #[derive(Debug, Args)]
 pub struct AttachCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 }
 
 #[async_trait]
@@ -38,7 +38,7 @@ impl Command for AttachCommand {
         }
 
         let selector = RepoSelector::new(&ctx, &self.select_repo);
-        let mut repo = selector.select_remote(self.force_no_cache).await?;
+        let mut repo = selector.select_remote(self.cache.force_no_cache).await?;
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);
         repo.visit(owner);

@@ -9,8 +9,12 @@ use crate::debug;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
 
+/// Remove a branch from both local and remote.
 #[derive(Debug, Args)]
 pub struct RemoveBranchCommand {
+    /// Specify the branch name to remove. Defaults to removing the current branch. If
+    /// removing the current branch, will switch to the default branch first.
+    /// Note: cannot remove the default branch with this command.
     pub branch: Option<String>,
 }
 

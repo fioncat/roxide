@@ -7,8 +7,10 @@ use crate::config::context::ConfigContext;
 use crate::exec::git::branch::Branch;
 use crate::{debug, output};
 
+/// Create a new branch and push it to the remote.
 #[derive(Debug, Args)]
 pub struct CreateBranchCommand {
+    /// Name of the branch to create.
     pub branch: String,
 }
 

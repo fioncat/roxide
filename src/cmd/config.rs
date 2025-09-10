@@ -14,12 +14,19 @@ use crate::debug;
 
 use super::Command;
 
+/// Print configuration in JSON format or directly edit the configuration file.
 #[derive(Debug, Args)]
 pub struct ConfigCommand {
+    /// Configuration file type. If not provided, defaults to base config
+    /// ($ROXIDE_CONFIG/config.toml). Use 'remote' for remote config
+    /// ($ROXIDE_CONFIG/remotes/{remote}.toml), or 'hook' for hook scripts
+    /// ($ROXIDE_CONFIG/hooks/{hook}.sh).
     pub config_type: Option<ConfigType>,
 
+    /// Remote configuration name or hook script name.
     pub name: Option<String>,
 
+    /// Edit the configuration file directly in the default editor.
     #[arg(long, short)]
     pub edit: bool,
 }

@@ -13,6 +13,9 @@ use crate::{cursor_up, outputln, term};
 
 #[derive(Debug, Args)]
 pub struct WaitActionArgs {
+    /// Wait for all jobs in the current action to complete before proceeding. This will
+    /// query the Remote API every 2 seconds and display jobs that are still pending or
+    /// running in real-time.
     #[arg(long, short)]
     pub wait: bool,
 }

@@ -17,14 +17,21 @@ use crate::{debug, outputln};
 
 use super::Command;
 
+/// Synchronize one or multiple repositories. Include cloning, pushing, pulling, etc.
 #[derive(Debug, Args)]
 pub struct SyncCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
+    /// By default, if you are currently in a repository, sync will synchronize the current
+    /// repository; otherwise it will sync multiple repositories. With this option,
+    /// multiple repositories will be synced regardless of your current location.
     #[arg(long, short)]
     pub recursive: bool,
 
+    /// By default, when syncing multiple repositories, only repositories marked with sync
+    /// flag will be synchronized. With this option, all repositories will be forcefully
+    /// synced, ignoring the sync flag.
     #[arg(long, short)]
     pub force: bool,
 }

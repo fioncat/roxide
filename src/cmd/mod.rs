@@ -37,7 +37,7 @@ pub trait Command: Args {
 }
 
 #[derive(Parser)]
-#[command(author, about, version = env!("ROXIDE_VERSION"))]
+#[command(bin_name = "rox", author, about, version = env!("ROXIDE_VERSION"))]
 pub struct App {
     #[command(subcommand)]
     pub command: Commands,
@@ -211,4 +211,30 @@ fn print_wrap_warn() {
             warn!("Cannot detect your shell type, please make sure you are using `bash` or `zsh`");
         }
     }
+}
+
+#[derive(Debug, Args, Clone, Copy)]
+pub struct CacheArgs {
+    /// Force to not use cache when accessing the remote API. If you are sure the remote
+    /// data is updated and want to update the local cache, you can add this flag.
+    /// This only affects when the cache is enabled.
+    #[arg(long, short)]
+    pub force_no_cache: bool,
+}
+
+#[derive(Debug, Args, Default, Clone, Copy)]
+pub struct UpstreamArgs {
+    /// Enable upstream mode. Operations will target the upstream repository instead of the
+    /// current repository. Only works with forked remote repositories. For example, when
+    /// creating pull requests, they will be created in the upstream repository.
+    #[arg(name = "upstream", long = "upstream", short = 'u')]
+    pub enable: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct IgnoreArgs {
+    /// Specify files or directories to ignore during operation. Supports multiple entries
+    /// and simple wildcard matching. Examples: "*.log", "target", "src/**/test"
+    #[arg(name = "ignore", long = "ignore", short = 'I')]
+    pub patterns: Option<Vec<String>>,
 }

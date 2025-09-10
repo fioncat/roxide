@@ -9,27 +9,25 @@ use clap::Args;
 use console::style;
 
 use crate::api::{PullRequest, PullRequestHead};
-use crate::cmd::{Command, complete};
+use crate::cmd::{CacheArgs, Command, UpstreamArgs, complete};
 use crate::config::context::ConfigContext;
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::SelectPullRequestsArgs;
-use crate::term::list::TableArgs;
 use crate::{confirm, debug, info};
 
+/// Create a new pull request on the remote (alias `pr`)
 #[derive(Debug, Args)]
 pub struct CreatePullRequestCommand {
+    /// The base branch for the pull request. If not specified, use the default branch.
     pub base: Option<String>,
 
-    #[arg(long, short)]
-    pub upstream: bool,
-
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
     #[clap(flatten)]
-    pub table: TableArgs,
+    pub upstream: UpstreamArgs,
 }
 
 #[async_trait]
@@ -39,7 +37,7 @@ impl Command for CreatePullRequestCommand {
         ensure_no_uncommitted_changes(ctx.git())?;
 
         let repo = get_current_repo(&ctx)?;
-        let api = ctx.get_api(&repo.remote, self.force_no_cache)?;
+        let api = ctx.get_api(&repo.remote, self.cache.force_no_cache)?;
         let args = SelectPullRequestsArgs {
             upstream: self.upstream,
             base: self.base,
@@ -77,7 +75,7 @@ impl Command for CreatePullRequestCommand {
 
         let op = RepoOperator::load(&ctx, &repo)?;
         let git_remote = op
-            .get_git_remote(self.upstream, self.force_no_cache)
+            .get_git_remote(self.upstream.enable, self.cache.force_no_cache)
             .await?;
         info!("Base git remote is {}", style(git_remote.as_str()).cyan());
         debug!("[cmd] Git remote: {git_remote:?}");

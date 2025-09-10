@@ -12,19 +12,24 @@ use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::list::{ListArgs, pagination};
 
+use super::RepoDiskUsageArgs;
+
+/// List repositories.
 #[derive(Debug, Args)]
 pub struct ListRepoCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
+    /// Filter with sync flag.
     #[arg(long)]
     pub sync: bool,
 
+    /// Filter with pin flag.
     #[arg(long)]
     pub pin: bool,
 
-    #[arg(long = "du", short)]
-    pub disk_usage: bool,
+    #[clap(flatten)]
+    pub disk_usage: RepoDiskUsageArgs,
 
     #[clap(flatten)]
     pub list: ListArgs,
@@ -44,12 +49,12 @@ impl Command for ListRepoCommand {
         if self.pin {
             opts.pin = Some(true);
         }
-        if !self.disk_usage {
+        if !self.disk_usage.enable {
             opts.limit = Some(limit);
         }
 
         let list = selector.select_many(opts)?;
-        let text = if self.disk_usage {
+        let text = if self.disk_usage.enable {
             let level = list.level;
             let usages = repo_disk_usage(&ctx, list.items).await?;
             let (usages, total) = pagination(usages, limit);

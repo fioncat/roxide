@@ -8,6 +8,7 @@ use crate::exec::git::branch::{Branch, BranchList};
 use crate::term::list::{ListArgs, pagination};
 use crate::{debug, outputln};
 
+/// List git branches.
 #[derive(Debug, Args)]
 pub struct ListBranchCommand {
     #[clap(flatten)]

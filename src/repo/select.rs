@@ -8,6 +8,7 @@ use reqwest::Url;
 use crate::api::{
     Action, HeadRepository, Job, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
 };
+use crate::cmd::UpstreamArgs;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
@@ -19,10 +20,23 @@ use crate::term::list::List;
 
 #[derive(Debug, Args, Default)]
 pub struct SelectRepoArgs {
+    /// Repository selector head parameter. Can be one of these forms: '-' to select the
+    /// last accessed repository, URL/SSH to locate a repository directly, fuzzy keyword
+    /// to quickly locate to a repository , or remote name.
+    /// If owner is provided, it is forced to be a remote name.
+    /// If empty, searches all repositories.
+    /// Examples: "https://github.com/user/repo", "git@github.com/owner/repo", "github",
+    /// "rox"
     pub head: Option<String>,
 
+    /// Repository owner name. When provided without name, searches all repositories under
+    /// this owner. This can be '-' to select the last accessed repository under the remote.
+    /// Examples: "kubernetes", "microsoft", "myorg"
     pub owner: Option<String>,
 
+    /// Repository name for precise selection. This can be '-' to select the latest accessed
+    /// repository under the owner.
+    /// Examples: "roxide", "vscode", "myproject"
     pub name: Option<String>,
 }
 
@@ -754,16 +768,20 @@ pub fn select_owners(
 
 #[derive(Debug, Args, Default)]
 pub struct SelectPullRequestsArgs {
+    /// Filter a specific pull request by ID.
     pub id: Option<u64>,
 
-    #[arg(long, short)]
-    pub upstream: bool,
-
+    /// By default, only filters pull requests with head as the current branch. With this
+    /// option, ignores the current branch and selects all pull requests.
     #[arg(long, short)]
     pub all: bool,
 
+    /// Filter pull requests by base branch name.
     #[arg(long, short)]
     pub base: Option<String>,
+
+    #[clap(flatten)]
+    pub upstream: UpstreamArgs,
 }
 
 impl SelectPullRequestsArgs {
@@ -812,7 +830,7 @@ impl SelectPullRequestsArgs {
         api: &dyn RemoteAPI,
         must_base: bool,
     ) -> Result<ListPullRequestsOptions> {
-        let (owner, name, base) = if self.upstream {
+        let (owner, name, base) = if self.upstream.enable {
             let api_repo = api.get_repo(&repo.remote, &repo.owner, &repo.name).await?;
             let Some(upstream) = api_repo.upstream else {
                 bail!("repo has no upstream");
@@ -837,7 +855,7 @@ impl SelectPullRequestsArgs {
             None
         } else {
             let current_branch = Branch::current(ctx.git().mute())?;
-            if self.upstream {
+            if self.upstream.enable {
                 Some(PullRequestHead::Repository(HeadRepository {
                     owner: repo.owner.clone(),
                     name: repo.name.clone(),

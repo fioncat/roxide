@@ -12,17 +12,23 @@ use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 use crate::term::confirm::confirm_items;
 use crate::{confirm, debug, info};
 
+/// Remove one or multiple repositories locally (won't affect remote).
 #[derive(Debug, Args)]
 pub struct RemoveRepoCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
+    /// Remove multiple repositories.
     #[arg(long, short)]
     pub recursive: bool,
 
+    /// Force removal when removing multiple repositories. By default, repositories with pin
+    /// flag will not be removed when removing multiple repositories.
+    /// With this option, ignores the pin flag.
     #[arg(long, short)]
     pub force: bool,
 }
+
 #[async_trait]
 impl Command for RemoveRepoCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {

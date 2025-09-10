@@ -2,24 +2,27 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RepoOperator, SquashOptions};
 
-use super::Command;
+use super::{CacheArgs, Command, UpstreamArgs, complete};
 
+/// Squash the current branch, combining multiple commits into one.
 #[derive(Debug, Args)]
 pub struct SquashCommand {
+    /// The target branch to squash. If not specified, use the default branch.
     pub target: Option<String>,
 
-    #[arg(long, short)]
-    pub upstream: bool,
+    #[clap(flatten)]
+    pub cache: CacheArgs,
 
-    #[arg(long, short)]
-    pub force_no_cache: bool,
+    #[clap(flatten)]
+    pub upstream: UpstreamArgs,
 
+    /// The commit message for the squashed commit. If not specified, git might open
+    /// an editor to edit the message.
     #[arg(long, short)]
     pub message: Option<String>,
 }
@@ -35,8 +38,8 @@ impl Command for SquashCommand {
         let op = RepoOperator::load(&ctx, &repo)?;
         op.squash(SquashOptions {
             target: self.target.as_deref().unwrap_or_default(),
-            upstream: self.upstream,
-            force_no_cache: self.force_no_cache,
+            upstream: self.upstream.enable,
+            force_no_cache: self.cache.force_no_cache,
             message: &self.message,
         })
         .await?;

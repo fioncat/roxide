@@ -22,9 +22,11 @@ pub trait ListItem: Serialize {
 
 #[derive(Debug, Clone, Copy, Args)]
 pub struct TableArgs {
+    /// Output results in JSON format instead of table format.
     #[arg(long)]
     pub json: bool,
 
+    /// Do not display header row when outputting tables.
     #[arg(long)]
     pub headless: bool,
 }
@@ -34,9 +36,11 @@ pub struct ListArgs {
     #[clap(flatten)]
     pub table: TableArgs,
 
+    /// Page number, indicating which page of data to display.
     #[arg(long, short, default_value = "1")]
     pub page: u32,
 
+    /// Number of rows to display per page.
     #[arg(long, short = 's', default_value = "20")]
     pub page_size: u32,
 }
