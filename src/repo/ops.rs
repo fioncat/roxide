@@ -561,31 +561,31 @@ impl SyncResult {
 
         if !self.pushed.is_empty() {
             let flag = style("↑").green().bold();
-            let field = format!("  {flag} {}", self.pushed.len());
+            let field = format!("  {flag} {}", self.pushed.join(", "));
             fields.push(field);
         }
 
         if !self.pulled.is_empty() {
             let flag = style("↓").green().bold();
-            let field = format!("  {flag} {}", self.pulled.len());
+            let field = format!("  {flag} {}", self.pulled.join(", "));
             fields.push(field);
         }
 
         if !self.deleted.is_empty() {
             let flag = style("-").red().bold();
-            let field = format!("  {flag} {}", self.deleted.len());
+            let field = format!("  {flag} {}", self.deleted.join(", "));
             fields.push(field);
         }
 
         if !self.conflect.is_empty() {
             let flag = style("$").red().bold();
-            let field = format!("  {flag} {}", self.conflect.len());
+            let field = format!("  {flag} {}", self.conflect.join(", "));
             fields.push(field);
         }
 
         if !self.detached.is_empty() {
             let flag = style("?").red().bold();
-            let field = format!("  {flag} {}", self.detached.len());
+            let field = format!("  {flag} {}", self.detached.join(", "));
             fields.push(field);
         }
 
