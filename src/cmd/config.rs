@@ -46,26 +46,26 @@ impl Command for ConfigCommand {
             if self.edit {
                 return ctx.edit(&ctx.cfg.path);
             }
-            return print_json(&ctx.cfg);
+            return print_config(&ctx.cfg);
         };
 
         match config_type {
             ConfigType::Remote => {
                 let Some(name) = self.name else {
-                    return print_json(&ctx.cfg.remotes);
+                    return print_config(&ctx.cfg.remotes);
                 };
                 if self.edit {
                     let path = ctx.cfg.remotes_dir.join(format!("{name}.toml"));
                     return ctx.edit(&path);
                 }
                 let remote = ctx.cfg.get_remote(&name)?;
-                print_json(&remote)
+                print_config(&remote)
             }
             ConfigType::Hook => {
                 let Some(name) = self.name else {
                     let mut hooks = ctx.cfg.hooks.hooks.into_keys().collect::<Vec<_>>();
                     hooks.sort_unstable();
-                    return print_json(&hooks);
+                    return print_config(&hooks);
                 };
                 if self.edit {
                     let path = ctx.cfg.hooks_dir.join(format!("{name}.sh"));
@@ -87,12 +87,12 @@ impl Command for ConfigCommand {
     }
 }
 
-fn print_json<T>(value: &T) -> Result<()>
+fn print_config<T>(value: &T) -> Result<()>
 where
     T: Serialize,
 {
-    let json = serde_json::to_string_pretty(value)?;
-    println!("{json}");
+    let toml = toml::to_string_pretty(value)?;
+    println!("{toml}");
     Ok(())
 }
 
