@@ -36,6 +36,7 @@ impl Command for RemoveCommand {
 
     fn complete_command() -> clap::Command {
         clap::Command::new("remove")
+            .alias("rm")
             .disable_help_flag(true)
             .disable_version_flag(true)
             .subcommands([
