@@ -255,16 +255,16 @@ impl RemoteAPI for GitLab {
             .project(&id)
             .sha(commit)
             .build()?;
-        let mut pipline: Vec<Pipeline> = endpoint.query_async(&client).await?;
-        if pipline.is_empty() {
+        let mut pipeline: Vec<Pipeline> = endpoint.query_async(&client).await?;
+        if pipeline.is_empty() {
             bail!("no pipeline found for commit {commit:?}");
         }
-        let pipline = pipline.remove(0);
-        debug!("[gitlab] Pipeline: {pipline:?}");
+        let pipeline = pipeline.remove(0);
+        debug!("[gitlab] Pipeline: {pipeline:?}");
 
         let endpoint = pipelines::PipelineJobs::builder()
             .project(id)
-            .pipeline(pipline.id)
+            .pipeline(pipeline.id)
             .build()?;
 
         let mut pipeline_jobs: Vec<PipelineJob> =
@@ -313,7 +313,7 @@ impl RemoteAPI for GitLab {
                 None => {
                     let group = JobGroup {
                         name: pipeline_job.stage.clone(),
-                        web_url: pipline.web_url.clone(),
+                        web_url: pipeline.web_url.clone(),
                         jobs: vec![job],
                     };
                     let idx = job_groups.len();
@@ -327,7 +327,7 @@ impl RemoteAPI for GitLab {
         }
 
         let action = Action {
-            web_url: pipline.web_url,
+            web_url: pipeline.web_url,
             commit_id: commit.unwrap(),
             commit_message: message.unwrap(),
             user: user.unwrap(),
@@ -465,5 +465,20 @@ mod tests {
                 expire_at: 0,
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_pull_request() {
+        // TODO: How to test PR?
+    }
+
+    #[tokio::test]
+    async fn test_action() {
+        // TODO: How to test action?
+    }
+
+    #[tokio::test]
+    async fn test_job_log() {
+        // TODO: How to test job logs?
     }
 }

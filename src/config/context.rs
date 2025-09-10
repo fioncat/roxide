@@ -243,16 +243,22 @@ impl ConfigContext {
 #[cfg(test)]
 pub mod tests {
     use std::borrow::Cow;
+    use std::cell::RefCell;
     use std::fs;
 
-    use crate::api::{ListPullRequestsOptions, RemoteInfo};
+    use crate::api::{
+        Action, HeadRepository, Job, JobGroup, JobStatus, ListPullRequestsOptions, PullRequest,
+        PullRequestHead, RemoteInfo,
+    };
     use crate::db::remote_repo::{RemoteRepository, RemoteUpstream};
     use crate::db::repo::Repository;
     use crate::{config, db, repo};
 
     use super::*;
 
-    struct MockAPI {}
+    struct MockAPI {
+        action_fetched: Mutex<RefCell<bool>>,
+    }
 
     #[async_trait::async_trait]
     impl RemoteAPI for MockAPI {
@@ -260,7 +266,7 @@ pub mod tests {
             Ok(RemoteInfo {
                 name: Cow::Borrowed("mock"),
                 auth_user: None,
-                ping: false,
+                ping: true,
                 cache: false,
             })
         }
@@ -314,22 +320,125 @@ pub mod tests {
 
         async fn list_pull_requests(
             &self,
-            _opts: ListPullRequestsOptions,
-        ) -> Result<Vec<api::PullRequest>> {
+            opts: ListPullRequestsOptions,
+        ) -> Result<Vec<PullRequest>> {
+            if opts.base.is_some_and(|b| b != "main") {
+                return Ok(vec![]);
+            }
+
+            if opts.owner == "fioncat"
+                && let Some(id) = opts.id
+                && id == 1
+            {
+                return Ok(vec![PullRequest {
+                    id: 1,
+                    base: "main".to_string(),
+                    head: PullRequestHead::Branch("test".to_string()),
+                    title: "Test PR 1".to_string(),
+                    web_url: "https://example.com/pull/1".to_string(),
+                    body: None,
+                }]);
+            }
+
+            if opts.id.is_none() && opts.owner == "fioncat" {
+                return Ok(vec![
+                    PullRequest {
+                        id: 1,
+                        base: "main".to_string(),
+                        head: PullRequestHead::Branch("test".to_string()),
+                        title: "Test PR 1".to_string(),
+                        web_url: "https://example.com/pull/1".to_string(),
+                        body: None,
+                    },
+                    PullRequest {
+                        id: 2,
+                        base: "main".to_string(),
+                        head: PullRequestHead::Branch("dev".to_string()),
+                        title: "Test PR 2".to_string(),
+                        web_url: "https://example.com/pull/2".to_string(),
+                        body: None,
+                    },
+                ]);
+            }
+
+            if opts.id.is_none() && opts.owner == "ayamir" {
+                return Ok(vec![PullRequest {
+                    id: 3,
+                    base: "main".to_string(),
+                    head: PullRequestHead::Repository(HeadRepository {
+                        owner: "fioncat".to_string(),
+                        name: "nvimdots".to_string(),
+                        branch: "main".to_string(),
+                    }),
+                    title: "Test PR 3".to_string(),
+                    web_url: "https://example.com/pull/3".to_string(),
+                    body: None,
+                }]);
+            }
+
             Ok(vec![])
         }
 
-        async fn get_action(
-            &self,
-            _owner: &str,
-            _name: &str,
-            _commit: &str,
-        ) -> Result<api::Action> {
-            todo!()
+        async fn get_action(&self, _owner: &str, _name: &str, _commit: &str) -> Result<Action> {
+            let mut action = Action {
+                web_url: "https://example.com/action".to_string(),
+                commit_id: "test-commit".to_string(),
+                commit_message: "test commit message".to_string(),
+                user: "test-user".to_string(),
+                email: "test-email".to_string(),
+                job_groups: vec![],
+            };
+            let fetched = self.action_fetched.lock().unwrap();
+            if *fetched.borrow() {
+                action.job_groups.push(JobGroup {
+                    name: "test-job-group".to_string(),
+                    web_url: "https://example.com/job-group".to_string(),
+                    jobs: vec![
+                        Job {
+                            id: 1,
+                            name: "test-job-1".to_string(),
+                            status: JobStatus::Success,
+                            web_url: "https://example.com/job/1".to_string(),
+                        },
+                        Job {
+                            id: 2,
+                            name: "test-job-2".to_string(),
+                            status: JobStatus::Failed,
+                            web_url: "https://example.com/job/2".to_string(),
+                        },
+                    ],
+                });
+                return Ok(action);
+            }
+
+            action.job_groups.push(JobGroup {
+                name: "test-job-group".to_string(),
+                web_url: "https://example.com/job-group".to_string(),
+                jobs: vec![
+                    Job {
+                        id: 1,
+                        name: "test-job-1".to_string(),
+                        status: JobStatus::Running,
+                        web_url: "https://example.com/job/1".to_string(),
+                    },
+                    Job {
+                        id: 2,
+                        name: "test-job-2".to_string(),
+                        status: JobStatus::Pending,
+                        web_url: "https://example.com/job/2".to_string(),
+                    },
+                ],
+            });
+            *fetched.borrow_mut() = true;
+            Ok(action)
         }
 
-        async fn get_job_log(&self, _owner: &str, _name: &str, _id: u64) -> Result<String> {
-            todo!()
+        async fn get_job_log(&self, _owner: &str, _name: &str, id: u64) -> Result<String> {
+            match id {
+                1 => Ok(String::from("mock log 1")),
+                2 => Ok(String::from("mock log 2")),
+                _ => bail!("no such job"),
+            }
         }
     }
 
@@ -364,7 +473,12 @@ pub mod tests {
         let home_dir = dirs::home_dir().unwrap();
         cfg.validate(&home_dir).unwrap();
 
-        let ctx = ConfigContext::new_mock_api(cfg, Arc::new(MockAPI {}));
+        let ctx = ConfigContext::new_mock_api(
+            cfg,
+            Arc::new(MockAPI {
+                action_fetched: Mutex::new(RefCell::new(false)),
+            }),
+        );
 
         let repos = db::tests::test_repos();
 

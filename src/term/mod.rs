@@ -90,4 +90,62 @@ mod tests {
         assert_eq!(truncate_by_width("A", 1), "A");
         assert_eq!(truncate_by_width("A", 2), "A");
     }
+
+    #[test]
+    fn test_render_list() {
+        #[derive(Debug)]
+        struct Case {
+            items: Vec<&'static str>,
+            width: usize,
+            expect: &'static str,
+        }
+
+        let cases = vec![
+            Case {
+                items: vec!["apple", "banana", "cherry"],
+                width: 20,
+                expect: "apple, banana, ...",
+            },
+            Case {
+                items: vec!["apple", "banana", "cherry"],
+                width: 15,
+                expect: "apple, banana..",
+            },
+            Case {
+                items: vec!["apple", "banana", "cherry"],
+                width: 10,
+                expect: "apple, ...",
+            },
+            Case {
+                items: vec!["apple", "banana", "cherry"],
+                width: 3,
+                expect: "...",
+            },
+            Case {
+                items: vec!["apple", "banana", "cherry"],
+                width: 0,
+                expect: "",
+            },
+            Case {
+                items: vec!["a", "b", "c", "d", "e"],
+                width: 9,
+                expect: "a, b, c..",
+            },
+            Case {
+                items: vec!["a", "b", "c", "d", "e"],
+                width: 7,
+                expect: "a, b...",
+            },
+            Case {
+                items: vec!["a", "b", "c", "d", "e"],
+                width: 5,
+                expect: "a, b.",
+            },
+        ];
+
+        for case in cases {
+            let result = render_list(&case.items, case.items.len(), case.width);
+            assert_eq!(result, case.expect, "Failed for {case:?}");
+        }
+    }
 }

@@ -145,7 +145,7 @@ impl ListItem for PullRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct Action {
     pub web_url: String,
 
@@ -158,15 +158,16 @@ pub struct Action {
     pub job_groups: Vec<JobGroup>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct JobGroup {
     pub name: String,
     pub web_url: String,
     pub jobs: Vec<Job>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 pub enum JobStatus {
+    #[default]
     Pending,
     Running,
     Success,
@@ -176,7 +177,7 @@ pub enum JobStatus {
     Manual,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct Job {
     pub id: u64,
     pub name: String,

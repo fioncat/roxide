@@ -191,7 +191,7 @@ pub async fn run() -> CommandResult {
     result
 }
 
-fn get_shell_type() -> Option<String> {
+pub fn get_shell_type() -> Option<String> {
     let shell = env::var("SHELL").ok()?;
     let name = Path::new(&shell).file_name()?.to_str()?;
     Some(name.to_string())

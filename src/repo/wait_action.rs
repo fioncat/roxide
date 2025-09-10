@@ -111,3 +111,99 @@ impl WaitActionArgs {
         format!("{list_head}{list}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::api::{Job, JobGroup};
+    use crate::config::context;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_wait_action() {
+        let ctx = context::tests::build_test_context("wait_action");
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "roxide".to_string(),
+            ..Default::default()
+        };
+        let api = ctx.get_api("github", false).unwrap();
+
+        let args = WaitActionArgs { wait: true };
+
+        let action = args.wait(&ctx, &repo, api.as_ref()).await.unwrap();
+        assert_eq!(
+            action,
+            Action {
+                web_url: "https://example.com/action".to_string(),
+                commit_id: "test-commit".to_string(),
+                commit_message: "test commit message".to_string(),
+                user: "test-user".to_string(),
+                email: "test-email".to_string(),
+                job_groups: vec![JobGroup {
+                    name: "test-job-group".to_string(),
+                    web_url: "https://example.com/job-group".to_string(),
+                    jobs: vec![
+                        Job {
+                            id: 1,
+                            name: "test-job-1".to_string(),
+                            status: JobStatus::Success,
+                            web_url: "https://example.com/job/1".to_string(),
+                        },
+                        Job {
+                            id: 2,
+                            name: "test-job-2".to_string(),
+                            status: JobStatus::Failed,
+                            web_url: "https://example.com/job/2".to_string(),
+                        },
+                    ],
+                }],
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_wait_action() {
+        let ctx = context::tests::build_test_context("no_wait_action");
+        let repo = Repository {
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "roxide".to_string(),
+            ..Default::default()
+        };
+        let api = ctx.get_api("github", false).unwrap();
+
+        let args = WaitActionArgs { wait: false };
+
+        let action = args.wait(&ctx, &repo, api.as_ref()).await.unwrap();
+        assert_eq!(
+            action,
+            Action {
+                web_url: "https://example.com/action".to_string(),
+                commit_id: "test-commit".to_string(),
+                commit_message: "test commit message".to_string(),
+                user: "test-user".to_string(),
+                email: "test-email".to_string(),
+                job_groups: vec![JobGroup {
+                    name: "test-job-group".to_string(),
+                    web_url: "https://example.com/job-group".to_string(),
+                    jobs: vec![
+                        Job {
+                            id: 1,
+                            name: "test-job-1".to_string(),
+                            status: JobStatus::Running,
+                            web_url: "https://example.com/job/1".to_string(),
+                        },
+                        Job {
+                            id: 2,
+                            name: "test-job-2".to_string(),
+                            status: JobStatus::Pending,
+                            web_url: "https://example.com/job/2".to_string(),
+                        },
+                    ],
+                }],
+            }
+        );
+    }
+}

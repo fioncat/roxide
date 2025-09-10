@@ -2,6 +2,7 @@ use std::process;
 
 mod api;
 mod batch;
+mod check;
 mod cmd;
 mod config;
 mod db;

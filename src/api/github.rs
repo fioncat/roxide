@@ -556,4 +556,19 @@ mod tests {
             }
         );
     }
+
+    #[tokio::test]
+    async fn test_pull_request() {
+        // TODO: How to test PR?
+    }
+
+    #[tokio::test]
+    async fn test_action() {
+        // TODO: How to test action?
+    }
+
+    #[tokio::test]
+    async fn test_job_log() {
+        // TODO: How to test job logs?
+    }
 }

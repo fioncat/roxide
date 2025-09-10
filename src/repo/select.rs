@@ -766,7 +766,7 @@ pub fn select_owners(
     Ok(list)
 }
 
-#[derive(Debug, Args, Default)]
+#[derive(Debug, Args, Clone, Default)]
 pub struct SelectPullRequestsArgs {
     /// Filter a specific pull request by ID.
     pub id: Option<u64>,
@@ -797,7 +797,7 @@ impl SelectPullRequestsArgs {
             bail!("no pull request found");
         }
 
-        if prs.len() == 1 {
+        if filter.is_none() && prs.len() == 1 {
             return Ok(prs.remove(0));
         }
 
@@ -913,9 +913,9 @@ pub fn select_job_from_action(
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{env, path::Path};
 
-    use crate::config::context;
+    use crate::{api::JobGroup, config::context};
 
     use super::*;
 
@@ -1727,6 +1727,207 @@ mod tests {
         for case in cases {
             let list = select_owners(&ctx, case.remote, case.limit).unwrap();
             assert_eq!(list, case.expect);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_select_pull_request() {
+        let mut ctx = context::tests::build_test_context("select_pull_request");
+        ctx.current_dir = Path::new(&ctx.cfg.workspace)
+            .join("github")
+            .join("fioncat")
+            .join("nvimdots");
+
+        let pr1 = PullRequest {
+            id: 1,
+            base: "main".to_string(),
+            head: PullRequestHead::Branch("test".to_string()),
+            title: "Test PR 1".to_string(),
+            web_url: "https://example.com/pull/1".to_string(),
+            body: None,
+        };
+        let pr2 = PullRequest {
+            id: 2,
+            base: "main".to_string(),
+            head: PullRequestHead::Branch("dev".to_string()),
+            title: "Test PR 2".to_string(),
+            web_url: "https://example.com/pull/2".to_string(),
+            body: None,
+        };
+        let pr3 = PullRequest {
+            id: 3,
+            base: "main".to_string(),
+            head: PullRequestHead::Repository(HeadRepository {
+                owner: "fioncat".to_string(),
+                name: "nvimdots".to_string(),
+                branch: "main".to_string(),
+            }),
+            title: "Test PR 3".to_string(),
+            web_url: "https://example.com/pull/3".to_string(),
+            body: None,
+        };
+
+        #[derive(Debug)]
+        struct Case {
+            args: SelectPullRequestsArgs,
+            expect_many: Vec<PullRequest>,
+
+            filter: Option<&'static str>,
+            expect_one: Option<PullRequest>,
+        }
+
+        let cases = [
+            Case {
+                args: SelectPullRequestsArgs {
+                    id: None,
+                    all: true,
+                    base: None,
+                    upstream: UpstreamArgs { enable: false },
+                },
+                expect_many: vec![pr1.clone(), pr2.clone()],
+
+                filter: Some("Test PR 2"),
+                expect_one: Some(pr2.clone()),
+            },
+            Case {
+                // not in upstream mode, should not return pr3
+                args: SelectPullRequestsArgs {
+                    id: Some(3),
+                    all: true,
+                    base: None,
+                    upstream: UpstreamArgs { enable: false },
+                },
+                expect_many: vec![],
+
+                filter: None,
+                expect_one: None,
+            },
+            Case {
+                args: SelectPullRequestsArgs {
+                    id: None,
+                    all: true,
+                    base: None,
+                    upstream: UpstreamArgs { enable: true },
+                },
+                expect_many: vec![pr3.clone()],
+
+                filter: Some("Test PR 1"),
+                expect_one: None,
+            },
+            Case {
+                args: SelectPullRequestsArgs {
+                    id: None,
+                    all: true,
+                    base: Some("master".to_string()),
+                    upstream: UpstreamArgs { enable: false },
+                },
+                expect_many: vec![],
+
+                filter: None,
+                expect_one: None,
+            },
+        ];
+
+        for case in cases {
+            let prs = case.args.clone().select_many(&ctx, false).await.unwrap();
+            assert_eq!(prs, case.expect_many, "{case:?}");
+
+            if let Some(filter) = case.filter {
+                let result = case
+                    .args
+                    .clone()
+                    .select_one(&ctx, false, Some(filter))
+                    .await;
+                if let Some(ref expect) = case.expect_one {
+                    let pr = result.unwrap();
+                    assert_eq!(pr, expect.clone(), "{case:?}");
+                } else {
+                    let err = result.err().unwrap();
+                    assert_eq!(err.to_string(), "fzf no match found", "{case:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_select_job_from_action() {
+        let ctx = context::tests::build_test_context("select_job_from_action");
+
+        let action = Action {
+            job_groups: vec![
+                JobGroup {
+                    name: "group-1".to_string(),
+                    jobs: vec![
+                        Job {
+                            id: 1,
+                            name: "test-job-1".to_string(),
+                            ..Default::default()
+                        },
+                        Job {
+                            id: 2,
+                            name: "test-job-2".to_string(),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                JobGroup {
+                    name: "group-2".to_string(),
+                    jobs: vec![Job {
+                        id: 3,
+                        name: "test-job-3".to_string(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        #[derive(Debug)]
+        struct Case {
+            id: Option<u64>,
+            filter: Option<&'static str>,
+            expect: u64,
+        }
+
+        let cases = [
+            Case {
+                id: Some(3),
+                filter: None,
+                expect: 3,
+            },
+            Case {
+                id: None,
+                filter: Some("group-1/test-job-2"),
+                expect: 2,
+            },
+            Case {
+                id: Some(4),
+                filter: None,
+                expect: 0,
+            },
+            Case {
+                id: None,
+                filter: Some("group-2/test-job-3"),
+                expect: 3,
+            },
+            Case {
+                id: None,
+                filter: Some("group-2/test-job-1"),
+                expect: 0,
+            },
+        ];
+
+        for case in cases {
+            let result = select_job_from_action(&ctx, action.clone(), case.id, case.filter);
+            if case.expect == 0 {
+                assert!(result.is_err(), "{case:?}");
+            } else {
+                let job = result.unwrap();
+                assert_eq!(job.id, case.expect, "{case:?}");
+                assert_eq!(job.name, format!("test-job-{}", case.expect), "{case:?}");
+            }
         }
     }
 }
