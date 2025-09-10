@@ -506,6 +506,7 @@ pub mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
