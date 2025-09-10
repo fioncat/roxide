@@ -32,6 +32,6 @@ impl Command for ListBranchCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("branch"))
+        clap::Command::new("branch")
     }
 }

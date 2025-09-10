@@ -46,6 +46,6 @@ impl Command for ListJobCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("job"))
+        clap::Command::new("job")
     }
 }

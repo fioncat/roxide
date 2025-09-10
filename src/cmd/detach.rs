@@ -36,6 +36,6 @@ impl Command for DetachCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("detach"))
+        clap::Command::new("detach")
     }
 }

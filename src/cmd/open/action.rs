@@ -35,6 +35,6 @@ impl Command for OpenActionCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("action"))
+        clap::Command::new("action")
     }
 }

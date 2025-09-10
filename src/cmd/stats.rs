@@ -57,6 +57,6 @@ impl Command for StatsCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("stats"))
+        clap::Command::new("stats")
     }
 }

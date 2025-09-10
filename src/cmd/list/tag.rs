@@ -32,6 +32,6 @@ impl Command for ListTagCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("tag"))
+        clap::Command::new("tag")
     }
 }

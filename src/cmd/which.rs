@@ -32,6 +32,6 @@ impl Command for WhichCommand {
     }
 
     fn complete_command() -> clap::Command {
-        Self::augment_args(clap::Command::new("which"))
+        clap::Command::new("which")
     }
 }
