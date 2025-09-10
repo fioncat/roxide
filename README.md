@@ -14,7 +14,7 @@ Download from [release](https://github.com/fioncat/roxide/releases).
 
 Add a basic config in `~/.config/roxide/config.toml`:
 
-```
+```toml
 # ~/.config/roxide/config.toml
 
 workspace = "~/dev"
@@ -78,6 +78,7 @@ Add a test remote config in `~/.config/roxide/remotes/test.toml`
 
 ```toml
 # ~/.config/roxide/remotes/test.toml
+
 icon = ""
 
 [owners.rust]

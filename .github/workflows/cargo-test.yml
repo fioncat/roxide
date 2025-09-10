@@ -20,5 +20,8 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
+      - name: Install fzf
+        run: sudo apt-get install fzf
+
       - name: Cargo Test
         run: cargo test
