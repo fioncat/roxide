@@ -913,9 +913,11 @@ pub fn select_job_from_action(
 
 #[cfg(test)]
 mod tests {
-    use std::{env, path::Path};
+    use std::env;
+    use std::path::Path;
 
-    use crate::{api::JobGroup, config::context};
+    use crate::api::JobGroup;
+    use crate::config::context;
 
     use super::*;
 
@@ -929,6 +931,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -985,6 +988,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1107,6 +1111,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1129,6 +1134,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 4,
                 remote: "github".to_string(),
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
@@ -1151,6 +1157,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1192,6 +1199,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 4,
                 remote: "github".to_string(),
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
@@ -1215,6 +1223,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1243,6 +1252,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1269,6 +1279,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -1314,6 +1325,7 @@ mod tests {
         assert_eq!(
             repo,
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),

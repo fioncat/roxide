@@ -15,6 +15,8 @@ use crate::term::list::ListItem;
 /// The database model for a repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Repository {
+    pub id: u64,
+
     /// Remote name, e.g. "github"
     pub remote: String,
     /// Owner name, e.g. "fioncat"
@@ -132,14 +134,15 @@ impl Repository {
 
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
         Ok(Self {
-            remote: row.get(0)?,
-            owner: row.get(1)?,
-            name: row.get(2)?,
-            path: row.get(3)?,
-            pin: row.get(4)?,
-            sync: row.get(5)?,
-            last_visited_at: row.get(6)?,
-            visited_count: row.get(7)?,
+            id: row.get(0)?,
+            remote: row.get(1)?,
+            owner: row.get(2)?,
+            name: row.get(3)?,
+            path: row.get(4)?,
+            pin: row.get(5)?,
+            sync: row.get(6)?,
+            last_visited_at: row.get(7)?,
+            visited_count: row.get(8)?,
             new_created: false,
         })
     }
@@ -148,9 +151,9 @@ impl Repository {
 impl DisplayLevel {
     pub fn titles(&self) -> Vec<&'static str> {
         match self {
-            Self::Remote => vec!["Remote", "Owner", "Name"],
-            Self::Owner => vec!["Owner", "Name"],
-            Self::Name => vec!["Name"],
+            Self::Remote => vec!["ID", "Remote", "Owner", "Name"],
+            Self::Owner => vec!["ID", "Owner", "Name"],
+            Self::Name => vec!["ID", "Name"],
         }
     }
 }
@@ -158,6 +161,7 @@ impl DisplayLevel {
 impl ListItem for Repository {
     fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
         match title {
+            "ID" => self.id.to_string().into(),
             "Remote" => Cow::Borrowed(&self.remote),
             "Owner" => Cow::Borrowed(&self.owner),
             "Name" => Cow::Borrowed(&self.name),
@@ -196,7 +200,7 @@ impl<'a> RepositoryHandle<'a> {
     }
 
     /// Insert a new repository.
-    pub fn insert(&self, repo: &Repository) -> Result<()> {
+    pub fn insert(&self, repo: &Repository) -> Result<u64> {
         insert(self.tx, repo)
     }
 
@@ -263,6 +267,7 @@ impl<'a> RepositoryHandle<'a> {
 
 const TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS repo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     remote TEXT NOT NULL,
     owner TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -270,16 +275,15 @@ CREATE TABLE IF NOT EXISTS repo (
     pin INTEGER NOT NULL,
     sync INTEGER NOT NULL,
     last_visited_at INTEGER NOT NULL,
-    visited_count INTEGER NOT NULL,
-    PRIMARY KEY (remote, owner, name)
+    visited_count INTEGER NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_unique_path
 ON repo (path)
 WHERE path IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_repo_remote ON repo (remote);
-CREATE INDEX IF NOT EXISTS idx_repo_owner ON repo (remote, owner);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_full ON repo (remote, owner, name);
+
 CREATE INDEX IF NOT EXISTS idx_repo_last_visited_at ON repo (last_visited_at DESC);
 "#;
 
@@ -304,7 +308,7 @@ INSERT INTO repo (
 )
 "#;
 
-fn insert(tx: &Transaction, repo: &Repository) -> Result<()> {
+fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
     debug!("[db] Insert repo: {repo:?}");
     tx.execute(
         INSERT_SQL,
@@ -319,11 +323,13 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<()> {
             repo.visited_count,
         ],
     )?;
-    Ok(())
+    let id = tx.last_insert_rowid() as u64;
+    debug!("[db] Inserted repo id: {id}");
+    Ok(id)
 }
 
 const GET_SQL: &str = r#"
-SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
@@ -339,7 +345,7 @@ fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Option
 }
 
 const GET_BY_PATH_SQL: &str = r#"
-SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 WHERE path = ?1
 "#;
@@ -353,8 +359,8 @@ fn get_by_path(tx: &Transaction, path: &str) -> Result<Option<Repository>> {
 }
 
 const UPDATE_SQL: &str = r#"
-UPDATE repo SET last_visited_at = ?4, visited_count = ?5, pin = ?6, sync = ?7
-WHERE remote = ?1 AND owner = ?2 AND name = ?3
+UPDATE repo SET last_visited_at = ?2, visited_count = ?3, pin = ?4, sync = ?5
+WHERE id = ?1
 "#;
 
 fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
@@ -362,9 +368,7 @@ fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
     tx.execute(
         UPDATE_SQL,
         params![
-            repo.remote,
-            repo.owner,
-            repo.name,
+            repo.id,
             repo.last_visited_at,
             repo.visited_count,
             repo.pin,
@@ -376,12 +380,12 @@ fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
 
 const DELETE_SQL: &str = r#"
 DELETE FROM repo
-WHERE remote = ?1 AND owner = ?2 AND name = ?3
+WHERE id=?
 "#;
 
 fn delete(tx: &Transaction, repo: &Repository) -> Result<()> {
     debug!("[db] Delete repo: {repo:?}");
-    tx.execute(DELETE_SQL, params![repo.remote, repo.owner, repo.name])?;
+    tx.execute(DELETE_SQL, params![repo.id])?;
     Ok(())
 }
 
@@ -481,7 +485,7 @@ impl<'a> QueryOptions<'a> {
 }
 
 const QUERY_SQL: &str = r#"
-SELECT remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
 FROM repo
 {{where}}
 ORDER BY last_visited_at DESC
@@ -746,6 +750,7 @@ pub mod tests {
     pub fn test_repos() -> Vec<Repository> {
         vec![
             Repository {
+                id: 1,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
@@ -757,6 +762,7 @@ pub mod tests {
                 new_created: false,
             },
             Repository {
+                id: 2,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "otree".to_string(),
@@ -768,6 +774,7 @@ pub mod tests {
                 new_created: false,
             },
             Repository {
+                id: 3,
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "nvimdots".to_string(),
@@ -779,6 +786,7 @@ pub mod tests {
                 new_created: false,
             },
             Repository {
+                id: 4,
                 remote: "github".to_string(),
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
@@ -790,6 +798,7 @@ pub mod tests {
                 new_created: false,
             },
             Repository {
+                id: 5,
                 remote: "gitlab".to_string(),
                 owner: "fioncat".to_string(),
                 name: "someproject".to_string(),
@@ -801,6 +810,7 @@ pub mod tests {
                 new_created: false,
             },
             Repository {
+                id: 6,
                 remote: "gitlab".to_string(),
                 owner: "fioncat".to_string(),
                 name: "template".to_string(),

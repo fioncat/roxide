@@ -92,6 +92,7 @@ pub mod tests {
     #[test]
     fn test_commit() {
         let repo = repo::Repository {
+            id: 1,
             remote: "github".to_string(),
             owner: "fioncat".to_string(),
             name: "roxide".to_string(),
