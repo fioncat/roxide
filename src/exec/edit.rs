@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, bail};
 
 use crate::config::CmdConfig;
-use crate::exec::SilentExit;
 
 pub fn edit<P>(cfg: &CmdConfig, file: P) -> Result<()>
 where
@@ -17,8 +16,12 @@ where
 
     cmd.args(&cfg.args).arg(file.as_ref());
     match cmd.status() {
-        Ok(status) if status.success() => Ok(()),
-        Ok(_) => bail!(SilentExit { code: 130 }),
+        Ok(status) => {
+            if !status.success() {
+                bail!("editor exited with bad status: {status}");
+            }
+            Ok(())
+        }
         Err(e) => Err(e).with_context(|| format!("failed to run editor command {:?}", cfg.name)),
     }
 }
