@@ -129,18 +129,6 @@ mod tests {
 
     use super::*;
 
-    fn build_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        ensure_table(&tx).unwrap();
-        let owners = test_remote_owners();
-        for owner in owners {
-            insert(&tx, &owner).unwrap();
-        }
-        tx.commit().unwrap();
-        conn
-    }
-
     fn test_remote_owners() -> Vec<RemoteOwner<'static>> {
         vec![
             RemoteOwner {
@@ -156,6 +144,18 @@ mod tests {
                 expire_at: 6789,
             },
         ]
+    }
+
+    fn build_conn() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
+        let owners = test_remote_owners();
+        for owner in owners {
+            insert(&tx, &owner).unwrap();
+        }
+        tx.commit().unwrap();
+        conn
     }
 
     #[test]

@@ -7,6 +7,7 @@ mod detach;
 mod disk_usage;
 mod home;
 mod list;
+mod mirror;
 mod open;
 mod rebase;
 mod remove;
@@ -55,6 +56,7 @@ pub enum Commands {
     Home(home::HomeCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
+    Mirror(mirror::MirrorCommand),
     Open(open::OpenCommand),
     Rebase(rebase::RebaseCommand),
     #[command(alias = "rm")]
@@ -78,6 +80,7 @@ impl Command for App {
             Commands::DiskUsage(cmd) => cmd.run(ctx).await,
             Commands::Home(cmd) => cmd.run(ctx).await,
             Commands::List(cmd) => cmd.run(ctx).await,
+            Commands::Mirror(cmd) => cmd.run(ctx).await,
             Commands::Open(cmd) => cmd.run(ctx).await,
             Commands::Rebase(cmd) => cmd.run(ctx).await,
             Commands::Remove(cmd) => cmd.run(ctx).await,
@@ -103,6 +106,7 @@ impl Command for App {
                 disk_usage::DiskUsageCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 list::ListCommand::complete_command(),
+                mirror::MirrorCommand::complete_command(),
                 open::OpenCommand::complete_command(),
                 rebase::RebaseCommand::complete_command(),
                 remove::RemoveCommand::complete_command(),
@@ -237,4 +241,14 @@ pub struct IgnoreArgs {
     /// and simple wildcard matching. Examples: "*.log", "target", "src/**/test"
     #[arg(name = "ignore", long = "ignore", short = 'I')]
     pub patterns: Option<Vec<String>>,
+}
+
+#[derive(Debug, Args, Clone, Copy)]
+pub struct ThinArgs {
+    /// Add `--depth 1` parameter when cloning repositories for faster cloning of large
+    /// repositories. Use this parameter if you only need temporary access to the repository.
+    /// Note: recommended for readonly mode only, as features like rebase and squash will not
+    /// work with shallow repositories.
+    #[arg(name = "thin", long = "thin", short = 't')]
+    pub enable: bool,
 }

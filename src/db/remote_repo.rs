@@ -177,18 +177,6 @@ mod tests {
 
     use super::*;
 
-    fn build_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        ensure_table(&tx).unwrap();
-        let repos = test_remote_repos();
-        for repo in repos {
-            insert(&tx, &repo).unwrap();
-        }
-        tx.commit().unwrap();
-        conn
-    }
-
     fn test_remote_repos() -> Vec<RemoteRepository<'static>> {
         vec![
             RemoteRepository {
@@ -236,6 +224,18 @@ mod tests {
                 expire_at: 1234567600,
             },
         ]
+    }
+
+    fn build_conn() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
+        let repos = test_remote_repos();
+        for repo in repos {
+            insert(&tx, &repo).unwrap();
+        }
+        tx.commit().unwrap();
+        conn
     }
 
     #[test]

@@ -53,7 +53,8 @@ impl Repository {
             return PathBuf::from(path);
         }
 
-        PathBuf::from(workspace.as_ref())
+        workspace
+            .as_ref()
             .join(Self::escaped_path(&self.remote).as_ref())
             .join(Self::escaped_path(&self.owner).as_ref())
             .join(&self.name)
@@ -118,7 +119,7 @@ impl Repository {
         self.visited_count += 1;
     }
 
-    fn escaped_path<'a>(raw: &'a str) -> Cow<'a, str> {
+    pub fn escaped_path<'a>(raw: &'a str) -> Cow<'a, str> {
         use std::path::MAIN_SEPARATOR;
 
         if !raw.contains(MAIN_SEPARATOR) {
@@ -202,6 +203,10 @@ impl<'a> RepositoryHandle<'a> {
     /// Insert a new repository.
     pub fn insert(&self, repo: &Repository) -> Result<u64> {
         insert(self.tx, repo)
+    }
+
+    pub fn get_by_id(&self, id: u64) -> Result<Option<Repository>> {
+        get_by_id(self.tx, id)
     }
 
     /// Same as `get_optional`, but returns an error if not found.
@@ -326,6 +331,20 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
     let id = tx.last_insert_rowid() as u64;
     debug!("[db] Inserted repo id: {id}");
     Ok(id)
+}
+
+const GET_BY_ID_SQL: &str = r#"
+SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+FROM repo
+WHERE id = ?1
+"#;
+
+fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Repository>> {
+    debug!("[db] Get repo by id: {id}");
+    let mut stmt = tx.prepare(GET_BY_ID_SQL)?;
+    let repo = stmt.query_row([id], Repository::from_row).optional()?;
+    debug!("[db] Result: {repo:?}");
+    Ok(repo)
 }
 
 const GET_SQL: &str = r#"
@@ -735,18 +754,6 @@ pub mod tests {
         }
     }
 
-    fn build_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        ensure_table(&tx).unwrap();
-        let repos = test_repos();
-        for repo in repos {
-            insert(&tx, &repo).unwrap();
-        }
-        tx.commit().unwrap();
-        conn
-    }
-
     pub fn test_repos() -> Vec<Repository> {
         vec![
             Repository {
@@ -824,6 +831,19 @@ pub mod tests {
         ]
     }
 
+    fn build_conn() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
+        let repos = test_repos();
+        for repo in repos {
+            let id = insert(&tx, &repo).unwrap();
+            assert_eq!(id, repo.id);
+        }
+        tx.commit().unwrap();
+        conn
+    }
+
     #[test]
     fn test_insert() {
         let mut conn = build_conn();
@@ -833,6 +853,17 @@ pub mod tests {
             let result = get(&tx, &repo.remote, &repo.owner, &repo.name)
                 .unwrap()
                 .unwrap();
+            assert_eq!(result, repo);
+        }
+    }
+
+    #[test]
+    fn test_get_by_id() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = test_repos();
+        for repo in repos {
+            let result = get_by_id(&tx, repo.id).unwrap().unwrap();
             assert_eq!(result, repo);
         }
     }

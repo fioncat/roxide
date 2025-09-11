@@ -13,6 +13,8 @@ use crate::db::repo::{QueryOptions, RemoteState};
 use crate::debug;
 use crate::exec::git::branch::Branch;
 use crate::exec::git::tag::Tag;
+use crate::repo::current::get_current_repo;
+use crate::repo::mirror::MirrorSelector;
 
 use super::App;
 
@@ -103,6 +105,7 @@ register_complete!(
     tag_method,
     config_type,
     config_name,
+    mirror_name,
 );
 
 fn complete_head(
@@ -319,6 +322,28 @@ fn complete_config_name(
     Ok(candidates)
 }
 
+fn complete_mirror_name(
+    ctx: &ConfigContext,
+    _: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete mirror name, current: {current:?}");
+
+    let repo = get_current_repo(ctx)?;
+    debug!("[complete] Current repo: {repo:?}");
+
+    let selector = MirrorSelector::new(ctx, &repo);
+    let mirrors = selector.select_many()?;
+
+    let items = mirrors
+        .into_iter()
+        .filter(|m| m.name.starts_with(current))
+        .map(|m| CompletionCandidate::new(m.name))
+        .collect::<Vec<_>>();
+    debug!("[complete] Results: {items:?}");
+    Ok(items)
+}
+
 #[inline]
 fn remotes_to_candidates(remotes: Vec<RemoteState>, current: &str) -> Vec<CompletionCandidate> {
     let candidates = remotes
@@ -349,7 +374,18 @@ mod tests {
         F: Fn(&ConfigContext, Vec<String>, &str) -> Result<Vec<CompletionCandidate>>,
     {
         let name = format!("complete_{name}");
-        let ctx = context::tests::build_test_context(&name);
+        let mut ctx = context::tests::build_test_context(&name);
+
+        if name == "complete_mirror_name" {
+            let repo = ctx
+                .get_db()
+                .unwrap()
+                .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+                .unwrap()
+                .unwrap();
+            let path = repo.get_path(&ctx.cfg.workspace);
+            ctx.current_dir = path;
+        }
 
         for case in cases {
             let mut args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
@@ -571,5 +607,38 @@ mod tests {
         ];
 
         run_cases("config_name", cases, complete_config_name);
+    }
+
+    #[test]
+    fn test_complete_mirror_name() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-go",
+                expect: vec!["roxide-golang"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-rs",
+                expect: vec!["roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "xxx",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("mirror_name", cases, complete_mirror_name);
     }
 }

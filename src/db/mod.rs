@@ -1,3 +1,4 @@
+pub mod mirror;
 pub mod remote_owner;
 pub mod remote_repo;
 pub mod repo;
@@ -25,6 +26,7 @@ impl Database {
     fn ensure_tables(&self) -> Result<()> {
         self.with_transaction(|tx| {
             tx.repo().ensure_table()?;
+            tx.mirror().ensure_table()?;
             tx.remote_owner().ensure_table()?;
             tx.remote_repo().ensure_table()?;
             Ok(())
@@ -63,6 +65,10 @@ impl DatabaseHandle<'_> {
         repo::RepositoryHandle::new(&self.tx)
     }
 
+    pub fn mirror<'a>(&'a self) -> mirror::MirrorHandle<'a> {
+        mirror::MirrorHandle::new(&self.tx)
+    }
+
     pub fn remote_owner<'a>(&'a self) -> remote_owner::RemoteOwnerHandle<'a> {
         remote_owner::RemoteOwnerHandle::new(&self.tx)
     }
@@ -81,6 +87,7 @@ pub mod tests {
 
     use super::*;
 
+    pub use super::mirror::tests::test_mirrors;
     pub use super::repo::tests::test_repos;
 
     fn build_db(name: &str) -> Database {

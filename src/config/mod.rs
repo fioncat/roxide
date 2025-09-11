@@ -2,6 +2,7 @@ pub mod context;
 pub mod hook;
 pub mod remote;
 
+use std::collections::HashMap;
 use std::io;
 use std::mem::take;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,11 @@ pub struct Config {
 
     #[serde(default)]
     pub data_dir: String,
+
+    #[serde(default)]
+    pub mirrors_dir: String,
+
+    pub mirror_icon: Option<String>,
 
     #[serde(default = "Config::default_branch")]
     pub default_branch: String,
@@ -41,6 +47,9 @@ pub struct Config {
 
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
+
+    #[serde(skip)]
+    remotes_index: Option<HashMap<String, usize>>,
 
     #[serde(skip)]
     pub hooks: hook::HooksConfig,
@@ -67,6 +76,8 @@ pub struct CmdConfig {
 }
 
 impl Config {
+    const REMOTES_INDEX_THRESHOLD: usize = 10;
+
     pub fn read<P>(path: Option<P>) -> Result<Self>
     where
         P: AsRef<Path>,
@@ -106,14 +117,27 @@ impl Config {
         cfg.dir = path;
         cfg.remotes_dir = cfg.dir.join("remotes");
         cfg.hooks_dir = cfg.dir.join("hooks");
-        cfg.validate(&home_dir)
-            .context("failed to validate base config")?;
 
         let hooks = hook::HooksConfig::read(&cfg.hooks_dir)?;
         let remotes = remote::RemoteConfig::read(&cfg.remotes_dir, &hooks)?;
 
         cfg.hooks = hooks;
         cfg.remotes = remotes;
+        if cfg.remotes.len() > Self::REMOTES_INDEX_THRESHOLD {
+            let remotes_index = cfg
+                .remotes
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (r.name.clone(), i))
+                .collect();
+            debug!(
+                "[config] Remotes length exceeded threshold, build remotes index: {remotes_index:?}"
+            );
+            cfg.remotes_index = Some(remotes_index);
+        }
+
+        cfg.validate(&home_dir)
+            .context("failed to validate base config")?;
 
         debug!("[config] Load config done");
         Ok(cfg)
@@ -124,9 +148,19 @@ impl Config {
     }
 
     pub fn get_remote(&self, name: &str) -> Result<&remote::RemoteConfig> {
-        match self.remotes.iter().find(|r| r.name == name) {
+        match self.get_rempte_optional(name) {
             Some(r) => Ok(r),
             None => bail!("remote {name:?} not found"),
+        }
+    }
+
+    pub fn get_rempte_optional(&self, name: &str) -> Option<&remote::RemoteConfig> {
+        match self.remotes_index {
+            Some(ref remotes_index) => {
+                let idx = remotes_index.get(name)?;
+                Some(&self.remotes[*idx])
+            }
+            None => self.remotes.iter().find(|r| r.name == name),
         }
     }
 
@@ -151,6 +185,20 @@ impl Config {
             bail!("data_dir path {:?} must be absolute", self.data_dir);
         }
         ensure_dir(&self.data_dir)?;
+
+        self.mirrors_dir = expandenv(take(&mut self.mirrors_dir));
+        if self.mirrors_dir.is_empty() {
+            if self.get_remote("mirrors").is_ok() {
+                bail!(
+                    "the mirrors dir needs to occupy the mirrors path under the workspace, but the path is currently occupied by a remote with the same name. You need to manually specify a mirrors path"
+                );
+            }
+            let mirrors_dir = Path::new(&self.workspace).join("mirrors");
+            self.mirrors_dir = format!("{}", mirrors_dir.display());
+        }
+        if Path::new(&self.mirrors_dir).is_relative() {
+            bail!("mirrors_dir path {:?} must be absolute", self.mirrors_dir);
+        }
 
         if self.default_branch.is_empty() {
             self.default_branch = Self::default_branch();
@@ -215,6 +263,8 @@ impl Default for Config {
         Self {
             workspace: String::new(),
             data_dir: String::new(),
+            mirrors_dir: String::new(),
+            mirror_icon: None,
             default_branch: Self::default_branch(),
             fzf: Self::default_fzf(),
             git: Self::default_git(),
@@ -222,6 +272,7 @@ impl Default for Config {
             edit: Self::default_edit(),
             stats_ignore: vec![],
             remotes: vec![],
+            remotes_index: None,
             hooks: hook::HooksConfig::default(),
             path: PathBuf::new(),
             dir: PathBuf::new(),
@@ -259,6 +310,8 @@ mod tests {
         let expect = Config {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
+            mirrors_dir: format!("{}/dev/mirrors", home_dir.display()),
+            mirror_icon: None,
             default_branch: "main".to_string(),
             fzf: Config::default_fzf(),
             git: Config::default_git(),
@@ -269,6 +322,7 @@ mod tests {
             edit: Config::default_edit(),
             stats_ignore: vec![],
             remotes: super::remote::tests::expect_remotes(),
+            remotes_index: None,
             hooks: super::hook::tests::expect_hooks(),
             dir: path.clone(),
             path: path.join("config.toml"),

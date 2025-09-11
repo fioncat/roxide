@@ -1,4 +1,5 @@
 use anyhow::Result;
+use anyhow::bail;
 use async_trait::async_trait;
 use clap::Args;
 
@@ -6,6 +7,7 @@ use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
+use crate::repo::mirror::clean_mirrors;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
@@ -38,6 +40,9 @@ impl Command for RemoveRepoCommand {
         let selector = RepoSelector::new(&ctx, &self.select_repo);
         if !self.recursive {
             let repo = selector.select_one(false, true).await?;
+            if repo.new_created {
+                bail!("could not find this repo");
+            }
             confirm!("Are you sure to remove repository {}", repo.full_name());
             return self.remove(&ctx, repo);
         }
@@ -69,6 +74,7 @@ impl Command for RemoveRepoCommand {
 
 impl RemoveRepoCommand {
     fn remove(&self, ctx: &ConfigContext, repo: Repository) -> Result<()> {
+        clean_mirrors(ctx, &repo)?;
         let db = ctx.get_db()?;
         let op = RepoOperator::load(ctx, &repo)?;
         op.remove()?;

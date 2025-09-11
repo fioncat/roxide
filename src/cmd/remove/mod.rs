@@ -1,4 +1,5 @@
 mod branch;
+mod mirror;
 mod repo;
 mod tag;
 
@@ -20,6 +21,7 @@ pub struct RemoveCommand {
 #[derive(Subcommand)]
 pub enum RemoveCommands {
     Branch(branch::RemoveBranchCommand),
+    Mirror(mirror::RemoveMirrorCommand),
     Repo(repo::RemoveRepoCommand),
     Tag(tag::RemoveTagCommand),
 }
@@ -29,6 +31,7 @@ impl Command for RemoveCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             RemoveCommands::Branch(cmd) => cmd.run(ctx).await,
+            RemoveCommands::Mirror(cmd) => cmd.run(ctx).await,
             RemoveCommands::Repo(cmd) => cmd.run(ctx).await,
             RemoveCommands::Tag(cmd) => cmd.run(ctx).await,
         }
@@ -41,6 +44,7 @@ impl Command for RemoveCommand {
             .disable_version_flag(true)
             .subcommands([
                 branch::RemoveBranchCommand::complete_command(),
+                mirror::RemoveMirrorCommand::complete_command(),
                 repo::RemoveRepoCommand::complete_command(),
                 tag::RemoveTagCommand::complete_command(),
             ])
