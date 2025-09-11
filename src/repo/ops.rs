@@ -534,14 +534,21 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         self.git().execute(args, "Commit squashed changes")
     }
 
+    pub fn get_clone_url(&self) -> Option<String> {
+        let domain = self.remote.clone.as_ref()?;
+        Some(self.repo.get_clone_url(domain, self.owner.ssh))
+    }
+
     pub fn path(&self) -> &Path {
         self.path.as_ref()
     }
 
-    #[inline]
-    fn get_clone_url(&self) -> Option<String> {
-        let domain = self.remote.clone.as_ref()?;
-        Some(self.repo.get_clone_url(domain, self.owner.ssh))
+    pub fn remote(&self) -> &RemoteConfig {
+        self.remote
+    }
+
+    pub fn owner(&self) -> OwnerConfigRef<'a> {
+        self.owner
     }
 
     #[inline]

@@ -205,6 +205,10 @@ impl<'a> RepositoryHandle<'a> {
         insert(self.tx, repo)
     }
 
+    pub fn get_by_id(&self, id: u64) -> Result<Option<Repository>> {
+        get_by_id(self.tx, id)
+    }
+
     /// Same as `get_optional`, but returns an error if not found.
     pub fn get(&self, remote: &str, owner: &str, name: &str) -> Result<Option<Repository>> {
         get(self.tx, remote, owner, name)
@@ -327,6 +331,20 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
     let id = tx.last_insert_rowid() as u64;
     debug!("[db] Inserted repo id: {id}");
     Ok(id)
+}
+
+const GET_BY_ID_SQL: &str = r#"
+SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+FROM repo
+WHERE id = ?1
+"#;
+
+fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Repository>> {
+    debug!("[db] Get repo by id: {id}");
+    let mut stmt = tx.prepare(GET_BY_ID_SQL)?;
+    let repo = stmt.query_row([id], Repository::from_row).optional()?;
+    debug!("[db] Result: {repo:?}");
+    Ok(repo)
 }
 
 const GET_SQL: &str = r#"
@@ -835,6 +853,17 @@ pub mod tests {
             let result = get(&tx, &repo.remote, &repo.owner, &repo.name)
                 .unwrap()
                 .unwrap();
+            assert_eq!(result, repo);
+        }
+    }
+
+    #[test]
+    fn test_get_by_id() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = test_repos();
+        for repo in repos {
+            let result = get_by_id(&tx, repo.id).unwrap().unwrap();
             assert_eq!(result, repo);
         }
     }

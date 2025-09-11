@@ -18,7 +18,7 @@ rox_home() {
 rox() {
     action=$1
     case "${action}" in
-    home)
+    home | mirror)
         rox_home "$@"
         ;;
 

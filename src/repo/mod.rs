@@ -1,5 +1,6 @@
 pub mod current;
 pub mod disk_usage;
+pub mod mirror;
 pub mod ops;
 pub mod select;
 pub mod wait_action;

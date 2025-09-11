@@ -24,9 +24,23 @@ pub struct Mirror {
     pub last_visited_at: u64,
 
     pub visited_count: u32,
+
+    pub new_created: bool,
 }
 
 impl Mirror {
+    pub fn new_from_repo(repo: &Repository, name: Option<String>) -> Self {
+        let name = name.unwrap_or(format!("{}-mirror", repo.name));
+        Self {
+            repo_id: repo.id,
+            remote: repo.remote.clone(),
+            owner: repo.owner.clone(),
+            name,
+            new_created: true,
+            ..Default::default()
+        }
+    }
+
     pub fn get_path<P: AsRef<Path>>(&self, mirrors_dir: P) -> PathBuf {
         mirrors_dir
             .as_ref()
@@ -35,15 +49,13 @@ impl Mirror {
             .join(&self.name)
     }
 
-    pub fn into_repo<P: AsRef<Path>>(self, mirrors_dir: P) -> Repository {
-        let path = self.get_path(mirrors_dir);
-        let path = format!("{}", path.display());
+    pub fn into_repo(self) -> Repository {
         Repository {
             id: self.id,
             remote: self.remote,
             owner: self.owner,
             name: self.name,
-            path: Some(path),
+            path: None,
             last_visited_at: self.last_visited_at,
             visited_count: self.visited_count,
             ..Default::default()
@@ -65,6 +77,7 @@ impl Mirror {
             name: row.get(4)?,
             last_visited_at: row.get(5)?,
             visited_count: row.get(6)?,
+            new_created: false,
         })
     }
 }
@@ -86,10 +99,6 @@ impl<'a> MirrorHandle<'a> {
         insert(self.tx, mirror)
     }
 
-    pub fn get_by_id(&self, id: u64) -> Result<Option<Mirror>> {
-        get_by_id(self.tx, id)
-    }
-
     pub fn get(&self, remote: &str, owner: &str, name: &str) -> Result<Option<Mirror>> {
         get(self.tx, remote, owner, name)
     }
@@ -98,8 +107,8 @@ impl<'a> MirrorHandle<'a> {
         update(self.tx, mirror)
     }
 
-    pub fn delete(&self, mirror: &Mirror) -> Result<()> {
-        delete(self.tx, mirror)
+    pub fn delete(&self, id: u64) -> Result<()> {
+        delete(self.tx, id)
     }
 
     pub fn delete_by_repo_id(&self, repo_id: u64) -> Result<()> {
@@ -164,21 +173,6 @@ fn insert(tx: &Transaction, mirror: &Mirror) -> Result<u64> {
     Ok(id)
 }
 
-const GET_BY_ID_SQL: &str = r#"
-SELECT id, repo_id, remote, owner, name, last_visited_at, visited_count
-FROM mirror
-WHERE id = ?1
-"#;
-
-fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Mirror>> {
-    debug!("[db] Get mirror by id: {id}");
-    let mirror = tx
-        .query_row(GET_BY_ID_SQL, params![id], Mirror::from_row)
-        .optional()?;
-    debug!("[db] Result: {mirror:?}");
-    Ok(mirror)
-}
-
 const GET_SQL: &str = r#"
 SELECT id, repo_id, remote, owner, name, last_visited_at, visited_count
 FROM mirror
@@ -212,9 +206,9 @@ const DELETE_SQL: &str = r#"
 DELETE FROM mirror WHERE id = ?1
 "#;
 
-fn delete(tx: &Transaction, mirror: &Mirror) -> Result<()> {
-    debug!("[db] Delete mirror: {mirror:?}");
-    tx.execute(DELETE_SQL, params![mirror.id])?;
+fn delete(tx: &Transaction, id: u64) -> Result<()> {
+    debug!("[db] Delete mirror: {id}");
+    tx.execute(DELETE_SQL, params![id])?;
     Ok(())
 }
 
@@ -264,6 +258,7 @@ pub mod tests {
                 repo_id: 1,
                 last_visited_at: 1234,
                 visited_count: 12,
+                new_created: false,
             },
             Mirror {
                 id: 2,
@@ -273,6 +268,7 @@ pub mod tests {
                 repo_id: 1,
                 last_visited_at: 3456,
                 visited_count: 1,
+                new_created: false,
             },
             Mirror {
                 id: 3,
@@ -282,6 +278,7 @@ pub mod tests {
                 repo_id: 1,
                 last_visited_at: 89,
                 visited_count: 3,
+                new_created: false,
             },
         ]
     }
@@ -308,17 +305,6 @@ pub mod tests {
             let result = get(&tx, &mirror.remote, &mirror.owner, &mirror.name)
                 .unwrap()
                 .unwrap();
-            assert_eq!(result, mirror);
-        }
-    }
-
-    #[test]
-    fn test_get_by_id() {
-        let mut conn = build_conn();
-        let tx = conn.transaction().unwrap();
-        let mirrors = test_mirrors();
-        for mirror in mirrors {
-            let result = get_by_id(&tx, mirror.id).unwrap().unwrap();
             assert_eq!(result, mirror);
         }
     }
@@ -357,7 +343,7 @@ pub mod tests {
         let mirror = get(&tx, "github", "fioncat", "roxide-mirror")
             .unwrap()
             .unwrap();
-        delete(&tx, &mirror).unwrap();
+        delete(&tx, mirror.id).unwrap();
         tx.commit().unwrap();
 
         let tx = conn.transaction().unwrap();

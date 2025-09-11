@@ -25,6 +25,8 @@ pub struct Config {
     #[serde(default)]
     pub mirrors_dir: String,
 
+    pub mirror_icon: Option<String>,
+
     #[serde(default = "Config::default_branch")]
     pub default_branch: String,
 
@@ -262,6 +264,7 @@ impl Default for Config {
             workspace: String::new(),
             data_dir: String::new(),
             mirrors_dir: String::new(),
+            mirror_icon: None,
             default_branch: Self::default_branch(),
             fzf: Self::default_fzf(),
             git: Self::default_git(),
@@ -308,6 +311,7 @@ mod tests {
             workspace: format!("{}/dev", home_dir.display()),
             data_dir: format!("{}/.local/share/roxide", home_dir.display()),
             mirrors_dir: format!("{}/dev/mirrors", home_dir.display()),
+            mirror_icon: None,
             default_branch: "main".to_string(),
             fzf: Config::default_fzf(),
             git: Config::default_git(),

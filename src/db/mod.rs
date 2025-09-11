@@ -26,6 +26,7 @@ impl Database {
     fn ensure_tables(&self) -> Result<()> {
         self.with_transaction(|tx| {
             tx.repo().ensure_table()?;
+            tx.mirror().ensure_table()?;
             tx.remote_owner().ensure_table()?;
             tx.remote_repo().ensure_table()?;
             Ok(())
@@ -62,6 +63,10 @@ pub struct DatabaseHandle<'a> {
 impl DatabaseHandle<'_> {
     pub fn repo<'a>(&'a self) -> repo::RepositoryHandle<'a> {
         repo::RepositoryHandle::new(&self.tx)
+    }
+
+    pub fn mirror<'a>(&'a self) -> mirror::MirrorHandle<'a> {
+        mirror::MirrorHandle::new(&self.tx)
     }
 
     pub fn remote_owner<'a>(&'a self) -> remote_owner::RemoteOwnerHandle<'a> {

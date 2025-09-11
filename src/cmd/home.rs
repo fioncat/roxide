@@ -1,9 +1,13 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, complete};
+use crate::cmd::{CacheArgs, ThinArgs, complete};
 use crate::config::context::ConfigContext;
+use crate::db::repo::Repository;
+use crate::repo::mirror::get_current_mirror;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
 use crate::{confirm, debug};
@@ -24,12 +28,8 @@ pub struct HomeCommand {
     #[arg(long, short)]
     pub local: bool,
 
-    /// Add `--depth 1` parameter when cloning repositories for faster cloning of large
-    /// repositories. Use this parameter if you only need temporary access to the repository.
-    /// Note: recommended for readonly mode only, as features like rebase and squash will not
-    /// work with shallow repositories.
-    #[arg(long, short)]
-    pub thin: bool,
+    #[clap(flatten)]
+    pub thin: ThinArgs,
 }
 
 #[async_trait]
@@ -38,10 +38,13 @@ impl Command for HomeCommand {
         debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
 
-        let selector = RepoSelector::new(&ctx, &self.select_repo);
-        let mut repo = selector
-            .select_one(self.cache.force_no_cache, self.local)
-            .await?;
+        let mut repo = match self.get_target(&ctx).await? {
+            HomeTarget::Repository(r) => r,
+            HomeTarget::Path(path) => {
+                println!("{}", path.display());
+                return Ok(());
+            }
+        };
 
         let remote = ctx.cfg.get_remote(&repo.remote)?;
         let owner = remote.get_owner(&repo.owner);
@@ -57,7 +60,7 @@ impl Command for HomeCommand {
 
         let path = repo.get_path(&ctx.cfg.workspace);
         let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
-        op.ensure_create(self.thin, None)?;
+        op.ensure_create(self.thin.enable, None)?;
 
         debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());
@@ -66,5 +69,37 @@ impl Command for HomeCommand {
 
     fn complete_command() -> clap::Command {
         clap::Command::new("home").args(complete::repo_args())
+    }
+}
+
+enum HomeTarget {
+    Repository(Repository),
+    Path(PathBuf),
+}
+
+impl HomeCommand {
+    async fn get_target(&self, ctx: &ConfigContext) -> Result<HomeTarget> {
+        if self.select_repo.head.is_none()
+            && let Some((repo, mirror)) = get_current_mirror(ctx)?
+        {
+            let mirror_path = mirror.get_path(&ctx.cfg.mirrors_dir);
+            debug!(
+                "[cmd] Current directory is a mirror: {mirror:?}, repo: {repo:?}, mirror_path: {mirror_path:?}"
+            );
+            if mirror_path == ctx.current_dir {
+                debug!(
+                    "[cmd] Current directory is the mirror root, return the upstream repository"
+                );
+                return Ok(HomeTarget::Repository(repo));
+            }
+            debug!("[cmd] Current directory is inside the mirror, return the mirror path");
+            return Ok(HomeTarget::Path(mirror_path));
+        };
+        debug!("[cmd] Not in mirror, select repository normally");
+        let selector = RepoSelector::new(ctx, &self.select_repo);
+        let repo = selector
+            .select_one(self.cache.force_no_cache, self.local)
+            .await?;
+        Ok(HomeTarget::Repository(repo))
     }
 }

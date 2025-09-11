@@ -13,6 +13,8 @@ use crate::db::repo::{QueryOptions, RemoteState};
 use crate::debug;
 use crate::exec::git::branch::Branch;
 use crate::exec::git::tag::Tag;
+use crate::repo::current::get_current_repo;
+use crate::repo::mirror::MirrorSelector;
 
 use super::App;
 
@@ -103,6 +105,7 @@ register_complete!(
     tag_method,
     config_type,
     config_name,
+    mirror_name,
 );
 
 fn complete_head(
@@ -317,6 +320,28 @@ fn complete_config_name(
     candidates.sort_by(|a, b| a.get_value().cmp(b.get_value()));
     debug!("[complete] Results: {candidates:?}");
     Ok(candidates)
+}
+
+fn complete_mirror_name(
+    ctx: &ConfigContext,
+    _: Vec<String>,
+    current: &str,
+) -> Result<Vec<CompletionCandidate>> {
+    debug!("[complete] Begin to complete mirror name, current: {current:?}");
+
+    let repo = get_current_repo(ctx)?;
+    debug!("[complete] Current repo: {repo:?}");
+
+    let selector = MirrorSelector::new(ctx, &repo);
+    let mirrors = selector.select_many()?;
+
+    let items = mirrors
+        .into_iter()
+        .filter(|m| m.name.starts_with(current))
+        .map(|m| CompletionCandidate::new(m.name))
+        .collect::<Vec<_>>();
+    debug!("[complete] Results: {items:?}");
+    Ok(items)
 }
 
 #[inline]
