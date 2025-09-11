@@ -374,7 +374,18 @@ mod tests {
         F: Fn(&ConfigContext, Vec<String>, &str) -> Result<Vec<CompletionCandidate>>,
     {
         let name = format!("complete_{name}");
-        let ctx = context::tests::build_test_context(&name);
+        let mut ctx = context::tests::build_test_context(&name);
+
+        if name == "complete_mirror_name" {
+            let repo = ctx
+                .get_db()
+                .unwrap()
+                .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+                .unwrap()
+                .unwrap();
+            let path = repo.get_path(&ctx.cfg.workspace);
+            ctx.current_dir = path;
+        }
 
         for case in cases {
             let mut args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
@@ -596,5 +607,38 @@ mod tests {
         ];
 
         run_cases("config_name", cases, complete_config_name);
+    }
+
+    #[test]
+    fn test_complete_mirror_name() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-go",
+                expect: vec!["roxide-golang"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-rs",
+                expect: vec!["roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "xxx",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("mirror_name", cases, complete_mirror_name);
     }
 }

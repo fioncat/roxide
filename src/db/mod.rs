@@ -87,6 +87,7 @@ pub mod tests {
 
     use super::*;
 
+    pub use super::mirror::tests::test_mirrors;
     pub use super::repo::tests::test_repos;
 
     fn build_db(name: &str) -> Database {

@@ -144,3 +144,248 @@ pub fn clean_mirrors(ctx: &ConfigContext, repo: &Repository) -> Result<()> {
     })?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::config::context;
+    use crate::db;
+    use crate::repo::ensure_dir;
+
+    use super::*;
+
+    #[test]
+    fn test_select_one() {
+        #[derive(Debug)]
+        struct Case {
+            name: Option<String>,
+            fuzzy: bool,
+            filter: Option<&'static str>,
+            expect: Mirror,
+        }
+
+        let cases = [
+            Case {
+                name: None,
+                fuzzy: true,
+                filter: Some("roxide-mirror"),
+                expect: Mirror {
+                    id: 1,
+                    repo_id: 1,
+                    name: "roxide-mirror".to_string(),
+                    owner: "fioncat".to_string(),
+                    remote: "github".to_string(),
+                    last_visited_at: 1234,
+                    visited_count: 12,
+                    new_created: false,
+                },
+            },
+            Case {
+                name: Some("golang".to_string()),
+                fuzzy: true,
+                filter: None,
+                expect: Mirror {
+                    id: 2,
+                    remote: "github".to_string(),
+                    owner: "fioncat".to_string(),
+                    name: "roxide-golang".to_string(),
+                    repo_id: 1,
+                    last_visited_at: 3456,
+                    visited_count: 1,
+                    new_created: false,
+                },
+            },
+            Case {
+                name: Some("roxide-rs".to_string()),
+                fuzzy: false,
+                filter: None,
+                expect: Mirror {
+                    id: 3,
+                    remote: "github".to_string(),
+                    owner: "fioncat".to_string(),
+                    name: "roxide-rs".to_string(),
+                    repo_id: 1,
+                    last_visited_at: 89,
+                    visited_count: 3,
+                    new_created: false,
+                },
+            },
+        ];
+
+        let ctx = context::tests::build_test_context("select_one_mirror");
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
+            .unwrap();
+        for case in cases {
+            let mut selector = MirrorSelector::new(&ctx, &repo);
+            selector.fzf_filter = case.filter;
+
+            let mirror = selector.select_one(case.name.clone(), case.fuzzy).unwrap();
+            assert_eq!(mirror, case.expect, "{case:?}");
+        }
+    }
+
+    #[test]
+    fn test_create() {
+        let ctx = context::tests::build_test_context("create_mirror");
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "kubernetes", "kubernetes"))
+            .unwrap()
+            .unwrap();
+
+        let selector = MirrorSelector::new(&ctx, &repo);
+        let mirror = selector.select_one(None, false).unwrap();
+        assert_eq!(
+            mirror,
+            Mirror {
+                repo_id: repo.id,
+                remote: repo.remote.clone(),
+                owner: repo.owner.clone(),
+                name: format!("{}-mirror", repo.name),
+                new_created: true,
+                ..Mirror::default()
+            }
+        );
+
+        let mirror = selector
+            .select_one(Some("test".to_string()), false)
+            .unwrap();
+        assert_eq!(
+            mirror,
+            Mirror {
+                repo_id: repo.id,
+                remote: repo.remote.clone(),
+                owner: repo.owner.clone(),
+                name: "test".to_string(),
+                new_created: true,
+                ..Mirror::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_select_many() {
+        let ctx = context::tests::build_test_context("select_many_mirrors");
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
+            .unwrap();
+        let mirrors = MirrorSelector::new(&ctx, &repo).select_many().unwrap();
+        let mut expect = db::tests::test_mirrors();
+        expect.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        assert_eq!(mirrors, expect);
+
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "kubernetes", "kubernetes"))
+            .unwrap()
+            .unwrap();
+        let mirrors = MirrorSelector::new(&ctx, &repo).select_many().unwrap();
+        assert!(mirrors.is_empty());
+    }
+
+    #[test]
+    fn test_current_mirror() {
+        let mut ctx = context::tests::build_test_context("current_mirror");
+        let expect_repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
+            .unwrap();
+
+        let expect_mirror = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.mirror().get("github", "fioncat", "roxide-mirror"))
+            .unwrap()
+            .unwrap();
+
+        let path = expect_mirror.get_path(&ctx.cfg.mirrors_dir);
+        ctx.current_dir = path;
+
+        let (repo, mirror) = get_current_mirror(&ctx).unwrap().unwrap();
+        assert_eq!(repo, expect_repo);
+        assert_eq!(mirror, expect_mirror);
+    }
+
+    #[test]
+    fn test_remove_mirror() {
+        let ctx = context::tests::build_test_context("remove_mirror");
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
+            .unwrap();
+        let mirror = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.mirror().get("github", "fioncat", "roxide-mirror"))
+            .unwrap()
+            .unwrap();
+        assert!(!mirror.new_created);
+
+        let path = mirror.get_path(&ctx.cfg.mirrors_dir);
+        ensure_dir(&path).unwrap();
+        ensure_dir(path.join(".git")).unwrap();
+        ensure_dir(path.join("src")).unwrap();
+
+        let mirrors_dir = PathBuf::from(&ctx.cfg.mirrors_dir);
+        assert!(mirrors_dir.exists());
+
+        remove_mirror(&ctx, &repo, mirror).unwrap();
+
+        let mirror = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.mirror().get("github", "fioncat", "roxide-mirror"))
+            .unwrap();
+        assert_eq!(mirror, None);
+        assert!(!mirrors_dir.exists());
+    }
+
+    #[test]
+    fn test_clean_mirrors() {
+        let ctx = context::tests::build_test_context("clean_mirrors");
+        let repo = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+            .unwrap()
+            .unwrap();
+
+        let mirrors = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.mirror().query_by_repo_id(repo.id))
+            .unwrap();
+        for mirror in mirrors.iter() {
+            let path = mirror.get_path(&ctx.cfg.mirrors_dir);
+            ensure_dir(&path).unwrap();
+            ensure_dir(path.join(".git")).unwrap();
+            ensure_dir(path.join("src")).unwrap();
+        }
+
+        let mirrors_dir = PathBuf::from(&ctx.cfg.mirrors_dir);
+        assert!(mirrors_dir.exists());
+
+        clean_mirrors(&ctx, &repo).unwrap();
+        let mirrors = ctx
+            .get_db()
+            .unwrap()
+            .with_transaction(|tx| tx.mirror().query_by_repo_id(repo.id))
+            .unwrap();
+        assert!(mirrors.is_empty());
+        assert!(!mirrors_dir.exists());
+    }
+}

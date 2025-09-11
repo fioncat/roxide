@@ -481,11 +481,17 @@ pub mod tests {
         );
 
         let repos = db::tests::test_repos();
+        let mirrors = db::tests::test_mirrors();
 
         let db = ctx.get_db().unwrap();
         db.with_transaction(|tx| {
             for repo in repos {
-                tx.repo().insert(&repo).unwrap();
+                let id = tx.repo().insert(&repo).unwrap();
+                assert_eq!(repo.id, id);
+            }
+            for mirror in mirrors {
+                let id = tx.mirror().insert(&mirror).unwrap();
+                assert_eq!(mirror.id, id);
             }
             Ok(())
         })
