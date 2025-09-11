@@ -5,7 +5,9 @@ mod config;
 mod create;
 mod detach;
 mod disk_usage;
+mod export;
 mod home;
+mod import;
 mod list;
 mod mirror;
 mod open;
@@ -53,6 +55,7 @@ pub enum Commands {
     Detach(detach::DetachCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
+    Export(export::ExportCommand),
     Home(home::HomeCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
@@ -78,6 +81,7 @@ impl Command for App {
             Commands::Create(cmd) => cmd.run(ctx).await,
             Commands::Detach(cmd) => cmd.run(ctx).await,
             Commands::DiskUsage(cmd) => cmd.run(ctx).await,
+            Commands::Export(cmd) => cmd.run(ctx).await,
             Commands::Home(cmd) => cmd.run(ctx).await,
             Commands::List(cmd) => cmd.run(ctx).await,
             Commands::Mirror(cmd) => cmd.run(ctx).await,
@@ -104,6 +108,7 @@ impl Command for App {
                 create::CreateCommand::complete_command(),
                 detach::DetachCommand::complete_command(),
                 disk_usage::DiskUsageCommand::complete_command(),
+                export::ExportCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 list::ListCommand::complete_command(),
                 mirror::MirrorCommand::complete_command(),

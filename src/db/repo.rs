@@ -25,6 +25,7 @@ pub struct Repository {
     pub name: String,
 
     /// This is optional, if none, the repository is in the workspace.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 
     pub pin: bool,
@@ -37,6 +38,7 @@ pub struct Repository {
     /// The number of times the repository has been visited.
     pub visited_count: u32,
 
+    #[serde(skip)]
     pub new_created: bool,
 }
 
@@ -178,6 +180,10 @@ impl ListItem for Repository {
             }
             "LastVisited" => format_time(self.last_visited_at).into(),
             "Visited" => self.visited_count.to_string().into(),
+            "Path" => match &self.path {
+                Some(p) => Cow::Borrowed(p),
+                None => Cow::Borrowed(""),
+            },
             _ => Cow::Borrowed(""),
         }
     }

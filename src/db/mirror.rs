@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -7,7 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::repo::Repository;
 use crate::debug;
-use crate::format::now;
+use crate::format::{format_time, now};
+use crate::term::list::ListItem;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Mirror {
@@ -79,6 +81,21 @@ impl Mirror {
             visited_count: row.get(6)?,
             new_created: false,
         })
+    }
+}
+
+impl ListItem for Mirror {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "ID" => self.id.to_string().into(),
+            "RepoID" => self.repo_id.to_string().into(),
+            "Remote" => Cow::Borrowed(&self.remote),
+            "Owner" => Cow::Borrowed(&self.owner),
+            "Name" => Cow::Borrowed(&self.name),
+            "LastVisited" => format_time(self.last_visited_at).into(),
+            "Visited" => self.visited_count.to_string().into(),
+            _ => Cow::Borrowed(""),
+        }
     }
 }
 

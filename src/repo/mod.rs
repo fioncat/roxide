@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod current;
 pub mod disk_usage;
 pub mod mirror;
