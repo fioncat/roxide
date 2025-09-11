@@ -185,3 +185,155 @@ where
 
     Ok(stats)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::repo::ensure_dir;
+
+    use super::*;
+
+    struct TestFile {
+        path: &'static str,
+        lines: Vec<&'static str>,
+    }
+
+    fn write_test_files(name: &str, files: &[TestFile]) -> PathBuf {
+        let dir = PathBuf::from("tests").join(name);
+        let _ = fs::remove_dir_all(&dir);
+        for file in files {
+            let path = dir.join(file.path);
+            let base = path.parent().unwrap();
+            ensure_dir(base).unwrap();
+
+            let content = file.lines.join("\n");
+            fs::write(path, content).unwrap();
+        }
+        dir
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_code_stats() {
+        let files = [
+            TestFile {
+                path: "src/main.rs",
+                lines: vec![
+                    "// This is a comment",
+                    "",
+                    "fn main() {",
+                    "    println!(\"Hello, world!\"); // Inline comment",
+                    "}",
+                ],
+            },
+            TestFile {
+                path: "src/lib.rs",
+                lines: vec![
+                    "// Another comment",
+                    "",
+                    "/** This is a doc comment",
+                    " * with multiple lines",
+                    " */",
+                    "fn foo() {",
+                    "    // Inside function comment",
+                    "    let x = 42;",
+                    "}",
+                ],
+            },
+            TestFile {
+                path: "python/app.py",
+                lines: vec![
+                    "# This is a comment",
+                    "",
+                    "print('Hello, world!')  # Inline comment",
+                    "",
+                    "    ",
+                    "# Another comment",
+                    "def foo():",
+                    "    pass",
+                    "",
+                ],
+            },
+            TestFile {
+                path: "config/test.json",
+                lines: vec![
+                    "{",
+                    r#"  "key": "value","#,
+                    r#"  "number": 42,"#,
+                    r#"  "array": [1, 2, 3]"#,
+                    "}",
+                    "",
+                ],
+            },
+            TestFile {
+                path: "pkg/main.go",
+                lines: vec!["// Go comment", "", "package main"],
+            },
+            TestFile {
+                path: "target/test.rs",
+                lines: vec!["// This file should be ignored", "fn ignored() {}"],
+            },
+            TestFile {
+                path: "Makefile",
+                lines: vec![
+                    "# Makefile comment",
+                    "",
+                    "all:",
+                    "\techo 'Building...'",
+                    "",
+                    "clean:",
+                    "\techo 'Cleaning...'",
+                ],
+            },
+        ];
+        let path = write_test_files("code_stats", &files);
+
+        let expect_items = vec![
+            CodeStatsItem {
+                name: "Rust",
+                files: 2,
+                code: 6,
+                comment: 6,
+                blank: 2,
+                total: 14,
+            },
+            CodeStatsItem {
+                name: "Python",
+                files: 1,
+                code: 3,
+                comment: 2,
+                blank: 3,
+                total: 8,
+            },
+            CodeStatsItem {
+                name: "Makefile",
+                files: 1,
+                code: 4,
+                comment: 1,
+                blank: 2,
+                total: 7,
+            },
+            CodeStatsItem {
+                name: "JSON",
+                files: 1,
+                code: 5,
+                comment: 0,
+                blank: 0,
+                total: 5,
+            },
+            CodeStatsItem {
+                name: "Go",
+                files: 1,
+                code: 1,
+                comment: 1,
+                blank: 1,
+                total: 3,
+            },
+        ];
+
+        let ignore = Ignore::parse(&path, ["target"]).unwrap();
+        let result = get_code_stats(path, ignore).await.unwrap();
+        assert_eq!(result.files_count, 6);
+        assert_eq!(result.items, expect_items);
+    }
+}
