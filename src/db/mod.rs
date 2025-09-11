@@ -1,3 +1,4 @@
+pub mod mirror;
 pub mod remote_owner;
 pub mod remote_repo;
 pub mod repo;

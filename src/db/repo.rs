@@ -53,7 +53,8 @@ impl Repository {
             return PathBuf::from(path);
         }
 
-        PathBuf::from(workspace.as_ref())
+        workspace
+            .as_ref()
             .join(Self::escaped_path(&self.remote).as_ref())
             .join(Self::escaped_path(&self.owner).as_ref())
             .join(&self.name)
@@ -118,7 +119,7 @@ impl Repository {
         self.visited_count += 1;
     }
 
-    fn escaped_path<'a>(raw: &'a str) -> Cow<'a, str> {
+    pub fn escaped_path<'a>(raw: &'a str) -> Cow<'a, str> {
         use std::path::MAIN_SEPARATOR;
 
         if !raw.contains(MAIN_SEPARATOR) {
@@ -735,18 +736,6 @@ pub mod tests {
         }
     }
 
-    fn build_conn() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        ensure_table(&tx).unwrap();
-        let repos = test_repos();
-        for repo in repos {
-            insert(&tx, &repo).unwrap();
-        }
-        tx.commit().unwrap();
-        conn
-    }
-
     pub fn test_repos() -> Vec<Repository> {
         vec![
             Repository {
@@ -822,6 +811,19 @@ pub mod tests {
                 new_created: false,
             },
         ]
+    }
+
+    fn build_conn() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        ensure_table(&tx).unwrap();
+        let repos = test_repos();
+        for repo in repos {
+            let id = insert(&tx, &repo).unwrap();
+            assert_eq!(id, repo.id);
+        }
+        tx.commit().unwrap();
+        conn
     }
 
     #[test]
