@@ -132,6 +132,10 @@ impl<'a> MirrorHandle<'a> {
         delete_by_repo_id(self.tx, repo_id)
     }
 
+    pub fn query_all(&self) -> Result<Vec<Mirror>> {
+        query_all(self.tx)
+    }
+
     pub fn query_by_repo_id(&self, repo_id: u64) -> Result<Vec<Mirror>> {
         query_by_repo_id(self.tx, repo_id)
     }
@@ -237,6 +241,24 @@ fn delete_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<()> {
     debug!("[db] Delete mirror by repo_id: {repo_id}");
     tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id])?;
     Ok(())
+}
+
+const QUERY_ALL_SQL: &str = r#"
+SELECT id, repo_id, remote, owner, name, last_visited_at, visited_count
+FROM mirror
+ORDER BY last_visited_at DESC
+"#;
+
+fn query_all(tx: &Transaction) -> Result<Vec<Mirror>> {
+    debug!("[db] Query all mirrors");
+    let mut stmt = tx.prepare(QUERY_ALL_SQL)?;
+    let rows = stmt.query_map([], Mirror::from_row)?;
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(row?);
+    }
+    debug!("[db] Query results: {results:?}");
+    Ok(results)
 }
 
 const QUERY_BY_REPO_ID_SQL: &str = r#"
@@ -380,6 +402,19 @@ pub mod tests {
             let result = get(&tx, &mirror.remote, &mirror.owner, &mirror.name).unwrap();
             assert_eq!(result, None);
         }
+    }
+
+    #[test]
+    fn test_query_all() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let results = query_all(&tx).unwrap();
+        let expect = {
+            let mut v = test_mirrors();
+            v.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+            v
+        };
+        assert_eq!(results, expect);
     }
 
     #[test]
