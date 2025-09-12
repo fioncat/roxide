@@ -249,7 +249,12 @@ impl RemoteAPI for GitHub {
         Ok(results)
     }
 
-    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
+    async fn get_action_optional(
+        &self,
+        owner: &str,
+        name: &str,
+        commit: &str,
+    ) -> Result<Option<Action>> {
         debug!("[github] Get action for {owner}/{name}, commit: {commit}");
 
         let req = GetActionRunRequest {
@@ -259,7 +264,7 @@ impl RemoteAPI for GitHub {
         let path = format!("/repos/{owner}/{name}/actions/runs");
         let runs: Page<workflows::Run> = self.client.get(path, Some(&req)).await?;
         if runs.items.is_empty() {
-            bail!("no workflow run found for commit {commit}");
+            return Ok(None);
         }
 
         let action = fetch_jobs(
@@ -272,7 +277,7 @@ impl RemoteAPI for GitHub {
         .await?;
         debug!("[github] Result: {action:?}");
 
-        Ok(action)
+        Ok(Some(action))
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {

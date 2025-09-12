@@ -112,8 +112,13 @@ impl RemoteAPI for Cache {
         self.upstream.list_pull_requests(opts).await
     }
 
-    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
-        self.upstream.get_action(owner, name, commit).await
+    async fn get_action_optional(
+        &self,
+        owner: &str,
+        name: &str,
+        commit: &str,
+    ) -> Result<Option<Action>> {
+        self.upstream.get_action_optional(owner, name, commit).await
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
@@ -219,7 +224,12 @@ mod tests {
             Ok(vec![])
         }
 
-        async fn get_action(&self, _owner: &str, _name: &str, _commit: &str) -> Result<Action> {
+        async fn get_action_optional(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _commit: &str,
+        ) -> Result<Option<Action>> {
             unimplemented!()
         }
 

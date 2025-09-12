@@ -4,6 +4,7 @@ use clap::Args;
 
 use crate::cmd::{CacheArgs, Command, complete};
 use crate::config::context::ConfigContext;
+use crate::repo::current::get_current_repo;
 use crate::repo::select::SelectPullRequestsArgs;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln};
@@ -41,9 +42,10 @@ impl Command for ListPullRequestCommand {
         }
         titles.push("Title");
 
+        let repo = get_current_repo(&ctx)?;
         let prs = self
             .select_pull_requests
-            .select_many(&ctx, self.cache.force_no_cache)
+            .select_many(&ctx, &repo, self.cache.force_no_cache)
             .await?;
         debug!("[cmd] Pull requests: {prs:?}");
 
