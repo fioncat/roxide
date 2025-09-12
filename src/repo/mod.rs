@@ -3,6 +3,7 @@ pub mod disk_usage;
 pub mod mirror;
 pub mod ops;
 pub mod restore;
+pub mod scan_orphans;
 pub mod select;
 pub mod wait_action;
 
@@ -54,6 +55,13 @@ where
 {
     let path = path.as_ref();
     if !path.exists() {
+        return Ok(());
+    }
+    if path.is_file() {
+        if !ctx.is_mute() {
+            info!("Remove file {}", path.display());
+        }
+        fs::remove_file(path).context("remove file")?;
         return Ok(());
     }
     if !ctx.is_mute() {

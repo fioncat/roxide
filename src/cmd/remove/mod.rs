@@ -1,5 +1,6 @@
 mod branch;
 mod mirror;
+mod orphan;
 mod repo;
 mod tag;
 
@@ -22,6 +23,7 @@ pub struct RemoveCommand {
 pub enum RemoveCommands {
     Branch(branch::RemoveBranchCommand),
     Mirror(mirror::RemoveMirrorCommand),
+    Orphan(orphan::RemoveOrphanCommand),
     Repo(repo::RemoveRepoCommand),
     Tag(tag::RemoveTagCommand),
 }
@@ -32,6 +34,7 @@ impl Command for RemoveCommand {
         match self.command {
             RemoveCommands::Branch(cmd) => cmd.run(ctx).await,
             RemoveCommands::Mirror(cmd) => cmd.run(ctx).await,
+            RemoveCommands::Orphan(cmd) => cmd.run(ctx).await,
             RemoveCommands::Repo(cmd) => cmd.run(ctx).await,
             RemoveCommands::Tag(cmd) => cmd.run(ctx).await,
         }
@@ -45,6 +48,7 @@ impl Command for RemoveCommand {
             .subcommands([
                 branch::RemoveBranchCommand::complete_command(),
                 mirror::RemoveMirrorCommand::complete_command(),
+                orphan::RemoveOrphanCommand::complete_command(),
                 repo::RemoveRepoCommand::complete_command(),
                 tag::RemoveTagCommand::complete_command(),
             ])
