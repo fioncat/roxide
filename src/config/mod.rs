@@ -61,6 +61,9 @@ pub struct Config {
     pub path: PathBuf,
 
     #[serde(skip)]
+    pub home_dir: PathBuf,
+
+    #[serde(skip)]
     pub remotes_dir: PathBuf,
 
     #[serde(skip)]
@@ -115,6 +118,7 @@ impl Config {
         };
         cfg.path = file_path;
         cfg.dir = path;
+        cfg.home_dir = home_dir;
         cfg.remotes_dir = cfg.dir.join("remotes");
         cfg.hooks_dir = cfg.dir.join("hooks");
 
@@ -136,8 +140,7 @@ impl Config {
             cfg.remotes_index = Some(remotes_index);
         }
 
-        cfg.validate(&home_dir)
-            .context("failed to validate base config")?;
+        cfg.validate().context("failed to validate base config")?;
 
         debug!("[config] Load config done");
         Ok(cfg)
@@ -150,7 +153,7 @@ impl Config {
     pub fn get_remote(&self, name: &str) -> Result<&remote::RemoteConfig> {
         match self.get_rempte_optional(name) {
             Some(r) => Ok(r),
-            None => bail!("remote {name:?} not found"),
+            None => bail!("config for remote {name:?} not found"),
         }
     }
 
@@ -164,12 +167,12 @@ impl Config {
         }
     }
 
-    fn validate(&mut self, home_dir: &Path) -> Result<()> {
+    fn validate(&mut self) -> Result<()> {
         debug!("[config] Validate config: {:?}", self);
 
         self.workspace = expandenv(take(&mut self.workspace));
         if self.workspace.is_empty() {
-            let workspace = home_dir.join("dev");
+            let workspace = self.home_dir.join("dev");
             self.workspace = format!("{}", workspace.display());
         }
         if Path::new(&self.workspace).is_relative() {
@@ -178,7 +181,7 @@ impl Config {
 
         self.data_dir = expandenv(take(&mut self.data_dir));
         if self.data_dir.is_empty() {
-            let data_dir = home_dir.join(".local").join("share").join("roxide");
+            let data_dir = self.home_dir.join(".local").join("share").join("roxide");
             self.data_dir = format!("{}", data_dir.display());
         }
         if Path::new(&self.data_dir).is_relative() {
@@ -275,6 +278,7 @@ impl Default for Config {
             remotes_index: None,
             hooks: hook::HooksConfig::default(),
             path: PathBuf::new(),
+            home_dir: PathBuf::new(),
             dir: PathBuf::new(),
             remotes_dir: PathBuf::new(),
             hooks_dir: PathBuf::new(),
@@ -325,6 +329,7 @@ mod tests {
             remotes_index: None,
             hooks: super::hook::tests::expect_hooks(),
             dir: path.clone(),
+            home_dir,
             path: path.join("config.toml"),
             remotes_dir: path.join("remotes"),
             hooks_dir: path.join("hooks"),

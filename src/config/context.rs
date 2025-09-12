@@ -468,10 +468,10 @@ pub mod tests {
             data_dir: format!("{}", data_dir.display()),
             remotes,
             hooks,
+            home_dir: dirs::home_dir().unwrap(),
             ..Default::default()
         };
-        let home_dir = dirs::home_dir().unwrap();
-        cfg.validate(&home_dir).unwrap();
+        cfg.validate().unwrap();
 
         let ctx = ConfigContext::new_mock_api(
             cfg,
