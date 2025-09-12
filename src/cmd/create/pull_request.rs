@@ -95,7 +95,15 @@ impl Command for CreatePullRequestCommand {
         } else {
             format!("{head}")
         };
-        let content = format!("# {init_title}\n\n");
+        let mut content = format!("# {init_title}\n\n");
+
+        if commits.len() > 1 {
+            for commit in commits {
+                content.push_str("* ");
+                content.push_str(&commit);
+                content.push_str("\n\n");
+            }
+        }
 
         fs::write(&edit_file, content).context("write content to edit file")?;
         ctx.edit(&edit_file)?;
