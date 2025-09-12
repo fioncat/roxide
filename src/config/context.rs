@@ -379,7 +379,7 @@ pub mod tests {
             Ok(vec![])
         }
 
-        async fn get_action_optinal(
+        async fn get_action_optional(
             &self,
             _owner: &str,
             _name: &str,

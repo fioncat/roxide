@@ -41,7 +41,7 @@ pub trait RemoteAPI: Send + Sync {
     ) -> Result<String>;
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>>;
 
-    async fn get_action_optinal(
+    async fn get_action_optional(
         &self,
         owner: &str,
         name: &str,
@@ -49,7 +49,7 @@ pub trait RemoteAPI: Send + Sync {
     ) -> Result<Option<Action>>;
 
     async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
-        match self.get_action_optinal(owner, name, commit).await? {
+        match self.get_action_optional(owner, name, commit).await? {
             Some(action) => Ok(action),
             None => bail!("cannot find action for current commit"),
         }

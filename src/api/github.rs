@@ -249,7 +249,7 @@ impl RemoteAPI for GitHub {
         Ok(results)
     }
 
-    async fn get_action_optinal(
+    async fn get_action_optional(
         &self,
         owner: &str,
         name: &str,

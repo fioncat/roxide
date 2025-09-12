@@ -245,7 +245,7 @@ impl RemoteAPI for GitLab {
         Ok(results)
     }
 
-    async fn get_action_optinal(
+    async fn get_action_optional(
         &self,
         owner: &str,
         name: &str,

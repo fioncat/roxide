@@ -95,7 +95,7 @@ impl WaitActionArgs {
         let mut no_created = false;
         loop {
             match api
-                .get_action_optinal(&repo.owner, &repo.name, commit)
+                .get_action_optional(&repo.owner, &repo.name, commit)
                 .await?
             {
                 Some(action) => {
