@@ -245,7 +245,12 @@ impl RemoteAPI for GitLab {
         Ok(results)
     }
 
-    async fn get_action(&self, owner: &str, name: &str, commit: &str) -> Result<Action> {
+    async fn get_action_optinal(
+        &self,
+        owner: &str,
+        name: &str,
+        commit: &str,
+    ) -> Result<Option<Action>> {
         debug!("[gitlab] Get action: {owner}/{name}, commit: {commit}");
 
         let client = self.client_builder.build_async().await?;
@@ -257,7 +262,7 @@ impl RemoteAPI for GitLab {
             .build()?;
         let mut pipeline: Vec<Pipeline> = endpoint.query_async(&client).await?;
         if pipeline.is_empty() {
-            bail!("no pipeline found for commit {commit:?}");
+            return Ok(None);
         }
         let pipeline = pipeline.remove(0);
         debug!("[gitlab] Pipeline: {pipeline:?}");
@@ -335,7 +340,7 @@ impl RemoteAPI for GitLab {
             job_groups,
         };
         debug!("[gitlab] Result: {action:?}");
-        Ok(action)
+        Ok(Some(action))
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {

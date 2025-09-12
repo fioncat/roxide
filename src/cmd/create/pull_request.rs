@@ -15,6 +15,7 @@ use crate::exec::git::commit::ensure_no_uncommitted_changes;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::SelectPullRequestsArgs;
+use crate::repo::wait_action::WaitActionArgs;
 use crate::{confirm, debug, info};
 
 /// Create a new pull request on the remote (alias `pr`)
@@ -28,6 +29,9 @@ pub struct CreatePullRequestCommand {
 
     #[clap(flatten)]
     pub upstream: UpstreamArgs,
+
+    #[clap(flatten)]
+    pub wait: WaitActionArgs,
 }
 
 #[async_trait]
@@ -150,6 +154,11 @@ impl Command for CreatePullRequestCommand {
         let web_url = api
             .create_pull_request(&opts.owner, &opts.name, &pr)
             .await?;
+
+        if self.wait.enable {
+            self.wait.wait(&ctx, &repo, api.as_ref()).await?;
+        }
+
         open::that(&web_url).with_context(|| {
             format!(
                 "failed to open newly created pull request web url {:?}",

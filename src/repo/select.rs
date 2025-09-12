@@ -15,7 +15,6 @@ use crate::db::repo::{
 };
 use crate::debug;
 use crate::exec::git::branch::Branch;
-use crate::repo::current::get_current_repo;
 use crate::term::list::List;
 
 #[derive(Debug, Args, Default)]
@@ -788,11 +787,12 @@ impl SelectPullRequestsArgs {
     pub async fn select_one(
         self,
         ctx: &ConfigContext,
+        repo: &Repository,
         force_no_cache: bool,
         filter: Option<&str>,
     ) -> Result<PullRequest> {
         debug!("[select] Select one pull request, args: {:?}", self);
-        let mut prs = self.select_many(ctx, force_no_cache).await?;
+        let mut prs = self.select_many(ctx, repo, force_no_cache).await?;
         if prs.is_empty() {
             bail!("no pull request found");
         }
@@ -810,10 +810,10 @@ impl SelectPullRequestsArgs {
     pub async fn select_many(
         self,
         ctx: &ConfigContext,
+        repo: &Repository,
         force_no_cache: bool,
     ) -> Result<Vec<PullRequest>> {
         debug!("[select] Select pull requests, args: {:?}", self);
-        let repo = get_current_repo(ctx)?;
         let api = ctx.get_api(&repo.remote, force_no_cache)?;
         let opts = self
             .build_list_options(ctx, &repo, api.as_ref(), false)
@@ -918,6 +918,7 @@ mod tests {
 
     use crate::api::JobGroup;
     use crate::config::context;
+    use crate::repo::current::get_current_repo;
 
     use super::*;
 
@@ -1840,15 +1841,21 @@ mod tests {
             },
         ];
 
+        let repo = get_current_repo(&ctx).unwrap();
         for case in cases {
-            let prs = case.args.clone().select_many(&ctx, false).await.unwrap();
+            let prs = case
+                .args
+                .clone()
+                .select_many(&ctx, &repo, false)
+                .await
+                .unwrap();
             assert_eq!(prs, case.expect_many, "{case:?}");
 
             if let Some(filter) = case.filter {
                 let result = case
                     .args
                     .clone()
-                    .select_one(&ctx, false, Some(filter))
+                    .select_one(&ctx, &repo, false, Some(filter))
                     .await;
                 if let Some(ref expect) = case.expect_one {
                     let pr = result.unwrap();

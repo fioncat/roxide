@@ -379,7 +379,12 @@ pub mod tests {
             Ok(vec![])
         }
 
-        async fn get_action(&self, _owner: &str, _name: &str, _commit: &str) -> Result<Action> {
+        async fn get_action_optinal(
+            &self,
+            _owner: &str,
+            _name: &str,
+            _commit: &str,
+        ) -> Result<Option<Action>> {
             let mut action = Action {
                 web_url: "https://example.com/action".to_string(),
                 commit_id: "test-commit".to_string(),
@@ -408,7 +413,7 @@ pub mod tests {
                         },
                     ],
                 });
-                return Ok(action);
+                return Ok(Some(action));
             }
 
             action.job_groups.push(JobGroup {
@@ -430,7 +435,7 @@ pub mod tests {
                 ],
             });
             *fetched.borrow_mut() = true;
-            Ok(action)
+            Ok(Some(action))
         }
 
         async fn get_job_log(&self, _owner: &str, _name: &str, id: u64) -> Result<String> {
