@@ -39,6 +39,9 @@ pub struct Config {
     #[serde(default = "Config::default_bash")]
     pub bash: CmdConfig,
 
+    #[serde(default)]
+    pub edit_allow_fail: bool,
+
     #[serde(default = "Config::default_edit")]
     pub edit: CmdConfig,
 
@@ -272,6 +275,7 @@ impl Default for Config {
             fzf: Self::default_fzf(),
             git: Self::default_git(),
             bash: Self::default_bash(),
+            edit_allow_fail: false,
             edit: Self::default_edit(),
             stats_ignore: vec![],
             remotes: vec![],
@@ -323,6 +327,7 @@ mod tests {
                 name: "/bin/bash".to_string(),
                 args: vec!["-e".to_string()],
             },
+            edit_allow_fail: false,
             edit: Config::default_edit(),
             stats_ignore: vec![],
             remotes: super::remote::tests::expect_remotes(),
