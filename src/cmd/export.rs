@@ -9,7 +9,7 @@ use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
-use crate::repo::backup::BackupData;
+use crate::repo::restore::RestoreData;
 use crate::repo::select::SelectRepoArgs;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions};
 
@@ -32,7 +32,7 @@ impl Command for ExportCommand {
         let selector = RepoSelector::new(&ctx, &self.select_repo);
         let list = selector.select_many(SelectManyReposOptions::default())?;
         let repos = list.items;
-        let data = BackupData::load(&ctx, repos)?;
+        let data = RestoreData::load(&ctx, repos)?;
 
         let data = serde_json::to_string(&data)?;
         if let Some(file) = self.file {

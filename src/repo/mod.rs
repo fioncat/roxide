@@ -1,17 +1,20 @@
-pub mod backup;
 pub mod current;
 pub mod disk_usage;
 pub mod mirror;
 pub mod ops;
+pub mod restore;
 pub mod select;
 pub mod wait_action;
 
 use std::fs;
+use std::io;
 use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
-use crate::db::repo::Repository;
+use crate::config::context::ConfigContext;
+use crate::{db::repo::Repository, info};
 
 /// If the directory doesn't exist, create it; if it exists, take no action.
 pub fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
@@ -43,6 +46,49 @@ where
         Repository::parse_escaped_path(owner),
         name.to_string(),
     ))
+}
+
+pub fn remove_dir_all<P>(ctx: &ConfigContext, path: P) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    if !path.exists() {
+        return Ok(());
+    }
+    if !ctx.is_mute() {
+        info!("Remove dir {}", path.display());
+    }
+    fs::remove_dir_all(path).context("remove directory")?;
+
+    let path = PathBuf::from(path);
+    let dir = path.parent();
+    if dir.is_none() {
+        return Ok(());
+    }
+    let mut dir = dir.unwrap();
+    loop {
+        match fs::read_dir(dir) {
+            Ok(dir_read) => {
+                let count = dir_read.count();
+                if count > 0 {
+                    return Ok(());
+                }
+                if !ctx.is_mute() {
+                    info!("Remove dir {}", dir.display());
+                }
+                fs::remove_dir(dir).context("remove directory")?;
+                match dir.parent() {
+                    Some(parent) => dir = parent,
+                    None => return Ok(()),
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(err).with_context(|| format!("read dir '{}'", dir.display()));
+            }
+        }
+    }
 }
 
 #[cfg(test)]

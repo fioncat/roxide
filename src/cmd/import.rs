@@ -12,14 +12,14 @@ use console::style;
 use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
-use crate::repo::backup::BackupData;
+use crate::repo::restore::RestoreData;
 use crate::repo::select::SelectRepoArgs;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln};
 
 /// Import repositories and mirrors from a JSON file or stdin.
 #[derive(Debug, Args)]
-pub struct ExportCommand {
+pub struct ImportCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
@@ -36,7 +36,7 @@ pub struct ExportCommand {
 }
 
 #[async_trait]
-impl Command for ExportCommand {
+impl Command for ImportCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run import command: {:?}", self);
         ctx.lock()?;
@@ -52,53 +52,42 @@ impl Command for ExportCommand {
             buffer
         };
 
-        let data: BackupData = serde_json::from_str(&data).context("failed to parse JSON data")?;
+        let data: RestoreData = serde_json::from_str(&data).context("failed to parse JSON data")?;
 
-        let db = ctx.get_db()?;
         if !self.dry_run {
-            return db.with_transaction(|tx| data.restore(tx));
+            return data.restore(&ctx);
         }
 
-        let repo_titles = vec![
-            "Remote",
-            "Owner",
-            "Name",
-            "Flags",
-            "LastVisited",
-            "Visited",
-            "Path",
-        ];
-        let mirror_titles = vec![
-            "RepoID",
-            "Remote",
-            "Owner",
-            "Name",
-            "LastVisited",
-            "Visited",
-        ];
-        let result = db.with_transaction(|tx| data.dry_run(tx))?;
+        let result = data.dry_run(&ctx)?;
+
+        if result.repos.is_empty() {
+            outputln!("Nothing to insert");
+            return Ok(());
+        }
 
         outputln!("{}", style("[New Repositories]").magenta().bold());
-        let text = self.table.render(repo_titles.clone(), &result.new_repos)?;
+        let text = self.table.render(
+            vec![
+                "Remote",
+                "Owner",
+                "Name",
+                "Flags",
+                "LastVisited",
+                "Visited",
+                "Path",
+            ],
+            &result.repos,
+        )?;
         outputln!("{text}");
 
-        outputln!("{}", style("[Update Repositories]").magenta().bold());
-        let text = self
-            .table
-            .render(repo_titles.clone(), &result.update_repos)?;
-        outputln!("{text}");
-
-        outputln!("{}", style("[New Mirrors]").magenta().bold());
-        let text = self
-            .table
-            .render(mirror_titles.clone(), &result.new_mirrors)?;
-        outputln!("{text}");
-
-        outputln!("{}", style("[Update Mirrors]").magenta().bold());
-        let text = self
-            .table
-            .render(mirror_titles.clone(), &result.update_mirrors)?;
-        outputln!("{text}");
+        if !result.mirrors.is_empty() {
+            outputln!("{}", style("[New Mirrors]").magenta().bold());
+            let text = self.table.render(
+                vec!["Remote", "Owner", "Name", "LastVisited", "Visited"],
+                &result.mirrors,
+            )?;
+            outputln!("{text}");
+        }
 
         Ok(())
     }

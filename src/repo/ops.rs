@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 use console::style;
@@ -176,38 +175,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub fn remove(&self) -> Result<()> {
-        if !self.path.exists() {
-            return Ok(());
-        }
-        show_info!(self, "Remove dir {}", self.path.display());
-        fs::remove_dir_all(&self.path).context("remove directory")?;
-
-        let path = PathBuf::from(&self.path);
-        let dir = path.parent();
-        if dir.is_none() {
-            return Ok(());
-        }
-        let mut dir = dir.unwrap();
-        loop {
-            match fs::read_dir(dir) {
-                Ok(dir_read) => {
-                    let count = dir_read.count();
-                    if count > 0 {
-                        return Ok(());
-                    }
-                    show_info!(self, "Remove dir {}", dir.display());
-                    fs::remove_dir(dir).context("remove directory")?;
-                    match dir.parent() {
-                        Some(parent) => dir = parent,
-                        None => return Ok(()),
-                    }
-                }
-                Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
-                Err(err) => {
-                    return Err(err).with_context(|| format!("read dir '{}'", dir.display()));
-                }
-            }
-        }
+        super::remove_dir_all(self.ctx, &self.path)
     }
 
     pub fn ensure_remote(&self) -> Result<()> {
@@ -612,6 +580,7 @@ impl SyncResult {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::Path;
 
     use crate::config::context;

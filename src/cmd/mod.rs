@@ -57,6 +57,7 @@ pub enum Commands {
     DiskUsage(disk_usage::DiskUsageCommand),
     Export(export::ExportCommand),
     Home(home::HomeCommand),
+    Import(import::ImportCommand),
     #[command(alias = "ls")]
     List(list::ListCommand),
     Mirror(mirror::MirrorCommand),
@@ -83,6 +84,7 @@ impl Command for App {
             Commands::DiskUsage(cmd) => cmd.run(ctx).await,
             Commands::Export(cmd) => cmd.run(ctx).await,
             Commands::Home(cmd) => cmd.run(ctx).await,
+            Commands::Import(cmd) => cmd.run(ctx).await,
             Commands::List(cmd) => cmd.run(ctx).await,
             Commands::Mirror(cmd) => cmd.run(ctx).await,
             Commands::Open(cmd) => cmd.run(ctx).await,
@@ -110,6 +112,7 @@ impl Command for App {
                 disk_usage::DiskUsageCommand::complete_command(),
                 export::ExportCommand::complete_command(),
                 home::HomeCommand::complete_command(),
+                import::ImportCommand::complete_command(),
                 list::ListCommand::complete_command(),
                 mirror::MirrorCommand::complete_command(),
                 open::OpenCommand::complete_command(),
