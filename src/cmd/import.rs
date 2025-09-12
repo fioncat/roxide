@@ -13,16 +13,12 @@ use crate::cmd::Command;
 use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::repo::restore::RestoreData;
-use crate::repo::select::SelectRepoArgs;
 use crate::term::list::TableArgs;
 use crate::{debug, outputln};
 
 /// Import repositories and mirrors from a JSON file or stdin.
 #[derive(Debug, Args)]
 pub struct ImportCommand {
-    #[clap(flatten)]
-    pub select_repo: SelectRepoArgs,
-
     /// The file to import. If not specified, import from stdin.
     #[arg(long, short)]
     pub file: Option<String>,

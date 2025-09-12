@@ -116,6 +116,8 @@ impl SyncCommand {
             return Ok(());
         }
 
+        outputln!();
+        outputln!("Result:");
         outputln!("{text}");
         Ok(())
     }
