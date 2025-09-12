@@ -98,6 +98,7 @@ impl Command for CreatePullRequestCommand {
         let mut content = format!("# {init_title}\n\n");
 
         if commits.len() > 1 {
+            commits.reverse();
             for commit in commits {
                 content.push_str("* ");
                 content.push_str(&commit);
