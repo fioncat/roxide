@@ -9,7 +9,7 @@ use crate::api::{Action, JobStatus, RemoteAPI};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::exec::git::commit::get_current_commit;
-use crate::{cursor_up, outputln, term};
+use crate::{cursor_up, debug, outputln, term};
 
 #[derive(Debug, Args)]
 pub struct WaitActionArgs {
@@ -29,14 +29,17 @@ impl WaitActionArgs {
         repo: &Repository,
         api: &dyn RemoteAPI,
     ) -> Result<Action> {
-        let commit = get_current_commit(ctx.git())?;
-        let mut action = self.wait_create(repo, api, &commit).await?;
+        let commit = get_current_commit(ctx.git().mute())?;
+        debug!("[wait_action] Current commit: {commit:?}");
         if !self.enable {
-            return Ok(action);
+            debug!("[wait_action] Wait not enabled, directly getting action");
+            return self.wait_create(repo, api, &commit).await;
         }
 
+        let mut action = self.wait_create(repo, api, &commit).await?;
         let mut reported: usize = 0;
         let mut has_title = false;
+        debug!("[wait_action] Start waiting for action jobs to complete");
         loop {
             let mut runnings: Vec<(String, Vec<String>)> = Vec::new();
             for group in action.job_groups.iter() {
@@ -54,19 +57,23 @@ impl WaitActionArgs {
                 }
                 runnings.push((group.name.clone(), running_items));
             }
+            debug!("[wait_action] Running jobs: {runnings:?}");
 
             for _ in 0..reported {
                 cursor_up!();
             }
 
             if runnings.is_empty() {
+                debug!("[wait_action] No running jobs, action complete");
                 if has_title {
+                    debug!("[wait_action] Action complete, removing title line");
                     cursor_up!();
                 }
                 break;
             }
 
             if !has_title {
+                debug!("[wait_action] First time reporting running jobs, printing title");
                 outputln!("Waiting for action jobs to complete...");
                 has_title = true;
             }
@@ -74,6 +81,7 @@ impl WaitActionArgs {
             reported = 0;
             let width = term::width();
             for (group, jobs) in runnings {
+                debug!("[wait_action] Reporting group {group} with jobs {jobs:?}");
                 let line = self.render_line(group, jobs, width);
                 outputln!("{line}");
                 reported += 1;
@@ -83,6 +91,7 @@ impl WaitActionArgs {
             action = api.get_action(&repo.owner, &repo.name, &commit).await?;
         }
 
+        debug!("[wait_action] Action jobs complete, action: {action:?}");
         Ok(action)
     }
 
@@ -92,6 +101,7 @@ impl WaitActionArgs {
         api: &dyn RemoteAPI,
         commit: &str,
     ) -> Result<Action> {
+        debug!("[wait_action] Waiting for action to be created");
         let mut no_created = false;
         loop {
             match api
@@ -99,13 +109,17 @@ impl WaitActionArgs {
                 .await?
             {
                 Some(action) => {
+                    debug!("[wait_action] Action created: {action:?}");
                     if no_created {
+                        debug!("[wait_action] Action created after waiting");
                         cursor_up!();
                     }
                     return Ok(action);
                 }
                 None => {
+                    debug!("[wait_action] Action not created yet, retrying");
                     if !no_created {
+                        debug!("[wait_action] First time no action created");
                         outputln!("Waiting for action to be created...");
                         no_created = true;
                     }
