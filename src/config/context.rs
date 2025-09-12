@@ -236,7 +236,7 @@ impl ConfigContext {
     where
         P: AsRef<Path>,
     {
-        edit(&self.cfg.edit, file)
+        edit(&self.cfg.edit, file, self.cfg.edit_allow_fail)
     }
 }
 

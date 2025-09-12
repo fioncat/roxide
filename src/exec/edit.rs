@@ -4,8 +4,9 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, bail};
 
 use crate::config::CmdConfig;
+use crate::debug;
 
-pub fn edit<P>(cfg: &CmdConfig, file: P) -> Result<()>
+pub fn edit<P>(cfg: &CmdConfig, file: P, allow_fail: bool) -> Result<()>
 where
     P: AsRef<Path>,
 {
@@ -18,6 +19,10 @@ where
     match cmd.status() {
         Ok(status) => {
             if !status.success() {
+                if allow_fail {
+                    debug!("[edit] Editor exited with bad status: {status}, but ignoring");
+                    return Ok(());
+                }
                 bail!("editor exited with bad status: {status}");
             }
             Ok(())
