@@ -10,6 +10,18 @@ use crate::format::format_bytes;
 use crate::secret::aes::AesCipher;
 use crate::{cursor_up, outputln};
 
+/// The encrypted file follows this binary format:
+///
+/// ```text
+/// [AES Header: salt + nonce]
+/// [u32 length1][encrypted data segment1]
+/// [u32 length2][encrypted data segment2]
+/// ...
+/// [u32 lengthN][encrypted data segmentN]
+/// ```
+///
+/// Each encrypted data segment is independent, so that we can encrypt/decrypt them in parallel.
+/// This method will launch multiple worker tasks to process data segments concurrently.
 #[inline]
 pub async fn encrypt<R, F, W>(
     password: &str,
