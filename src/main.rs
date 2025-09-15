@@ -1,5 +1,3 @@
-use std::process;
-
 mod api;
 mod batch;
 mod check;
@@ -11,7 +9,10 @@ mod filelock;
 mod format;
 mod repo;
 mod scan;
+mod secret;
 mod term;
+
+use std::process;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

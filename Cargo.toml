@@ -11,8 +11,10 @@ repository = "https://github.com/fioncat/roxide"
 description = "A simple and fast tool to manage your git repositories"
 
 [dependencies]
+aes-gcm = "^0"
 anyhow = "^1"
 async-trait = "^0"
+base64 = "^0"
 chrono = "^0"
 clap = { version = "^4", features = ["derive"] }
 clap_complete = { version = "^4", features = ["unstable-dynamic"] }
@@ -27,13 +29,17 @@ octocrab = "^0"
 open = "^5"
 pad = "^0"
 paste = "^1"
+pbkdf2 = "^0"
+rand = "^0"
 regex = "^1"
 reqwest = "^0"
+rpassword = "^7"
 rusqlite = { version = "^0", features = ["bundled"] }
 scanf = "^2"
 semver = "^1"
 serde = {version = "^1", features = ["derive"] }
 serde_json = "^1"
+sha2 = "^0"
 shellexpand = "^3"
 termion = "^4"
 tokio = { version = "^1", features = ["full"] }
