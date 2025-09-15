@@ -2142,7 +2142,6 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "async-trait",
- "base64",
  "chrono",
  "clap",
  "clap_complete",

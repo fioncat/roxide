@@ -14,7 +14,6 @@ description = "A simple and fast tool to manage your git repositories"
 aes-gcm = "^0"
 anyhow = "^1"
 async-trait = "^0"
-base64 = "^0"
 chrono = "^0"
 clap = { version = "^4", features = ["derive"] }
 clap_complete = { version = "^4", features = ["unstable-dynamic"] }

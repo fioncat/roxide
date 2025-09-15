@@ -1,8 +1,8 @@
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
@@ -10,6 +10,7 @@ use crate::format::format_bytes;
 use crate::secret::aes::AesCipher;
 use crate::{cursor_up, outputln};
 
+#[inline]
 pub async fn encrypt<R, F, W>(
     password: &str,
     src: R,
@@ -21,15 +22,44 @@ where
     F: Fn() -> Result<W>,
     W: Write,
 {
+    inner(password, src, dest_factory, buffer_size, true).await
+}
+
+#[inline]
+pub async fn decrypt<R, F, W>(password: &str, src: R, dest_factory: F) -> Result<W>
+where
+    R: Read,
+    F: Fn() -> Result<W>,
+    W: Write,
+{
+    inner(password, src, dest_factory, 0, false).await
+}
+
+async fn inner<R, F, W>(
+    password: &str,
+    src: R,
+    dest_factory: F,
+    buffer_size: usize,
+    encrypt: bool,
+) -> Result<W>
+where
+    R: Read,
+    F: Fn() -> Result<W>,
+    W: Write,
+{
     let mut reader = BufReader::new(src);
-    let cipher = AesCipher::new(password);
+    let cipher = if encrypt {
+        AesCipher::new(password)
+    } else {
+        AesCipher::read(&mut reader, password)?
+    };
     let cipher = Arc::new(cipher);
 
     let worker_count = num_cpus::get();
     assert!(worker_count > 0);
 
     let mut task_tx_list: Vec<mpsc::Sender<(usize, Vec<u8>)>> = vec![];
-    let (result_tx, mut result_rx) = mpsc::channel::<(usize, Result<String>)>(worker_count);
+    let (result_tx, mut result_rx) = mpsc::channel::<(usize, Result<Vec<u8>>)>(worker_count);
 
     let mut handlers = vec![];
     for _worker_idx in 0..worker_count {
@@ -43,106 +73,11 @@ where
                 let Some((task_idx, data)) = task_rx.recv().await else {
                     break;
                 };
-                let result = cipher.encrypt(&data);
-                result_tx.send((task_idx, result)).await.unwrap();
-            }
-        });
-        handlers.push(handler);
-    }
-
-    let mut done = false;
-    let mut dest: Option<W> = None;
-    while !done {
-        let mut sent = 0;
-        for (idx, task_tx) in task_tx_list.iter().enumerate() {
-            let mut buffer = vec![0u8; buffer_size];
-            match reader.read(&mut buffer) {
-                Ok(0) => {
-                    done = true;
-                    break;
-                }
-                Ok(bytes_read) => {
-                    buffer.truncate(bytes_read);
-                    task_tx.send((idx, buffer)).await.unwrap();
-                    sent += 1;
-                }
-                Err(e) => return Err(e).context("failed to read content from secret file"),
-            };
-        }
-
-        if sent == 0 {
-            break;
-        }
-
-        let mut results: Vec<(usize, String)> = vec![];
-        for _ in 0..sent {
-            let (idx, result) = result_rx.recv().await.unwrap();
-            let line = match result {
-                Ok(line) => line,
-                Err(e) => return Err(e),
-            };
-            results.push((idx, line));
-        }
-        results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
-
-        for (_, line) in results {
-            match dest {
-                Some(ref mut dest) => {
-                    dest.write_all(line.as_bytes())?;
-                    dest.write_all(b"\n")?;
-                }
-                None => {
-                    let mut w = dest_factory()?;
-                    cipher.write_head(&mut w)?;
-                    w.write_all(line.as_bytes())?;
-                    w.write_all(b"\n")?;
-                    dest = Some(w);
-                }
-            }
-        }
-    }
-
-    drop(task_tx_list);
-
-    for handler in handlers {
-        handler.await.unwrap();
-    }
-
-    match dest {
-        Some(w) => Ok(w),
-        None => bail!("the source file is empty, no data to encrypt"),
-    }
-}
-
-pub async fn decrypt<R, F, W>(password: &str, src: R, dest_factory: F) -> Result<W>
-where
-    R: Read,
-    F: Fn() -> Result<W>,
-    W: Write,
-{
-    let mut lines = BufReader::new(src).lines();
-    let cipher = AesCipher::read(&mut lines, password)?;
-    let cipher = Arc::new(cipher);
-
-    let worker_count = num_cpus::get();
-    assert!(worker_count > 0);
-
-    let mut task_tx_list: Vec<mpsc::Sender<(usize, String)>> = vec![];
-    let (result_tx, mut result_rx) = mpsc::channel::<(usize, Result<Vec<u8>>)>(worker_count);
-
-    let mut handlers = vec![];
-    for _worker_idx in 0..worker_count {
-        let cipher = cipher.clone();
-        let (task_tx, mut task_rx) = mpsc::channel::<(usize, String)>(1);
-        task_tx_list.push(task_tx);
-        let result_tx = result_tx.clone();
-
-        let handler = tokio::spawn(async move {
-            loop {
-                let Some((task_idx, line)) = task_rx.recv().await else {
-                    break;
+                let result = if encrypt {
+                    cipher.encrypt(&data)
+                } else {
+                    cipher.decrypt(&data)
                 };
-                let result = cipher.decrypt(&line);
                 result_tx.send((task_idx, result)).await.unwrap();
             }
         });
@@ -154,12 +89,35 @@ where
     while !done {
         let mut sent = 0;
         for (idx, task_tx) in task_tx_list.iter().enumerate() {
-            let Some(line) = lines.next() else {
-                done = true;
-                break;
+            let data = if encrypt {
+                let mut buffer = vec![0u8; buffer_size];
+                match reader.read(&mut buffer)? {
+                    0 => {
+                        done = true;
+                        break;
+                    }
+                    bytes_read => {
+                        buffer.truncate(bytes_read);
+                        buffer
+                    }
+                }
+            } else {
+                let mut len_buffer = [0u8; 4];
+                let read_size = match reader.read_exact(&mut len_buffer) {
+                    Ok(()) => u32::from_be_bytes(len_buffer) as usize,
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        done = true;
+                        break;
+                    }
+                    Err(e) => bail!(e),
+                };
+
+                let mut data = vec![0u8; read_size];
+                reader.read_exact(&mut data)?;
+                data
             };
-            let line = line.context("read utf-8 content from source file")?;
-            task_tx.send((idx, line)).await.unwrap();
+
+            task_tx.send((idx, data)).await.unwrap();
             sent += 1;
         }
 
@@ -178,15 +136,31 @@ where
         }
         results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
 
-        for (_, data) in results {
-            match dest {
-                Some(ref mut dest) => dest.write_all(&data)?,
-                None => {
-                    let mut w = dest_factory()?;
-                    w.write_all(&data)?;
-                    dest = Some(w);
+        let w = match dest {
+            Some(ref mut w) => w,
+            None => {
+                let mut w = dest_factory()?;
+                if encrypt {
+                    cipher.write_head(&mut w)?;
                 }
-            };
+                dest = Some(w);
+                dest.as_mut().unwrap()
+            }
+        };
+
+        for (_, data) in results {
+            if encrypt {
+                let data_len = data.len();
+                if data_len > u32::MAX as usize {
+                    bail!(
+                        "data segment is too large: {data_len}, please use a smaller buffer size"
+                    );
+                }
+                let data_len = data_len as u32;
+                let len_bytes = data_len.to_be_bytes();
+                w.write_all(&len_bytes)?;
+            }
+            w.write_all(&data)?;
         }
     }
 
@@ -198,7 +172,7 @@ where
 
     match dest {
         Some(w) => Ok(w),
-        None => bail!("the source file is empty, no data to decrypt"),
+        None => bail!("the source file is empty, no data to handle"),
     }
 }
 
