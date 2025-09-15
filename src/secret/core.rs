@@ -22,35 +22,10 @@ use crate::{cursor_up, outputln};
 ///
 /// Each encrypted data segment is independent, so that we can encrypt/decrypt them in parallel.
 /// This method will launch multiple worker tasks to process data segments concurrently.
-#[inline]
-pub async fn encrypt<R, F, W>(
-    password: &str,
+pub async fn single<R, F, W>(
     src: R,
     dest_factory: F,
-    buffer_size: usize,
-) -> Result<W>
-where
-    R: Read,
-    F: Fn() -> Result<W>,
-    W: Write,
-{
-    inner(password, src, dest_factory, buffer_size, true).await
-}
-
-#[inline]
-pub async fn decrypt<R, F, W>(password: &str, src: R, dest_factory: F) -> Result<W>
-where
-    R: Read,
-    F: Fn() -> Result<W>,
-    W: Write,
-{
-    inner(password, src, dest_factory, 0, false).await
-}
-
-async fn inner<R, F, W>(
     password: &str,
-    src: R,
-    dest_factory: F,
     buffer_size: usize,
     encrypt: bool,
 ) -> Result<W>
@@ -293,6 +268,28 @@ impl<R: Read> Drop for ProgressReader<R> {
     }
 }
 
+pub struct StdoutWrap {
+    pub stdout: io::Stdout,
+}
+
+impl Write for StdoutWrap {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match String::from_utf8(buf.to_vec()) {
+            Ok(s) => s,
+            Err(_) => {
+                return Err(io::Error::other(
+                    "the plain data is not utf-8 encoded (maybe a binary file), please use file or pipe",
+                ));
+            }
+        };
+        self.stdout.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stdout.flush()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
@@ -338,27 +335,38 @@ mod tests {
         let password = "test_password123";
         let buffer_size = 4096;
         let src = File::open(plain_path).unwrap();
-        encrypt(
-            password,
+        single(
             src,
             || Ok(File::create(secret_path).unwrap()),
+            password,
             buffer_size,
+            true,
         )
         .await
         .unwrap();
 
         let src = File::open(secret_path).unwrap();
-        decrypt(password, src, || Ok(File::create(result_path).unwrap()))
-            .await
-            .unwrap();
+        single(
+            src,
+            || Ok(File::create(result_path).unwrap()),
+            password,
+            0,
+            false,
+        )
+        .await
+        .unwrap();
 
         let result_data = fs::read_to_string(result_path).unwrap();
         assert_eq!(random_content, result_data);
 
         let src = File::open(secret_path).unwrap();
-        let result = decrypt("incorrect_password", src, || {
-            Ok(File::create(incorrect_path).unwrap())
-        })
+        let result = single(
+            src,
+            || Ok(File::create(incorrect_path).unwrap()),
+            "incorrect_password",
+            0,
+            false,
+        )
         .await;
         assert!(result.is_err());
         // When password is incorrect, the destination file should not be created

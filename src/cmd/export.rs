@@ -1,9 +1,6 @@
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use clap::Arg;
-use clap::Args;
-use clap::ValueHint;
+use clap::{Arg, Args, ValueHint};
 
 use crate::cmd::Command;
 use crate::cmd::complete;
