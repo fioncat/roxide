@@ -12,6 +12,8 @@ use sha2::Sha256;
 pub struct AesCipher {
     cipher: Aes256Gcm,
     nonce: Nonce<Aes256Gcm>,
+    salt_base64: String,
+    nonce_base64: String,
 }
 
 impl AesCipher {
@@ -22,45 +24,43 @@ impl AesCipher {
     #[cfg(test)]
     const PBKDF2_ROUNDS: u32 = 600;
 
-    pub fn generate<W>(mut dest: W, password: &str) -> Result<Self>
-    where
-        W: Write,
-    {
+    pub fn new(password: &str) -> Self {
         let mut rng = rand::rng();
         let mut salt = [0u8; Self::SALT_LENGTH];
         rng.fill_bytes(&mut salt);
 
         let salt_base64 = B64Engine.encode(salt);
-        dest.write_all(salt_base64.as_bytes())
-            .context("write salt to dest")?;
-        dest.write_all(b"\n")?;
 
         let mut rng = OsRng;
         let nonce = Aes256Gcm::generate_nonce(&mut rng);
 
         let nonce_base64 = B64Engine.encode(nonce);
-        dest.write_all(nonce_base64.as_bytes())
-            .context("write nonce to dest")?;
-        dest.write_all(b"\n")?;
 
         let key: [u8; 32] =
             pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), &salt, Self::PBKDF2_ROUNDS);
         let key = Key::<Aes256Gcm>::from_slice(&key);
         let cipher = Aes256Gcm::new(key);
 
-        Ok(Self { cipher, nonce })
+        Self {
+            cipher,
+            nonce,
+            salt_base64,
+            nonce_base64,
+        }
     }
 
     pub fn read<R>(lines: &mut Lines<BufReader<R>>, password: &str) -> Result<Self>
     where
         R: Read,
     {
-        let salt = Self::read_head(lines).context("read salt from encrypted data")?;
+        let (salt, salt_base64) =
+            Self::read_head(lines).context("read salt from encrypted data")?;
         if salt.len() != Self::SALT_LENGTH {
             bail!("the length of salt is incorrect");
         }
 
-        let nonce = Self::read_head(lines).context("read nonce from encrypted data")?;
+        let (nonce, nonce_base64) =
+            Self::read_head(lines).context("read nonce from encrypted data")?;
         if nonce.len() != Self::NONCE_LENGTH {
             bail!("the length of nonce is incorrect");
         }
@@ -75,10 +75,12 @@ impl AesCipher {
         Ok(Self {
             cipher,
             nonce: *nonce,
+            salt_base64,
+            nonce_base64,
         })
     }
 
-    fn read_head<R>(lines: &mut Lines<BufReader<R>>) -> Result<Vec<u8>>
+    fn read_head<R>(lines: &mut Lines<BufReader<R>>) -> Result<(Vec<u8>, String)>
     where
         R: Read,
     {
@@ -86,8 +88,18 @@ impl AesCipher {
             bail!("unexpected end of the encrypted data, the content is too short");
         };
         let line = line.context("read head line from encrypted data")?;
-        let data = B64Engine.decode(line).context("decode base64 head line")?;
-        Ok(data)
+        let data = B64Engine.decode(&line).context("decode base64 head line")?;
+        Ok((data, line))
+    }
+
+    pub fn write_head<W: Write>(&self, dest: &mut W) -> Result<()> {
+        dest.write_all(self.salt_base64.as_bytes())
+            .context("write salt to destination")?;
+        dest.write_all(b"\n")?;
+        dest.write_all(self.nonce_base64.as_bytes())
+            .context("write nonce to destination")?;
+        dest.write_all(b"\n")?;
+        Ok(())
     }
 
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<String> {
@@ -125,7 +137,8 @@ mod tests {
         let mut file = File::create(path).unwrap();
 
         let password = "some password 123";
-        let cipher = AesCipher::generate(&mut file, password).unwrap();
+        let cipher = AesCipher::new(password);
+        cipher.write_head(&mut file).unwrap();
 
         let plaintexts = [
             "hello, world!",
@@ -162,7 +175,8 @@ mod tests {
         let mut file = File::create(path).unwrap();
 
         let password = "correct password";
-        let cipher = AesCipher::generate(&mut file, password).unwrap();
+        let cipher = AesCipher::new(password);
+        cipher.write_head(&mut file).unwrap();
         let line = cipher.encrypt(b"some secret text").unwrap();
         file.write_all(line.as_bytes()).unwrap();
         file.write_all(b"\n").unwrap();
