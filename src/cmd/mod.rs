@@ -3,8 +3,10 @@ mod check;
 mod complete;
 mod config;
 mod create;
+mod decrypt;
 mod detach;
 mod disk_usage;
+mod encrypt;
 mod export;
 mod home;
 mod import;
@@ -13,7 +15,6 @@ mod mirror;
 mod open;
 mod rebase;
 mod remove;
-mod secret;
 mod squash;
 mod stats;
 mod switch;
@@ -53,9 +54,11 @@ pub enum Commands {
     Check(check::CheckCommand),
     Config(config::ConfigCommand),
     Create(create::CreateCommand),
+    Decrypt(decrypt::DecryptCommand),
     Detach(detach::DetachCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
+    Encrypt(encrypt::EncryptCommand),
     Export(export::ExportCommand),
     Home(home::HomeCommand),
     Import(import::ImportCommand),
@@ -66,7 +69,6 @@ pub enum Commands {
     Rebase(rebase::RebaseCommand),
     #[command(alias = "rm")]
     Remove(remove::RemoveCommand),
-    Secret(secret::SecretCommand),
     Squash(squash::SquashCommand),
     Stats(stats::StatsCommand),
     Switch(switch::SwitchCommand),
@@ -82,8 +84,10 @@ impl Command for App {
             Commands::Check(cmd) => cmd.run(ctx).await,
             Commands::Config(cmd) => cmd.run(ctx).await,
             Commands::Create(cmd) => cmd.run(ctx).await,
+            Commands::Decrypt(cmd) => cmd.run(ctx).await,
             Commands::Detach(cmd) => cmd.run(ctx).await,
             Commands::DiskUsage(cmd) => cmd.run(ctx).await,
+            Commands::Encrypt(cmd) => cmd.run(ctx).await,
             Commands::Export(cmd) => cmd.run(ctx).await,
             Commands::Home(cmd) => cmd.run(ctx).await,
             Commands::Import(cmd) => cmd.run(ctx).await,
@@ -92,7 +96,6 @@ impl Command for App {
             Commands::Open(cmd) => cmd.run(ctx).await,
             Commands::Rebase(cmd) => cmd.run(ctx).await,
             Commands::Remove(cmd) => cmd.run(ctx).await,
-            Commands::Secret(cmd) => cmd.run(ctx).await,
             Commands::Squash(cmd) => cmd.run(ctx).await,
             Commands::Stats(cmd) => cmd.run(ctx).await,
             Commands::Switch(cmd) => cmd.run(ctx).await,
@@ -111,8 +114,10 @@ impl Command for App {
                 check::CheckCommand::complete_command(),
                 config::ConfigCommand::complete_command(),
                 create::CreateCommand::complete_command(),
+                decrypt::DecryptCommand::complete_command(),
                 detach::DetachCommand::complete_command(),
                 disk_usage::DiskUsageCommand::complete_command(),
+                encrypt::EncryptCommand::complete_command(),
                 export::ExportCommand::complete_command(),
                 home::HomeCommand::complete_command(),
                 import::ImportCommand::complete_command(),
@@ -121,7 +126,6 @@ impl Command for App {
                 open::OpenCommand::complete_command(),
                 rebase::RebaseCommand::complete_command(),
                 remove::RemoveCommand::complete_command(),
-                secret::SecretCommand::complete_command(),
                 squash::SquashCommand::complete_command(),
                 stats::StatsCommand::complete_command(),
                 switch::SwitchCommand::complete_command(),

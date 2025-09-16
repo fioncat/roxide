@@ -1,20 +1,88 @@
 mod aes;
 mod core;
 mod password;
+mod scan;
+
+use clap::Args;
+use clap_num::number_range;
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-pub use password::get_password;
+use crate::config::context::ConfigContext;
+use crate::info;
+
+#[derive(Debug, Args)]
+pub struct SecretArgs {
+    /// The source file or directory to encrypt or decrypt. With `-f` option, it refers to
+    /// a file; otherwise, it refers to a directory.
+    /// In directory mode, it reads the directory's .gitignore file, finds patterns
+    /// containing the `# rox:secret` marker, scans the directory for files matching those
+    /// patterns, and encrypts or decrypts them. Encrypted files are renamed by adding a
+    /// `.secret` suffix to the original name, while decryption removes the `.secret` suffix.
+    /// If this option is not provided, directory mode defaults to the current directory;
+    /// in file mode, data is read from stdin.
+    pub src: Option<String>,
+
+    /// Force update password, overwriting the existing password.
+    #[arg(long, short)]
+    pub update_password: bool,
+
+    /// Indicates file mode. If a value is provided, the content is output to the target
+    /// file; if no value is provided, the content is output to stdout.
+    /// Note that binary content cannot be output to the terminal, such as when encrypting
+    /// or decrypting non-UTF-8 content. When this option has no value, stdout must be
+    /// redirected, otherwise an error will occur.
+    /// If this option is provided with a value, the target file cannot be the same as the
+    /// source file, i.e., the encryption and decryption files cannot be the same.
+    #[arg(long, short)]
+    pub file: Option<Option<String>>,
+}
+
+#[derive(Debug, Args)]
+pub struct BufferArgs {
+    /// The buffer size processed by each thread at once during concurrent encryption and
+    /// decryption. Generally, larger values result in faster encryption and decryption
+    /// speeds, but consume more memory. Cannot be lower than 512.
+    #[arg(
+        name = "buffer-size",
+        long = "buffer-size",
+        short = 'b',
+        default_value = "4096",
+        value_parser=buffer_size_range
+    )]
+    pub size: usize,
+}
+
+impl SecretArgs {
+    pub fn get_password(&self, ctx: &ConfigContext) -> Result<String> {
+        password::get_password(ctx, self.update_password)
+    }
+
+    pub fn into_many_base_dir(self, ctx: ConfigContext) -> Result<PathBuf> {
+        let dir = match self.src {
+            Some(ref s) => PathBuf::from(s),
+            None => ctx.current_dir,
+        };
+        if dir.is_file() {
+            bail!("the path you provided must be directory");
+        }
+        Ok(dir)
+    }
+}
+
+fn buffer_size_range(s: &str) -> Result<usize, String> {
+    number_range(s, 512, usize::MAX)
+}
 
 const REPORT_PROGRESS_SIZE: u64 = 1024 * 1024 * 100; // 100 MiB
 
 #[inline]
-pub async fn encrypt_single<S, D>(
+pub async fn encrypt_one<S, D>(
     src: Option<S>,
     dest: Option<D>,
     password: &str,
@@ -24,17 +92,17 @@ where
     S: AsRef<Path>,
     D: AsRef<Path>,
 {
-    single(src, dest, password, buffer_size, true, false).await?;
+    one(src, dest, password, buffer_size, true, false).await?;
     Ok(())
 }
 
 #[inline]
-pub async fn decrypt_single<S, D>(src: Option<S>, dest: Option<D>, password: &str) -> Result<()>
+pub async fn decrypt_one<S, D>(src: Option<S>, dest: Option<D>, password: &str) -> Result<()>
 where
     S: AsRef<Path>,
     D: AsRef<Path>,
 {
-    single(src, dest, password, 0, false, false).await?;
+    one(src, dest, password, 0, false, false).await?;
     Ok(())
 }
 
@@ -81,7 +149,7 @@ impl Write for Output {
     }
 }
 
-async fn single<S, D>(
+async fn one<S, D>(
     src: Option<S>,
     dest: Option<D>,
     password: &str,
@@ -169,4 +237,48 @@ where
         return Ok(Some(sha256));
     }
     Ok(None)
+}
+
+#[inline]
+pub async fn encrypt_many<P>(base_dir: P, password: &str, buffer_size: usize) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    many(base_dir.as_ref(), password, buffer_size, true).await
+}
+
+#[inline]
+pub async fn decrypt_many<P>(base_dir: P, password: &str) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    many(base_dir.as_ref(), password, 0, false).await
+}
+
+async fn many<P>(base_dir: P, password: &str, buffer_size: usize, encrypt: bool) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let files = scan::scan_secret_files(base_dir.as_ref()).await?;
+    if files.is_empty() {
+        bail!("no source or secret file to handle");
+    }
+
+    for file in files {
+        let verb = if encrypt { "Encrypting" } else { "Decrypting" };
+        info!("{verb}: {}", file.name);
+        if encrypt {
+            encrypt_one(
+                Some(file.source_path),
+                Some(file.secret_path),
+                password,
+                buffer_size,
+            )
+            .await?;
+        } else {
+            decrypt_one(Some(file.secret_path), Some(file.source_path), password).await?;
+        }
+    }
+
+    Ok(())
 }

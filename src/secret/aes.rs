@@ -17,9 +17,9 @@ pub struct AesCipher {
 impl AesCipher {
     const SALT_LENGTH: usize = 20;
     const NONCE_LENGTH: usize = 12;
-    #[cfg(not(test))]
+    #[cfg(not(debug_assertions))]
     const PBKDF2_ROUNDS: u32 = 600_000;
-    #[cfg(test)]
+    #[cfg(debug_assertions)]
     const PBKDF2_ROUNDS: u32 = 600;
 
     pub fn new(password: &str) -> Self {
