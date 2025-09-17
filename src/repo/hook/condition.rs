@@ -43,6 +43,10 @@ impl Condition {
                 db.with_transaction(|tx| {
                     match tx.hook_history().get(op.repo().id, name)? {
                         Some(history) => {
+                            if !history.success {
+                                // If the last execution was not successful, always match
+                                return Ok(true);
+                            }
                             let now = now();
                             Ok(now >= history.time + interval)
                         }
