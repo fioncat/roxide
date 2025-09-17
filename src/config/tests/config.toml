@@ -13,3 +13,7 @@ name = "gomod-init"
 when = ["created"]
 on = ["test golang"]
 run = ["gomod-init"]
+
+[[hooks]]
+name = "print-envs"
+run = ["print-envs"]

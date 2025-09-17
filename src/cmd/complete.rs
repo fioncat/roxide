@@ -597,7 +597,7 @@ mod tests {
             CompleteCase {
                 args: vec!["hook"],
                 current: "",
-                expect: vec!["cargo-init", "gomod-init"],
+                expect: vec!["cargo-init", "gomod-init", "print-envs"],
             },
             CompleteCase {
                 args: vec!["hook"],

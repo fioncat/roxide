@@ -142,6 +142,11 @@ pub mod tests {
                 conditions: vec![Condition::Created],
                 filters: vec![Filter::parse("test golang").unwrap()],
             },
+            HookConfig {
+                name: "print-envs".to_string(),
+                run: vec!["print-envs".to_string()],
+                ..Default::default()
+            },
         ]
     }
 
@@ -152,6 +157,7 @@ pub mod tests {
         let mut expected = HashMap::new();
         expected.insert("cargo-init".to_string(), format!("{dir}/cargo-init.sh"));
         expected.insert("gomod-init".to_string(), format!("{dir}/gomod-init.sh"));
+        expected.insert("print-envs".to_string(), format!("{dir}/print-envs.sh"));
         HookRuns { hooks: expected }
     }
 
@@ -173,6 +179,11 @@ pub mod tests {
                 run: vec!["gomod-init".to_string()],
                 conditions: vec![],
                 filters: vec![],
+            },
+            HookConfig {
+                name: "print-envs".to_string(),
+                run: vec!["print-envs".to_string()],
+                ..Default::default()
             },
         ];
         let runs = expect_hook_runs();

@@ -595,7 +595,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         let current_branch = Branch::current(self.git().mute()).unwrap_or_default();
         let default_branch = Branch::default(self.git().mute()).unwrap_or_default();
         [
-            ("REMOTE_NAME", Cow::Borrowed(&self.repo.name)),
+            ("REMOTE_NAME", Cow::Borrowed(&self.repo.remote)),
             (
                 "REMOTE_CLONE",
                 Cow::Borrowed(self.remote.clone.as_deref().unwrap_or_default()),
@@ -1181,5 +1181,48 @@ mod tests {
             )
             .unwrap();
         assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_run_hooks() {
+        let ctx = context::tests::build_test_context("run_hooks");
+        let repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+        op.run_hooks(CreateResult::Created).unwrap();
+
+        // The cargo init should be run
+        let path = op.path().join("Cargo.toml");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_run_hook() {
+        let ctx = context::tests::build_test_context("run_hook");
+        let repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let hook = ctx.cfg.get_hook("print-envs").unwrap();
+        let envs = op.build_hook_envs();
+        op.run_hook(hook, &envs).unwrap();
+
+        let path = op.path().join("repo.txt");
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.trim(), repo.full_name());
+
+        let path = op.path().join("branch.txt");
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.trim(), ctx.cfg.default_branch);
     }
 }
