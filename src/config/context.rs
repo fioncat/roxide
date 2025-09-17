@@ -462,6 +462,7 @@ pub mod tests {
         let data_dir = fs::canonicalize(&data_dir).unwrap();
 
         let hook_runs = config::hook::tests::expect_hook_runs();
+        let hooks = config::hook::tests::expect_hooks();
 
         let mut remotes = config::remote::tests::expect_remotes();
         for remote in remotes.iter_mut() {
@@ -472,6 +473,7 @@ pub mod tests {
             workspace: format!("{}", workspace.display()),
             data_dir: format!("{}", data_dir.display()),
             remotes,
+            hooks,
             hook_runs,
             home_dir: dirs::home_dir().unwrap(),
             ..Default::default()

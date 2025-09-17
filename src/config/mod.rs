@@ -48,6 +48,9 @@ pub struct Config {
     #[serde(default)]
     pub stats_ignore: Vec<String>,
 
+    #[serde(default)]
+    pub hooks: Vec<hook::HookConfig>,
+
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
 
@@ -127,6 +130,7 @@ impl Config {
 
         let remotes = remote::RemoteConfig::read(&cfg.remotes_dir)?;
         let hook_runs = hook::HookRuns::read(&cfg.hooks_dir)?;
+        hook::HookConfig::validate_hooks(&mut cfg.hooks, &hook_runs)?;
 
         cfg.hook_runs = hook_runs;
         cfg.remotes = remotes;
@@ -278,6 +282,7 @@ impl Default for Config {
             edit_allow_fail: false,
             edit: Self::default_edit(),
             stats_ignore: vec![],
+            hooks: vec![],
             remotes: vec![],
             remotes_index: None,
             hook_runs: hook::HookRuns::default(),
@@ -330,6 +335,7 @@ mod tests {
             edit_allow_fail: false,
             edit: Config::default_edit(),
             stats_ignore: vec![],
+            hooks: super::hook::tests::expect_hooks(),
             remotes: super::remote::tests::expect_remotes(),
             remotes_index: None,
             hook_runs: super::hook::tests::expect_hook_runs(),

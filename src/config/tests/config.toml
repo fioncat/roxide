@@ -1,3 +1,15 @@
 [bash]
 name = "/bin/bash"
 args = ["-e"]
+
+[[hooks]]
+name = "cargo-init"
+when = ["created"]
+on = ["test rust"]
+run = ["cargo-init"]
+
+[[hooks]]
+name = "gomod-init"
+when = ["created"]
+on = ["test golang"]
+run = ["gomod-init"]

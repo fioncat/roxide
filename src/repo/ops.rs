@@ -30,6 +30,13 @@ pub struct RepoOperator<'a, 'b> {
     path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateResult {
+    Created,
+    Cloned,
+    Exists,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SyncResult {
     pub name: String,
@@ -101,12 +108,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
     }
 
-    pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<bool> {
+    pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<CreateResult> {
         debug!("[op] Ensure repo create");
 
         if self.path.exists() {
             debug!("[op] Repo already exists, return");
-            return Ok(false);
+            return Ok(CreateResult::Exists);
         }
 
         let clone_url = match clone_url {
@@ -115,7 +122,6 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         };
         debug!("[op] Clone URL: {clone_url:?}");
         let mut cloned = false;
-
         match clone_url {
             Some(url) => {
                 debug!("[op] Clone repo from {url:?}");
@@ -147,7 +153,11 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         };
 
         debug!("[op] Ensure repo create done");
-        Ok(cloned)
+        Ok(if cloned {
+            CreateResult::Cloned
+        } else {
+            CreateResult::Created
+        })
     }
 
     pub fn remove(&self) -> Result<()> {
@@ -267,8 +277,8 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
     pub fn sync(&self) -> Result<SyncResult> {
         debug!("[op] Begin to sync repo");
-        let cloned = self.ensure_create(false, None)?;
-        if !cloned {
+        let result = self.ensure_create(false, None)?;
+        if !matches!(result, CreateResult::Cloned) {
             debug!("[op] Repo not cloned, ensure user and remote");
             self.ensure_user()?;
             self.ensure_remote()?;
@@ -496,7 +506,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     #[inline]
-    fn git<'this>(&'this self) -> GitCmd<'this> {
+    pub fn git<'this>(&'this self) -> GitCmd<'this> {
         self.ctx.git_work_dir(&self.path)
     }
 }
