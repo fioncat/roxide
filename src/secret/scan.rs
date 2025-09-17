@@ -21,7 +21,7 @@ pub async fn scan_secret_files(base_dir: &Path) -> Result<Vec<ScanFile>> {
     Ok(files)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanFile {
     pub name: String,
     pub source_path: PathBuf,
@@ -117,4 +117,71 @@ fn read_rules(base_dir: &Path) -> Result<Ignore> {
 
     Ignore::parse(base_dir, &patterns)
         .context("failed to parse secret patterns in \".gitignore\" file")
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::repo::ensure_dir;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_scan_secret_files() {
+        let base_dir = "tests/scan_secret_files";
+        let _ = fs::remove_dir_all(base_dir);
+
+        let ignore_content = r#"
+        src/*.rs
+
+        # rox:secrets
+        config/*.yaml
+        src/*.toml
+        apps/test/secret.json
+        # rox:end
+
+        tests/secret.txt
+        "#;
+
+        let base_dir = PathBuf::from(base_dir);
+        ensure_dir(&base_dir).unwrap();
+        ensure_dir(base_dir.join("src")).unwrap();
+        ensure_dir(base_dir.join("config")).unwrap();
+        ensure_dir(base_dir.join("apps/test")).unwrap();
+        ensure_dir(base_dir.join("tests")).unwrap();
+
+        fs::write(base_dir.join(".gitignore"), ignore_content).unwrap();
+        fs::write(base_dir.join("src/main.rs"), "").unwrap();
+        fs::write(base_dir.join("src/lib.rs"), "").unwrap();
+        fs::write(base_dir.join("src/config.toml.secret"), "").unwrap();
+        fs::write(base_dir.join("src/test.toml"), "").unwrap();
+        fs::write(base_dir.join("config/hello.yaml.secret"), "").unwrap();
+        fs::write(base_dir.join("config/test.toml"), "").unwrap();
+        fs::write(base_dir.join("apps/test/secret.json"), "").unwrap();
+        fs::write(base_dir.join("tests/secret.txt"), "").unwrap();
+
+        let files = scan_secret_files(&base_dir).await.unwrap();
+        let expected = vec![
+            ScanFile {
+                name: "apps/test/secret.json".to_string(),
+                source_path: base_dir.join("apps/test/secret.json"),
+                secret_path: base_dir.join("apps/test/secret.json.secret"),
+            },
+            ScanFile {
+                name: "config/hello.yaml".to_string(),
+                source_path: base_dir.join("config/hello.yaml"),
+                secret_path: base_dir.join("config/hello.yaml.secret"),
+            },
+            ScanFile {
+                name: "src/config.toml".to_string(),
+                source_path: base_dir.join("src/config.toml"),
+                secret_path: base_dir.join("src/config.toml.secret"),
+            },
+            ScanFile {
+                name: "src/test.toml".to_string(),
+                source_path: base_dir.join("src/test.toml"),
+                secret_path: base_dir.join("src/test.toml.secret"),
+            },
+        ];
+        assert_eq!(files, expected);
+    }
 }

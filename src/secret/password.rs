@@ -34,3 +34,23 @@ fn input_password() -> Result<String> {
 
     Ok(password)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::config::context;
+
+    use super::*;
+
+    #[test]
+    fn test_get_password() {
+        let ctx = context::tests::build_test_context("secret_get_password");
+
+        let password = get_password(&ctx, false).unwrap();
+        let sha256 = format!("{:x}", Sha256::digest("test_password"));
+
+        assert_eq!(password, sha256);
+
+        let result = fs::read_to_string(Path::new(&ctx.cfg.data_dir).join("password")).unwrap();
+        assert_eq!(sha256, result);
+    }
+}

@@ -231,7 +231,7 @@ where
         }
     };
 
-    let output = core::single(src, dest_factory, password, buffer_size, encrypt).await?;
+    let output = core::one(src, dest_factory, password, buffer_size, encrypt).await?;
     if let Output::Sha256(writer) = output {
         let sha256 = hex::encode(writer.finalize());
         return Ok(Some(sha256));
@@ -281,4 +281,80 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::repo::ensure_dir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_one() {
+        let password = "test_password123";
+
+        let content = r#"
+        Test Line
+        Next Line
+        Last Line
+        Goodbye!
+        "#;
+
+        let src_path = "tests/secret_one.txt";
+        let secret_path = "tests/secret_one.secret";
+        let result_path = "tests/secret_one.result";
+
+        fs::write(src_path, content).unwrap();
+
+        encrypt_one(Some(src_path), Some(secret_path), password, 4096)
+            .await
+            .unwrap();
+        decrypt_one(Some(secret_path), Some(result_path), password)
+            .await
+            .unwrap();
+
+        let result = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, result);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_many() {
+        let gitignore_content = r#"
+        # rox:secrets
+        test1.txt
+        test2.txt
+        "#;
+
+        let base_dir = PathBuf::from("tests/secret_many");
+        let _ = fs::remove_dir_all(&base_dir);
+
+        ensure_dir(&base_dir).unwrap();
+
+        fs::write(base_dir.join(".gitignore"), gitignore_content).unwrap();
+
+        let test1_content = "Content from test1";
+        let test2_content = "Content from test2";
+
+        fs::write(base_dir.join("test1.txt"), test1_content).unwrap();
+        fs::write(base_dir.join("test2.txt"), test2_content).unwrap();
+
+        let password = "test_secret_many123";
+        encrypt_many(&base_dir, password, 4096).await.unwrap();
+
+        assert!(base_dir.join("test1.txt.secret").exists());
+        assert!(base_dir.join("test2.txt.secret").exists());
+
+        fs::remove_file(base_dir.join("test1.txt")).unwrap();
+        fs::remove_file(base_dir.join("test2.txt")).unwrap();
+
+        decrypt_many(&base_dir, password).await.unwrap();
+
+        let result1 = fs::read_to_string(base_dir.join("test1.txt")).unwrap();
+        let result2 = fs::read_to_string(base_dir.join("test2.txt")).unwrap();
+
+        assert_eq!(result1, test1_content);
+        assert_eq!(result2, test2_content);
+    }
 }

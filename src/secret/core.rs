@@ -22,7 +22,7 @@ use crate::{cursor_up, outputln};
 ///
 /// Each encrypted data segment is independent, so that we can encrypt/decrypt them in parallel.
 /// This method will launch multiple worker tasks to process data segments concurrently.
-pub async fn single<R, F, W>(
+pub async fn one<R, F, W>(
     src: R,
     dest_factory: F,
     password: &str,
@@ -335,7 +335,7 @@ mod tests {
         let password = "test_password123";
         let buffer_size = 4096;
         let src = File::open(plain_path).unwrap();
-        single(
+        one(
             src,
             || Ok(File::create(secret_path).unwrap()),
             password,
@@ -346,7 +346,7 @@ mod tests {
         .unwrap();
 
         let src = File::open(secret_path).unwrap();
-        single(
+        one(
             src,
             || Ok(File::create(result_path).unwrap()),
             password,
@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(random_content, result_data);
 
         let src = File::open(secret_path).unwrap();
-        let result = single(
+        let result = one(
             src,
             || Ok(File::create(incorrect_path).unwrap()),
             "incorrect_password",
