@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
@@ -183,7 +184,7 @@ impl ConfigContext {
         &self,
         path: P,
         file: F,
-        envs: &[(&str, &str)],
+        envs: &[(&str, Cow<str>)],
         message: impl ToString,
     ) -> Result<()>
     where
@@ -461,11 +462,12 @@ pub mod tests {
         let workspace = fs::canonicalize(&workspace).unwrap();
         let data_dir = fs::canonicalize(&data_dir).unwrap();
 
+        let hook_runs = config::hook::tests::expect_hook_runs();
         let hooks = config::hook::tests::expect_hooks();
 
         let mut remotes = config::remote::tests::expect_remotes();
         for remote in remotes.iter_mut() {
-            remote.validate(&hooks).unwrap();
+            remote.validate().unwrap();
         }
 
         let mut cfg = Config {
@@ -473,6 +475,7 @@ pub mod tests {
             data_dir: format!("{}", data_dir.display()),
             remotes,
             hooks,
+            hook_runs,
             home_dir: dirs::home_dir().unwrap(),
             ..Default::default()
         };
@@ -487,6 +490,7 @@ pub mod tests {
 
         let repos = db::tests::test_repos();
         let mirrors = db::tests::test_mirrors();
+        let hook_histories = db::hook_history::tests::test_hook_histories();
 
         let db = ctx.get_db().unwrap();
         db.with_transaction(|tx| {
@@ -497,6 +501,9 @@ pub mod tests {
             for mirror in mirrors {
                 let id = tx.mirror().insert(&mirror).unwrap();
                 assert_eq!(mirror.id, id);
+            }
+            for history in hook_histories {
+                tx.hook_history().insert(&history).unwrap();
             }
             Ok(())
         })

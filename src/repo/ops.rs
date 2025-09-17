@@ -1,15 +1,20 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use console::style;
 
 use crate::config::context::ConfigContext;
+use crate::config::hook::HookConfig;
 use crate::config::remote::{OwnerConfigRef, RemoteConfig};
+use crate::db::hook_history::HookHistory;
 use crate::db::repo::Repository;
 use crate::exec::git::GitCmd;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
 use crate::exec::git::remote::Remote;
+use crate::format::now;
+use crate::repo::hook::filter::matched_filters;
 use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
@@ -28,6 +33,19 @@ pub struct RepoOperator<'a, 'b> {
     repo: &'b Repository,
 
     path: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateResult {
+    Created,
+    Cloned,
+    Exists,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HookResult<'a> {
+    pub name: &'a str,
+    pub success: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -101,12 +119,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
     }
 
-    pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<bool> {
+    pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<CreateResult> {
         debug!("[op] Ensure repo create");
 
         if self.path.exists() {
             debug!("[op] Repo already exists, return");
-            return Ok(false);
+            return Ok(CreateResult::Exists);
         }
 
         let clone_url = match clone_url {
@@ -114,9 +132,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             None => self.get_clone_url(),
         };
         debug!("[op] Clone URL: {clone_url:?}");
-        let mut cloned = false;
-
-        match clone_url {
+        let result = match clone_url {
             Some(url) => {
                 debug!("[op] Clone repo from {url:?}");
                 let message = format!("Cloning from {url}");
@@ -129,7 +145,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 self.ctx.git().execute(args, message)?;
 
                 self.ensure_user()?;
-                cloned = true;
+                CreateResult::Cloned
             }
             None => {
                 debug!(
@@ -143,35 +159,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                     ["init", "-b", self.ctx.cfg.default_branch.as_str()],
                     "Initializing empty git repository",
                 )?;
+                CreateResult::Created
             }
         };
 
-        if !self.owner.on_create.is_empty() {
-            let envs = [
-                ("REPO_REMOTE", self.repo.remote.as_str()),
-                ("REPO_NAME", self.repo.name.as_str()),
-                ("REPO_OWNER", self.repo.owner.as_str()),
-            ];
-
-            for hook_name in self.owner.on_create.iter() {
-                debug!("[op] Run create hook: {hook_name:?}");
-                let Some(hook_path) = self.ctx.cfg.hooks.get(hook_name) else {
-                    bail!("hook {hook_name:?} not found");
-                };
-
-                self.ctx
-                    .run_bash(
-                        &self.path,
-                        hook_path,
-                        &envs,
-                        format!("Running create hook: {hook_name}"),
-                    )
-                    .with_context(|| format!("failed to run create hook {hook_name:?}"))?;
-            }
-        }
-
-        debug!("[op] Ensure repo create done");
-        Ok(cloned)
+        debug!("[op] Ensure repo create done: {result:?}");
+        Ok(result)
     }
 
     pub fn remove(&self) -> Result<()> {
@@ -291,8 +284,8 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
     pub fn sync(&self) -> Result<SyncResult> {
         debug!("[op] Begin to sync repo");
-        let cloned = self.ensure_create(false, None)?;
-        if !cloned {
+        let result = self.ensure_create(false, None)?;
+        if !matches!(result, CreateResult::Cloned) {
             debug!("[op] Repo not cloned, ensure user and remote");
             self.ensure_user()?;
             self.ensure_remote()?;
@@ -502,6 +495,134 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         self.git().execute(args, "Commit squashed changes")
     }
 
+    pub fn run_hooks<'this>(
+        &'this self,
+        create_result: CreateResult,
+    ) -> Result<Vec<HookResult<'this>>> {
+        debug!("[op] Running hooks for repo {:?}", self.repo);
+        let mut to_run = vec![];
+        for hook in self.ctx.cfg.hooks.iter() {
+            debug!("[op] Checking hook: {hook:?}");
+            if !matched_filters(self.repo, &hook.filters) {
+                debug!("[op] Hook not matched filter, skip");
+                continue;
+            }
+            let mut should_run = false;
+            for cond in hook.conditions.iter() {
+                if cond.matched(self, &hook.name, create_result)? {
+                    debug!("[op] Hook condition matched: {cond:?}");
+                    should_run = true;
+                    break;
+                }
+            }
+            if should_run {
+                debug!("[op] Hook will be run");
+                to_run.push(hook);
+            } else {
+                debug!("[op] Hook conditions not matched, skip");
+            }
+        }
+
+        if to_run.is_empty() {
+            debug!("[op] No hook to run");
+            return Ok(vec![]);
+        }
+
+        let mut results = vec![];
+        let envs = self.build_hook_envs();
+        debug!("[op] Run hooks with envs: {envs:?}");
+        for hook in to_run {
+            let success = self.run_hook(hook, &envs)?;
+            results.push(HookResult {
+                name: &hook.name,
+                success,
+            });
+        }
+        Ok(results)
+    }
+
+    pub fn run_hook(&self, hook: &HookConfig, envs: &[(&'static str, Cow<str>)]) -> Result<bool> {
+        show_info!(self, "Running hook: {}", style(&hook.name).magenta().bold());
+        debug!(
+            "[op] Running hook for repo {:?}, hook config: {hook:?}",
+            self.repo
+        );
+        let mut success = true;
+        for run in hook.run.iter() {
+            debug!("[op] Run hook run: {run:?}");
+            let Some(run_path) = self.ctx.cfg.hook_runs.get(run) else {
+                debug!("[op] Hook run {run:?} not found, skip");
+                continue;
+            };
+
+            let result = self
+                .ctx
+                .run_bash(&self.path, run_path, envs, format!("Running: {run}"));
+            if result.is_err() {
+                debug!("[op] Hook run {run:?} failed: {result:?}");
+                success = false;
+                break;
+            }
+        }
+
+        let history = HookHistory {
+            id: 0,
+            repo_id: self.repo.id,
+            name: hook.name.clone(),
+            success,
+            time: now(),
+        };
+        let db = self.ctx.get_db()?;
+        db.with_transaction(
+            |tx| match tx.hook_history().get(history.repo_id, &history.name)? {
+                Some(_) => tx.hook_history().update(&history),
+                None => {
+                    tx.hook_history().insert(&history)?;
+                    Ok(())
+                }
+            },
+        )?;
+
+        if success {
+            show_info!(self, "Hook {} {}", hook.name, style("ok").green());
+        } else {
+            show_info!(self, "Hook {} {}", hook.name, style("failed").red());
+        }
+        Ok(success)
+    }
+
+    pub fn build_hook_envs<'this>(&'this self) -> [(&'static str, Cow<'this, str>); 8] {
+        let current_branch = Branch::current(self.git().mute()).unwrap_or_default();
+        let default_branch = Branch::default(self.git().mute()).unwrap_or_default();
+        [
+            ("REMOTE_NAME", Cow::Borrowed(&self.repo.remote)),
+            (
+                "REMOTE_CLONE",
+                Cow::Borrowed(self.remote.clone.as_deref().unwrap_or_default()),
+            ),
+            ("OWNER_NAME", Cow::Borrowed(&self.repo.owner)),
+            (
+                "OWNER_USER",
+                Cow::Borrowed(self.owner.user.unwrap_or_default()),
+            ),
+            (
+                "OWNER_EMAIL",
+                Cow::Borrowed(self.owner.email.unwrap_or_default()),
+            ),
+            ("REPO_NAME", Cow::Borrowed(&self.repo.name)),
+            ("CURRENT_BRANCH", current_branch.into()),
+            ("DEFAULT_BRANCH", default_branch.into()),
+        ]
+    }
+
+    pub fn ctx(&self) -> &ConfigContext {
+        self.ctx
+    }
+
+    pub fn repo(&self) -> &Repository {
+        self.repo
+    }
+
     pub fn get_clone_url(&self) -> Option<String> {
         let domain = self.remote.clone.as_ref()?;
         Some(self.repo.get_clone_url(domain, self.owner.ssh))
@@ -520,7 +641,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     #[inline]
-    fn git<'this>(&'this self) -> GitCmd<'this> {
+    pub fn git<'this>(&'this self) -> GitCmd<'this> {
         self.ctx.git_work_dir(&self.path)
     }
 }
@@ -622,15 +743,10 @@ mod tests {
             ..Default::default()
         };
         let ctx = context::tests::build_test_context("create_empty");
-        let path = repo.get_path(&ctx.cfg.workspace);
         let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         op.git().execute(["status"], "").unwrap();
-
-        // The cargo-init hook should have created a Cargo.toml
-        let cargo_path = path.join("Cargo.toml");
-        fs::metadata(&cargo_path).unwrap();
     }
 
     #[test]
@@ -1065,5 +1181,48 @@ mod tests {
             )
             .unwrap();
         assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_run_hooks() {
+        let ctx = context::tests::build_test_context("run_hooks");
+        let repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+        op.run_hooks(CreateResult::Created).unwrap();
+
+        // The cargo init should be run
+        let path = op.path().join("Cargo.toml");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_run_hook() {
+        let ctx = context::tests::build_test_context("run_hook");
+        let repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let hook = ctx.cfg.get_hook("print-envs").unwrap();
+        let envs = op.build_hook_envs();
+        op.run_hook(hook, &envs).unwrap();
+
+        let path = op.path().join("repo.txt");
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.trim(), repo.full_name());
+
+        let path = op.path().join("branch.txt");
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.trim(), ctx.cfg.default_branch);
     }
 }

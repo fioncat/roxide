@@ -306,7 +306,7 @@ fn complete_config_name(
             .collect::<Vec<_>>(),
         "hook" => ctx
             .cfg
-            .hooks
+            .hook_runs
             .hooks
             .keys()
             .filter(|h| h.starts_with(current))
@@ -597,7 +597,7 @@ mod tests {
             CompleteCase {
                 args: vec!["hook"],
                 current: "",
-                expect: vec!["cargo-init", "gomod-init"],
+                expect: vec!["cargo-init", "gomod-init", "print-envs"],
             },
             CompleteCase {
                 args: vec!["hook"],

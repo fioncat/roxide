@@ -1,3 +1,4 @@
+pub mod hook_history;
 pub mod mirror;
 pub mod remote_owner;
 pub mod remote_repo;
@@ -27,6 +28,7 @@ impl Database {
         self.with_transaction(|tx| {
             tx.repo().ensure_table()?;
             tx.mirror().ensure_table()?;
+            tx.hook_history().ensure_table()?;
             tx.remote_owner().ensure_table()?;
             tx.remote_repo().ensure_table()?;
             Ok(())
@@ -67,6 +69,10 @@ impl DatabaseHandle<'_> {
 
     pub fn mirror<'a>(&'a self) -> mirror::MirrorHandle<'a> {
         mirror::MirrorHandle::new(&self.tx)
+    }
+
+    pub fn hook_history<'a>(&'a self) -> hook_history::HookHistoryHandle<'a> {
+        hook_history::HookHistoryHandle::new(&self.tx)
     }
 
     pub fn remote_owner<'a>(&'a self) -> remote_owner::RemoteOwnerHandle<'a> {

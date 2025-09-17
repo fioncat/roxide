@@ -15,6 +15,7 @@ mod mirror;
 mod open;
 mod rebase;
 mod remove;
+mod run_hook;
 mod squash;
 mod stats;
 mod switch;
@@ -69,6 +70,7 @@ pub enum Commands {
     Rebase(rebase::RebaseCommand),
     #[command(alias = "rm")]
     Remove(remove::RemoveCommand),
+    RunHook(run_hook::RunHookCommand),
     Squash(squash::SquashCommand),
     Stats(stats::StatsCommand),
     Switch(switch::SwitchCommand),
@@ -96,6 +98,7 @@ impl Command for App {
             Commands::Open(cmd) => cmd.run(ctx).await,
             Commands::Rebase(cmd) => cmd.run(ctx).await,
             Commands::Remove(cmd) => cmd.run(ctx).await,
+            Commands::RunHook(cmd) => cmd.run(ctx).await,
             Commands::Squash(cmd) => cmd.run(ctx).await,
             Commands::Stats(cmd) => cmd.run(ctx).await,
             Commands::Switch(cmd) => cmd.run(ctx).await,
@@ -126,6 +129,7 @@ impl Command for App {
                 open::OpenCommand::complete_command(),
                 rebase::RebaseCommand::complete_command(),
                 remove::RemoveCommand::complete_command(),
+                run_hook::RunHookCommand::complete_command(),
                 squash::SquashCommand::complete_command(),
                 stats::StatsCommand::complete_command(),
                 switch::SwitchCommand::complete_command(),

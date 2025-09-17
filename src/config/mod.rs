@@ -48,6 +48,9 @@ pub struct Config {
     #[serde(default)]
     pub stats_ignore: Vec<String>,
 
+    #[serde(default)]
+    pub hooks: Vec<hook::HookConfig>,
+
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
 
@@ -55,7 +58,7 @@ pub struct Config {
     remotes_index: Option<HashMap<String, usize>>,
 
     #[serde(skip)]
-    pub hooks: hook::HooksConfig,
+    pub hook_runs: hook::HookRuns,
 
     #[serde(skip)]
     pub dir: PathBuf,
@@ -125,10 +128,11 @@ impl Config {
         cfg.remotes_dir = cfg.dir.join("remotes");
         cfg.hooks_dir = cfg.dir.join("hooks");
 
-        let hooks = hook::HooksConfig::read(&cfg.hooks_dir)?;
-        let remotes = remote::RemoteConfig::read(&cfg.remotes_dir, &hooks)?;
+        let remotes = remote::RemoteConfig::read(&cfg.remotes_dir)?;
+        let hook_runs = hook::HookRuns::read(&cfg.hooks_dir)?;
+        hook::HookConfig::validate_hooks(&mut cfg.hooks, &hook_runs)?;
 
-        cfg.hooks = hooks;
+        cfg.hook_runs = hook_runs;
         cfg.remotes = remotes;
         if cfg.remotes.len() > Self::REMOTES_INDEX_THRESHOLD {
             let remotes_index = cfg
@@ -157,6 +161,13 @@ impl Config {
         match self.get_rempte_optional(name) {
             Some(r) => Ok(r),
             None => bail!("config for remote {name:?} not found"),
+        }
+    }
+
+    pub fn get_hook(&self, name: &str) -> Result<&hook::HookConfig> {
+        match self.hooks.iter().find(|h| h.name == name) {
+            Some(h) => Ok(h),
+            None => bail!("hook {name:?} not found"),
         }
     }
 
@@ -278,9 +289,10 @@ impl Default for Config {
             edit_allow_fail: false,
             edit: Self::default_edit(),
             stats_ignore: vec![],
+            hooks: vec![],
             remotes: vec![],
             remotes_index: None,
-            hooks: hook::HooksConfig::default(),
+            hook_runs: hook::HookRuns::default(),
             path: PathBuf::new(),
             home_dir: PathBuf::new(),
             dir: PathBuf::new(),
@@ -330,9 +342,10 @@ mod tests {
             edit_allow_fail: false,
             edit: Config::default_edit(),
             stats_ignore: vec![],
+            hooks: super::hook::tests::expect_hooks(),
             remotes: super::remote::tests::expect_remotes(),
             remotes_index: None,
-            hooks: super::hook::tests::expect_hooks(),
+            hook_runs: super::hook::tests::expect_hook_runs(),
             dir: path.clone(),
             home_dir,
             path: path.join("config.toml"),

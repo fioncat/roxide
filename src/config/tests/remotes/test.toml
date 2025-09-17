@@ -1,7 +1,1 @@
 icon = "T"
-
-[owners."golang"]
-on_create = ["gomod-init"]
-
-[owners."rust"]
-on_create = ["cargo-init"]

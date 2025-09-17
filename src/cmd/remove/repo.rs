@@ -78,7 +78,10 @@ impl RemoveRepoCommand {
         let db = ctx.get_db()?;
         let op = RepoOperator::load(ctx, &repo)?;
         op.remove()?;
-        db.with_transaction(|tx| tx.repo().delete(&repo))?;
+        db.with_transaction(|tx| {
+            tx.hook_history().delete_by_repo_id(repo.id)?;
+            tx.repo().delete(&repo)
+        })?;
         info!(
             "Repository {} was removed from disk and database",
             repo.full_name()

@@ -1,5 +1,6 @@
 pub mod current;
 pub mod disk_usage;
+pub mod hook;
 pub mod mirror;
 pub mod ops;
 pub mod restore;
