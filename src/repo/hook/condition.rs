@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 
 use crate::exec::git::commit::count_uncommitted_changes;
+use crate::format::now;
 use crate::repo::ops::{CreateResult, RepoOperator};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,7 +25,12 @@ impl Condition {
         }
     }
 
-    pub fn matched(&self, op: &RepoOperator, create_result: CreateResult) -> Result<bool> {
+    pub fn matched(
+        &self,
+        op: &RepoOperator,
+        name: &str,
+        create_result: CreateResult,
+    ) -> Result<bool> {
         match self {
             Self::Created => Ok(matches!(create_result, CreateResult::Created)),
             Self::Cloned => Ok(matches!(create_result, CreateResult::Cloned)),
@@ -32,8 +38,20 @@ impl Condition {
                 let count = count_uncommitted_changes(op.git().mute())?;
                 Ok(count > 0)
             }
-            Self::Interval(_next_seconds) => {
-                todo!()
+            Self::Interval(interval) => {
+                let db = op.ctx().get_db()?;
+                db.with_transaction(|tx| {
+                    match tx.hook_history().get(op.repo().id, name)? {
+                        Some(history) => {
+                            let now = now();
+                            Ok(now >= history.time + interval)
+                        }
+                        None => {
+                            // never executed, always match
+                            Ok(true)
+                        }
+                    }
+                })
             }
         }
     }
@@ -71,6 +89,7 @@ mod tests {
     use std::fs;
 
     use crate::config::context;
+    use crate::db::hook_history::HookHistory;
     use crate::db::repo::Repository;
 
     use super::*;
@@ -148,14 +167,14 @@ mod tests {
         let op = RepoOperator::load(&ctx, &repo).unwrap();
 
         let cond = Condition::Created;
-        assert!(cond.matched(&op, CreateResult::Created).unwrap());
-        assert!(!cond.matched(&op, CreateResult::Cloned).unwrap());
-        assert!(!cond.matched(&op, CreateResult::Exists).unwrap());
+        assert!(cond.matched(&op, "", CreateResult::Created).unwrap());
+        assert!(!cond.matched(&op, "", CreateResult::Cloned).unwrap());
+        assert!(!cond.matched(&op, "", CreateResult::Exists).unwrap());
 
         let cond = Condition::Cloned;
-        assert!(cond.matched(&op, CreateResult::Cloned).unwrap());
-        assert!(!cond.matched(&op, CreateResult::Created).unwrap());
-        assert!(!cond.matched(&op, CreateResult::Exists).unwrap());
+        assert!(cond.matched(&op, "", CreateResult::Cloned).unwrap());
+        assert!(!cond.matched(&op, "", CreateResult::Created).unwrap());
+        assert!(!cond.matched(&op, "", CreateResult::Exists).unwrap());
     }
 
     #[test]
@@ -185,11 +204,48 @@ mod tests {
         op.git().execute(["commit", "-m", "test"], "").unwrap();
 
         let cond = Condition::Updated;
-        assert!(!cond.matched(&op, CreateResult::Exists).unwrap());
+        assert!(!cond.matched(&op, "", CreateResult::Exists).unwrap());
 
         let path = op.path().join("test.txt");
         fs::write(path, "test content").unwrap();
 
-        assert!(cond.matched(&op, CreateResult::Exists).unwrap());
+        assert!(cond.matched(&op, "", CreateResult::Exists).unwrap());
+    }
+
+    #[test]
+    fn test_matched_interval() {
+        let ctx = context::tests::build_test_context("hook_condition_matched_interval");
+        let repo = Repository {
+            id: 1,
+            remote: "github".to_string(),
+            owner: "fioncat".to_string(),
+            name: "roxide".to_string(),
+            ..Default::default()
+        };
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+
+        let cond = Condition::Interval(100);
+
+        assert!(cond.matched(&op, "test", CreateResult::Exists).unwrap());
+        assert!(
+            cond.matched(&op, "spell-check", CreateResult::Exists)
+                .unwrap()
+        );
+        let db = ctx.get_db().unwrap();
+        db.with_transaction(|tx| {
+            tx.hook_history().update(&HookHistory {
+                repo_id: op.repo().id,
+                name: "spell-check".to_string(),
+                success: true,
+                time: now(),
+            })
+        })
+        .unwrap();
+
+        assert!(
+            !cond
+                .matched(&op, "spell-check", CreateResult::Exists)
+                .unwrap()
+        );
     }
 }

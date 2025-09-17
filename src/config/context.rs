@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
@@ -183,7 +184,7 @@ impl ConfigContext {
         &self,
         path: P,
         file: F,
-        envs: &[(&str, &str)],
+        envs: &[(&str, Cow<str>)],
         message: impl ToString,
     ) -> Result<()>
     where
@@ -489,6 +490,7 @@ pub mod tests {
 
         let repos = db::tests::test_repos();
         let mirrors = db::tests::test_mirrors();
+        let hook_histories = db::hook_history::tests::test_hook_histories();
 
         let db = ctx.get_db().unwrap();
         db.with_transaction(|tx| {
@@ -499,6 +501,9 @@ pub mod tests {
             for mirror in mirrors {
                 let id = tx.mirror().insert(&mirror).unwrap();
                 assert_eq!(mirror.id, id);
+            }
+            for history in hook_histories {
+                tx.hook_history().insert(&history).unwrap();
             }
             Ok(())
         })

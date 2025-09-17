@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -9,7 +10,7 @@ pub fn run<P, F>(
     cfg: &CmdConfig,
     path: P,
     file: F,
-    envs: &[(&str, &str)],
+    envs: &[(&str, Cow<str>)],
     message: impl ToString,
     mute: bool,
 ) -> Result<()>
@@ -82,7 +83,7 @@ mod tests {
         let bash0_path = fs::canonicalize(bash0_path).unwrap();
         let bash1_path = fs::canonicalize(bash1_path).unwrap();
 
-        let envs = [("TEST_ENV", "Hello, World!")];
+        let envs = [("TEST_ENV", Cow::Borrowed("Hello, World!"))];
 
         let cfg = Config::default_bash();
         run(&cfg, base_dir, bash0_path, &envs, "Test", true).unwrap();

@@ -60,7 +60,8 @@ impl Command for HomeCommand {
 
         let path = repo.get_path(&ctx.cfg.workspace);
         let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
-        op.ensure_create(self.thin.enable, None)?;
+        let create_result = op.ensure_create(self.thin.enable, None)?;
+        op.run_hooks(create_result)?;
 
         debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());

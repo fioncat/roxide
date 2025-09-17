@@ -1,15 +1,20 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use console::style;
 
 use crate::config::context::ConfigContext;
+use crate::config::hook::HookConfig;
 use crate::config::remote::{OwnerConfigRef, RemoteConfig};
+use crate::db::hook_history::HookHistory;
 use crate::db::repo::Repository;
 use crate::exec::git::GitCmd;
 use crate::exec::git::branch::{Branch, BranchStatus};
 use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
 use crate::exec::git::remote::Remote;
+use crate::format::now;
+use crate::repo::hook::filter::matched_filters;
 use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
@@ -35,6 +40,11 @@ pub enum CreateResult {
     Created,
     Cloned,
     Exists,
+}
+
+pub struct HookResult<'a> {
+    pub name: &'a str,
+    pub success: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -121,8 +131,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             None => self.get_clone_url(),
         };
         debug!("[op] Clone URL: {clone_url:?}");
-        let mut cloned = false;
-        match clone_url {
+        let result = match clone_url {
             Some(url) => {
                 debug!("[op] Clone repo from {url:?}");
                 let message = format!("Cloning from {url}");
@@ -135,7 +144,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 self.ctx.git().execute(args, message)?;
 
                 self.ensure_user()?;
-                cloned = true;
+                CreateResult::Cloned
             }
             None => {
                 debug!(
@@ -149,15 +158,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                     ["init", "-b", self.ctx.cfg.default_branch.as_str()],
                     "Initializing empty git repository",
                 )?;
+                CreateResult::Created
             }
         };
 
-        debug!("[op] Ensure repo create done");
-        Ok(if cloned {
-            CreateResult::Cloned
-        } else {
-            CreateResult::Created
-        })
+        debug!("[op] Ensure repo create done: {result:?}");
+        Ok(result)
     }
 
     pub fn remove(&self) -> Result<()> {
@@ -486,6 +492,134 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             vec!["commit"]
         };
         self.git().execute(args, "Commit squashed changes")
+    }
+
+    pub fn run_hooks<'this>(
+        &'this self,
+        create_result: CreateResult,
+    ) -> Result<Vec<HookResult<'this>>> {
+        debug!("[op] Running hooks for repo {:?}", self.repo);
+        let mut to_run = vec![];
+        for hook in self.ctx.cfg.hooks.iter() {
+            debug!("[op] Checking hook: {hook:?}");
+            if !matched_filters(self.repo, &hook.filters) {
+                debug!("[op] Hook not matched filter, skip");
+                continue;
+            }
+            let mut should_run = false;
+            for cond in hook.conditions.iter() {
+                if cond.matched(self, &hook.name, create_result)? {
+                    debug!("[op] Hook condition matched: {cond:?}");
+                    should_run = true;
+                    break;
+                }
+            }
+            if should_run {
+                debug!("[op] Hook will be run");
+                to_run.push(hook);
+            } else {
+                debug!("[op] Hook conditions not matched, skip");
+            }
+        }
+
+        if to_run.is_empty() {
+            debug!("[op] No hook to run");
+            return Ok(vec![]);
+        }
+
+        let envs = self.build_hook_envs()?;
+        debug!("[op] Hook envs: {envs:?}");
+
+        let mut results = Vec::with_capacity(to_run.len());
+        for hook in to_run.iter() {
+            let success = self.run_hook_inner(hook, &envs)?;
+            results.push(HookResult {
+                name: &hook.name,
+                success,
+            });
+        }
+        Ok(results)
+    }
+
+    fn run_hook_inner(&self, hook: &HookConfig, envs: &[(&'static str, Cow<str>)]) -> Result<bool> {
+        show_info!(self, "Running hook: {}", style(&hook.name).magenta().bold());
+        debug!(
+            "[op] Running hook for repo {:?}, hook config: {hook:?}",
+            self.repo
+        );
+        let mut success = true;
+        for run in hook.run.iter() {
+            debug!("[op] Run hook run: {run:?}");
+            let Some(run_path) = self.ctx.cfg.hook_runs.get(run) else {
+                debug!("[op] Hook run {run:?} not found, skip");
+                continue;
+            };
+
+            let result = self.ctx.run_bash(
+                &self.path,
+                run_path,
+                envs,
+                format!("Running script {}", style(run).blue()),
+            );
+            if result.is_err() {
+                debug!("[op] Hook run {run:?} failed: {result:?}");
+                success = false;
+                break;
+            }
+        }
+
+        let history = HookHistory {
+            repo_id: self.repo.id,
+            name: hook.name.clone(),
+            success,
+            time: now(),
+        };
+        let db = self.ctx.get_db()?;
+        db.with_transaction(
+            |tx| match tx.hook_history().get(history.repo_id, &history.name)? {
+                Some(_) => tx.hook_history().update(&history),
+                None => tx.hook_history().insert(&history),
+            },
+        )?;
+
+        if success {
+            show_info!(self, "Hook {} {}", hook.name, style("ok").green());
+        } else {
+            show_info!(self, "Hook {} {}", hook.name, style("failed").red());
+        }
+        Ok(success)
+    }
+
+    fn build_hook_envs<'this>(&'this self) -> Result<[(&'static str, Cow<'this, str>); 8]> {
+        let current_branch = Branch::current(self.git().mute())?;
+        let default_branch = Branch::default(self.git().mute())?;
+        Ok([
+            ("REMOTE_NAME", Cow::Borrowed(&self.repo.name)),
+            (
+                "REMOTE_CLONE",
+                Cow::Borrowed(self.remote.clone.as_deref().unwrap_or_default()),
+            ),
+            ("OWNER_NAME", Cow::Borrowed(&self.repo.owner)),
+            (
+                "OWNER_USER",
+                Cow::Borrowed(self.owner.user.unwrap_or_default()),
+            ),
+            (
+                "OWNER_EMAIL",
+                Cow::Borrowed(self.owner.email.unwrap_or_default()),
+            ),
+            ("REPO_NAME", Cow::Borrowed(&self.repo.name)),
+            ("CURRENT_BRANCH", current_branch.into()),
+            ("DEFAULT_BRANCH", default_branch.into()),
+        ])
+    }
+
+    pub fn ctx(&self) -> &ConfigContext {
+        self.ctx
+    }
+
+    pub fn repo(&self) -> &Repository {
+        self.repo
     }
 
     pub fn get_clone_url(&self) -> Option<String> {
