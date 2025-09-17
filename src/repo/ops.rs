@@ -42,6 +42,7 @@ pub enum CreateResult {
     Exists,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HookResult<'a> {
     pub name: &'a str,
     pub success: bool,
@@ -527,12 +528,11 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             return Ok(vec![]);
         }
 
-        let envs = self.build_hook_envs()?;
-        debug!("[op] Hook envs: {envs:?}");
-
-        let mut results = Vec::with_capacity(to_run.len());
-        for hook in to_run.iter() {
-            let success = self.run_hook_inner(hook, &envs)?;
+        let mut results = vec![];
+        let envs = self.build_hook_envs();
+        debug!("[op] Run hooks with envs: {envs:?}");
+        for hook in to_run {
+            let success = self.run_hook(hook, &envs)?;
             results.push(HookResult {
                 name: &hook.name,
                 success,
@@ -541,7 +541,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         Ok(results)
     }
 
-    fn run_hook_inner(&self, hook: &HookConfig, envs: &[(&'static str, Cow<str>)]) -> Result<bool> {
+    pub fn run_hook(&self, hook: &HookConfig, envs: &[(&'static str, Cow<str>)]) -> Result<bool> {
         show_info!(self, "Running hook: {}", style(&hook.name).magenta().bold());
         debug!(
             "[op] Running hook for repo {:?}, hook config: {hook:?}",
@@ -555,12 +555,9 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 continue;
             };
 
-            let result = self.ctx.run_bash(
-                &self.path,
-                run_path,
-                envs,
-                format!("Running script {}", style(run).blue()),
-            );
+            let result = self
+                .ctx
+                .run_bash(&self.path, run_path, envs, format!("Running: {run}"));
             if result.is_err() {
                 debug!("[op] Hook run {run:?} failed: {result:?}");
                 success = false;
@@ -569,6 +566,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
 
         let history = HookHistory {
+            id: 0,
             repo_id: self.repo.id,
             name: hook.name.clone(),
             success,
@@ -578,7 +576,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         db.with_transaction(
             |tx| match tx.hook_history().get(history.repo_id, &history.name)? {
                 Some(_) => tx.hook_history().update(&history),
-                None => tx.hook_history().insert(&history),
+                None => {
+                    tx.hook_history().insert(&history)?;
+                    Ok(())
+                }
             },
         )?;
 
@@ -590,10 +591,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         Ok(success)
     }
 
-    fn build_hook_envs<'this>(&'this self) -> Result<[(&'static str, Cow<'this, str>); 8]> {
-        let current_branch = Branch::current(self.git().mute())?;
-        let default_branch = Branch::default(self.git().mute())?;
-        Ok([
+    pub fn build_hook_envs<'this>(&'this self) -> [(&'static str, Cow<'this, str>); 8] {
+        let current_branch = Branch::current(self.git().mute()).unwrap_or_default();
+        let default_branch = Branch::default(self.git().mute()).unwrap_or_default();
+        [
             ("REMOTE_NAME", Cow::Borrowed(&self.repo.name)),
             (
                 "REMOTE_CLONE",
@@ -611,7 +612,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             ("REPO_NAME", Cow::Borrowed(&self.repo.name)),
             ("CURRENT_BRANCH", current_branch.into()),
             ("DEFAULT_BRANCH", default_branch.into()),
-        ])
+        ]
     }
 
     pub fn ctx(&self) -> &ConfigContext {

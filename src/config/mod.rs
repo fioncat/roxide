@@ -164,6 +164,13 @@ impl Config {
         }
     }
 
+    pub fn get_hook(&self, name: &str) -> Result<&hook::HookConfig> {
+        match self.hooks.iter().find(|h| h.name == name) {
+            Some(h) => Ok(h),
+            None => bail!("hook {name:?} not found"),
+        }
+    }
+
     pub fn get_rempte_optional(&self, name: &str) -> Option<&remote::RemoteConfig> {
         match self.remotes_index {
             Some(ref remotes_index) => {

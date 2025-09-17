@@ -238,6 +238,7 @@ mod tests {
         let db = ctx.get_db().unwrap();
         db.with_transaction(|tx| {
             tx.hook_history().update(&HookHistory {
+                id: 1,
                 repo_id: op.repo().id,
                 name: "spell-check".to_string(),
                 success: true,

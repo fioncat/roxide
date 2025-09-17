@@ -1,4 +1,5 @@
 mod branch;
+mod hook_history;
 mod mirror;
 mod orphan;
 mod repo;
@@ -22,6 +23,7 @@ pub struct RemoveCommand {
 #[derive(Subcommand)]
 pub enum RemoveCommands {
     Branch(branch::RemoveBranchCommand),
+    HookHistory(hook_history::RemoveHookHistoryCommand),
     Mirror(mirror::RemoveMirrorCommand),
     Orphan(orphan::RemoveOrphanCommand),
     Repo(repo::RemoveRepoCommand),
@@ -33,6 +35,7 @@ impl Command for RemoveCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             RemoveCommands::Branch(cmd) => cmd.run(ctx).await,
+            RemoveCommands::HookHistory(cmd) => cmd.run(ctx).await,
             RemoveCommands::Mirror(cmd) => cmd.run(ctx).await,
             RemoveCommands::Orphan(cmd) => cmd.run(ctx).await,
             RemoveCommands::Repo(cmd) => cmd.run(ctx).await,
@@ -47,6 +50,7 @@ impl Command for RemoveCommand {
             .disable_version_flag(true)
             .subcommands([
                 branch::RemoveBranchCommand::complete_command(),
+                hook_history::RemoveHookHistoryCommand::complete_command(),
                 mirror::RemoveMirrorCommand::complete_command(),
                 orphan::RemoveOrphanCommand::complete_command(),
                 repo::RemoveRepoCommand::complete_command(),

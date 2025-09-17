@@ -1,5 +1,6 @@
 mod action;
 mod branch;
+mod hook_history;
 mod job;
 mod mirror;
 mod owner;
@@ -27,6 +28,7 @@ pub struct ListCommand {
 pub enum ListCommands {
     Action(action::ListActionCommand),
     Branch(branch::ListBranchCommand),
+    HookHistory(hook_history::ListHookHistoryCommand),
     Job(job::ListJobCommand),
     Mirror(mirror::ListMirrorCommand),
     Owner(owner::ListOwnerCommand),
@@ -43,6 +45,7 @@ impl Command for ListCommand {
         match self.command {
             ListCommands::Action(cmd) => cmd.run(ctx).await,
             ListCommands::Branch(cmd) => cmd.run(ctx).await,
+            ListCommands::HookHistory(cmd) => cmd.run(ctx).await,
             ListCommands::Job(cmd) => cmd.run(ctx).await,
             ListCommands::Mirror(cmd) => cmd.run(ctx).await,
             ListCommands::Owner(cmd) => cmd.run(ctx).await,
@@ -61,6 +64,7 @@ impl Command for ListCommand {
             .subcommands([
                 action::ListActionCommand::complete_command(),
                 branch::ListBranchCommand::complete_command(),
+                hook_history::ListHookHistoryCommand::complete_command(),
                 job::ListJobCommand::complete_command(),
                 mirror::ListMirrorCommand::complete_command(),
                 owner::ListOwnerCommand::complete_command(),

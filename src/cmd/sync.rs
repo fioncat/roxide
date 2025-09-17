@@ -40,7 +40,6 @@ pub struct SyncCommand {
 impl Command for SyncCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run sync command: {:?}", self);
-        ctx.lock()?;
 
         if !self.recursive
             && let Some(repo) = get_current_repo_optional(&ctx)?

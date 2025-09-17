@@ -53,7 +53,8 @@ impl Command for HomeCommand {
         let db = ctx.get_db()?;
         if repo.new_created {
             confirm!("Do you want to create {}", repo.full_name());
-            db.with_transaction(|tx| tx.repo().insert(&repo))?;
+            let id = db.with_transaction(|tx| tx.repo().insert(&repo))?;
+            repo.id = id;
         } else {
             db.with_transaction(|tx| tx.repo().update(&repo))?;
         };
