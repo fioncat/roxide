@@ -1,9 +1,6 @@
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use clap::Arg;
 use clap::Args;
-use clap::ValueHint;
 
 use crate::cmd::Command;
 use crate::cmd::complete;
@@ -46,13 +43,6 @@ impl Command for ExportCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("export")
-            .args(complete::repo_args())
-            .arg(
-                Arg::new("file")
-                    .long("file")
-                    .short('f')
-                    .value_hint(ValueHint::AnyPath),
-            )
+        clap::Command::new("export").args(complete::repo_args())
     }
 }

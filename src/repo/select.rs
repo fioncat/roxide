@@ -816,7 +816,7 @@ impl SelectPullRequestsArgs {
         debug!("[select] Select pull requests, args: {:?}", self);
         let api = ctx.get_api(&repo.remote, force_no_cache)?;
         let opts = self
-            .build_list_options(ctx, &repo, api.as_ref(), false)
+            .build_list_options(ctx, repo, api.as_ref(), false)
             .await?;
         let prs = api.list_pull_requests(opts).await?;
         debug!("[select] Pull requests: {prs:?}");

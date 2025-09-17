@@ -1,12 +1,8 @@
-use std::io;
-use std::io::Read;
+use std::io::{self, Read};
 
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use clap::Arg;
 use clap::Args;
-use clap::ValueHint;
 use console::style;
 
 use crate::cmd::Command;
@@ -89,13 +85,6 @@ impl Command for ImportCommand {
     }
 
     fn complete_command() -> clap::Command {
-        clap::Command::new("import")
-            .args(complete::repo_args())
-            .arg(
-                Arg::new("file")
-                    .long("file")
-                    .short('f')
-                    .value_hint(ValueHint::FilePath),
-            )
+        clap::Command::new("import").args(complete::repo_args())
     }
 }
