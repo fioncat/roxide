@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::cmd::complete;
 use crate::config::Config;
 use crate::config::context::ConfigContext;
-use crate::config::hook::HooksConfig;
+use crate::config::hook::HookRuns;
 use crate::config::remote::RemoteConfig;
 use crate::debug;
 
@@ -63,7 +63,7 @@ impl Command for ConfigCommand {
             }
             ConfigType::Hook => {
                 let Some(name) = self.name else {
-                    let mut hooks = ctx.cfg.hooks.hooks.into_keys().collect::<Vec<_>>();
+                    let mut hooks = ctx.cfg.hook_runs.hooks.into_keys().collect::<Vec<_>>();
                     hooks.sort_unstable();
                     return print_config(&hooks);
                 };
@@ -71,7 +71,7 @@ impl Command for ConfigCommand {
                     let path = ctx.cfg.hooks_dir.join(format!("{name}.sh"));
                     return ctx.edit(&path);
                 }
-                let Some(path) = ctx.cfg.hooks.get(&name) else {
+                let Some(path) = ctx.cfg.hook_runs.get(&name) else {
                     bail!("hook {name:?} not found");
                 };
                 let text = fs::read_to_string(path)?;
@@ -102,5 +102,5 @@ struct ConfigDisplay {
 
     pub remotes: Vec<RemoteConfig>,
 
-    pub hooks: HooksConfig,
+    pub hooks: HookRuns,
 }

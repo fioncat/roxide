@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use console::style;
 
 use crate::config::context::ConfigContext;
@@ -145,30 +145,6 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 )?;
             }
         };
-
-        if !self.owner.on_create.is_empty() {
-            let envs = [
-                ("REPO_REMOTE", self.repo.remote.as_str()),
-                ("REPO_NAME", self.repo.name.as_str()),
-                ("REPO_OWNER", self.repo.owner.as_str()),
-            ];
-
-            for hook_name in self.owner.on_create.iter() {
-                debug!("[op] Run create hook: {hook_name:?}");
-                let Some(hook_path) = self.ctx.cfg.hooks.get(hook_name) else {
-                    bail!("hook {hook_name:?} not found");
-                };
-
-                self.ctx
-                    .run_bash(
-                        &self.path,
-                        hook_path,
-                        &envs,
-                        format!("Running create hook: {hook_name}"),
-                    )
-                    .with_context(|| format!("failed to run create hook {hook_name:?}"))?;
-            }
-        }
 
         debug!("[op] Ensure repo create done");
         Ok(cloned)
@@ -622,15 +598,10 @@ mod tests {
             ..Default::default()
         };
         let ctx = context::tests::build_test_context("create_empty");
-        let path = repo.get_path(&ctx.cfg.workspace);
         let op = RepoOperator::load(&ctx, &repo).unwrap();
         op.ensure_create(true, None).unwrap();
 
         op.git().execute(["status"], "").unwrap();
-
-        // The cargo-init hook should have created a Cargo.toml
-        let cargo_path = path.join("Cargo.toml");
-        fs::metadata(&cargo_path).unwrap();
     }
 
     #[test]

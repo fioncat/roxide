@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use crate::debug;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HooksConfig {
+pub struct HookRuns {
     pub hooks: HashMap<String, String>,
 }
 
-impl HooksConfig {
+impl HookRuns {
     pub fn read(dir: &Path) -> Result<Self> {
         debug!("[config] Read hooks config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
@@ -65,28 +65,28 @@ impl HooksConfig {
 pub mod tests {
     use super::*;
 
-    pub fn expect_hooks() -> HooksConfig {
+    pub fn expect_hook_runs() -> HookRuns {
         let dir = "src/config/tests/hooks";
         let dir = fs::canonicalize(dir).unwrap();
         let dir = format!("{}", dir.display());
         let mut expected = HashMap::new();
         expected.insert("cargo-init".to_string(), format!("{dir}/cargo-init.sh"));
         expected.insert("gomod-init".to_string(), format!("{dir}/gomod-init.sh"));
-        HooksConfig { hooks: expected }
+        HookRuns { hooks: expected }
     }
 
     #[test]
-    fn test_hooks_config() {
+    fn test_hook_runs_config() {
         let dir = "src/config/tests/hooks";
         let dir = fs::canonicalize(dir).unwrap();
-        let hooks = HooksConfig::read(&dir).unwrap();
-        assert_eq!(hooks, expect_hooks());
+        let hooks = HookRuns::read(&dir).unwrap();
+        assert_eq!(hooks, expect_hook_runs());
     }
 
     #[test]
-    fn test_default() {
+    fn test_default_hook_runs() {
         let dir = "src/config"; // no .sh files here
-        let hooks = HooksConfig::read(Path::new(dir)).unwrap();
-        assert_eq!(hooks, HooksConfig::default());
+        let hooks = HookRuns::read(Path::new(dir)).unwrap();
+        assert_eq!(hooks, HookRuns::default());
     }
 }

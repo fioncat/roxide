@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug;
 
-use super::hook::HooksConfig;
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RemoteConfig {
     #[serde(skip)]
@@ -64,9 +62,6 @@ pub struct OwnerConfig {
 
     pub user: Option<String>,
     pub email: Option<String>,
-
-    #[serde(default)]
-    pub on_create: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -79,12 +74,10 @@ pub struct OwnerConfigRef<'a> {
 
     pub user: Option<&'a str>,
     pub email: Option<&'a str>,
-
-    pub on_create: &'a [String],
 }
 
 impl RemoteConfig {
-    pub fn read(dir: &Path, hooks: &HooksConfig) -> Result<Vec<Self>> {
+    pub fn read(dir: &Path) -> Result<Vec<Self>> {
         debug!("[config] Read remotes config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
             Ok(d) => {
@@ -124,7 +117,7 @@ impl RemoteConfig {
                 .with_context(|| format!("failed to parse remote config {name:?}"))?;
             remote.name = name.clone();
             remote
-                .validate(hooks)
+                .validate()
                 .with_context(|| format!("failed to validate remote config {name:?}"))?;
             remotes.push(remote);
         }
@@ -144,7 +137,7 @@ impl RemoteConfig {
         owner_ref
     }
 
-    pub(super) fn validate(&mut self, hooks: &HooksConfig) -> Result<()> {
+    pub(super) fn validate(&mut self) -> Result<()> {
         debug!("[config] Validate remote config: {:?}", self);
         if self.clone.is_some() {
             let clone = super::expandenv(take(&mut self.clone).unwrap());
@@ -167,7 +160,7 @@ impl RemoteConfig {
         }
 
         if let Some(ref mut default) = self.default {
-            default.validate(hooks).context("validate default owner")?;
+            default.validate().context("validate default owner")?;
         }
 
         for (name, owner) in &mut self.owners {
@@ -175,7 +168,7 @@ impl RemoteConfig {
                 bail!("owner name is empty");
             }
             owner
-                .validate(hooks)
+                .validate()
                 .with_context(|| format!("validate owner {name:?}"))?;
         }
 
@@ -221,7 +214,7 @@ impl RemoteAPI {
 }
 
 impl OwnerConfig {
-    fn validate(&mut self, hooks: &HooksConfig) -> Result<()> {
+    fn validate(&mut self) -> Result<()> {
         if self.user.is_some() {
             let user = super::expandenv(take(&mut self.user).unwrap());
             if user.is_empty() {
@@ -237,20 +230,6 @@ impl OwnerConfig {
             }
             self.email = Some(email);
         }
-
-        let on_create = take(&mut self.on_create);
-        let mut new_on_create = Vec::with_capacity(on_create.len());
-        for (idx, name) in on_create.into_iter().enumerate() {
-            let name = super::expandenv(name);
-            if name.is_empty() {
-                bail!("on_create hook #{idx} is empty");
-            }
-            if !hooks.contains(&name) {
-                bail!("on_create hook {name:?} not found");
-            }
-            new_on_create.push(name);
-        }
-        self.on_create = new_on_create;
 
         Ok(())
     }
@@ -272,9 +251,6 @@ impl<'a> OwnerConfigRef<'a> {
         }
         if let Some(email) = owner.email.as_ref() {
             self.email = Some(email);
-        }
-        if !owner.on_create.is_empty() {
-            self.on_create = &owner.on_create;
         }
     }
 }
@@ -355,28 +331,11 @@ pub mod tests {
             },
             RemoteConfig {
                 name: "test".to_string(),
-                clone: None,
                 icon: Some("T".to_string()),
+                clone: None,
                 api: None,
                 default: None,
-                owners: {
-                    let mut owners = HashMap::new();
-                    owners.insert(
-                        "golang".to_string(),
-                        OwnerConfig {
-                            on_create: vec!["gomod-init".to_string()],
-                            ..Default::default()
-                        },
-                    );
-                    owners.insert(
-                        "rust".to_string(),
-                        OwnerConfig {
-                            on_create: vec!["cargo-init".to_string()],
-                            ..Default::default()
-                        },
-                    );
-                    owners
-                },
+                owners: HashMap::new(),
             },
         ]
     }
@@ -384,10 +343,7 @@ pub mod tests {
     #[test]
     fn test_remote_config() {
         let dir = "src/config/tests/remotes";
-        let hooks_dir = "src/config/tests/hooks";
-        let hooks = HooksConfig::read(Path::new(hooks_dir)).unwrap();
-        let remotes = RemoteConfig::read(Path::new(dir), &hooks).unwrap();
-
+        let remotes = RemoteConfig::read(Path::new(dir)).unwrap();
         assert_eq!(remotes, expect_remotes());
     }
 }

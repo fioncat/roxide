@@ -55,7 +55,7 @@ pub struct Config {
     remotes_index: Option<HashMap<String, usize>>,
 
     #[serde(skip)]
-    pub hooks: hook::HooksConfig,
+    pub hook_runs: hook::HookRuns,
 
     #[serde(skip)]
     pub dir: PathBuf,
@@ -125,10 +125,10 @@ impl Config {
         cfg.remotes_dir = cfg.dir.join("remotes");
         cfg.hooks_dir = cfg.dir.join("hooks");
 
-        let hooks = hook::HooksConfig::read(&cfg.hooks_dir)?;
-        let remotes = remote::RemoteConfig::read(&cfg.remotes_dir, &hooks)?;
+        let remotes = remote::RemoteConfig::read(&cfg.remotes_dir)?;
+        let hook_runs = hook::HookRuns::read(&cfg.hooks_dir)?;
 
-        cfg.hooks = hooks;
+        cfg.hook_runs = hook_runs;
         cfg.remotes = remotes;
         if cfg.remotes.len() > Self::REMOTES_INDEX_THRESHOLD {
             let remotes_index = cfg
@@ -280,7 +280,7 @@ impl Default for Config {
             stats_ignore: vec![],
             remotes: vec![],
             remotes_index: None,
-            hooks: hook::HooksConfig::default(),
+            hook_runs: hook::HookRuns::default(),
             path: PathBuf::new(),
             home_dir: PathBuf::new(),
             dir: PathBuf::new(),
@@ -332,7 +332,7 @@ mod tests {
             stats_ignore: vec![],
             remotes: super::remote::tests::expect_remotes(),
             remotes_index: None,
-            hooks: super::hook::tests::expect_hooks(),
+            hook_runs: super::hook::tests::expect_hook_runs(),
             dir: path.clone(),
             home_dir,
             path: path.join("config.toml"),

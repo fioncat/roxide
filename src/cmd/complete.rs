@@ -306,7 +306,7 @@ fn complete_config_name(
             .collect::<Vec<_>>(),
         "hook" => ctx
             .cfg
-            .hooks
+            .hook_runs
             .hooks
             .keys()
             .filter(|h| h.starts_with(current))
