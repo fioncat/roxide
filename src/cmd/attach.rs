@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::RepoOperator;
@@ -62,5 +63,12 @@ impl Command for AttachCommand {
             repo.full_name()
         );
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_remote))
+            .arg(CompleteArg::new().complete(funcs::complete_owner))
+            .arg(CacheArgs::complete())
     }
 }

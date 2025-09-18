@@ -1,7 +1,8 @@
 _rox() {
 	local cmd=${words[1]}
 	local cmp_args=("${words[@]:1}")
-	local items=($(ROXIDE_INIT="zsh" $cmd "${cmp_args[@]}" 2>/dev/null))
+	local complete_index=$(expr $CURRENT - 1)
+	local items=($(ROXIDE_INIT="zsh" ROXIDE_COMPLETE_INDEX="$complete_index" $cmd "${cmp_args[@]}" 2>/dev/null))
 
 	local flags=${items[1]}
 	local items=("${items[@]:1}")

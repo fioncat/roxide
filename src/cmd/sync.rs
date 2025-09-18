@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::batch::{self, Task};
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::current::get_current_repo_optional;
@@ -25,13 +26,13 @@ pub struct SyncCommand {
     /// By default, if you are currently in a repository, sync will synchronize the current
     /// repository; otherwise it will sync multiple repositories. With this option,
     /// multiple repositories will be synced regardless of your current location.
-    #[arg(long, short)]
+    #[arg(short)]
     pub recursive: bool,
 
     /// By default, when syncing multiple repositories, only repositories marked with sync
     /// flag will be synchronized. With this option, all repositories will be forcefully
     /// synced, ignoring the sync flag.
-    #[arg(long, short)]
+    #[arg(short)]
     pub force: bool,
 }
 
@@ -50,6 +51,13 @@ impl Command for SyncCommand {
             return self.sync_one(ctx, repo);
         }
         self.sync_many(ctx).await
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            .arg(CompleteArg::new().short('r'))
+            .arg(CompleteArg::new().short('f'))
     }
 }
 

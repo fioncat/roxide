@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -42,5 +43,12 @@ impl Command for RebaseCommand {
         .await?;
 
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_branch))
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "roxide"
-version = "0.20.0"
+version = "0.20.1"
 edition = "2024"
 build = "build.rs"
 license = "MIT"
@@ -17,7 +17,6 @@ async-trait = "^0"
 chrono = "^0"
 clap = { version = "^4", features = ["derive"] }
 clap-num = "^1"
-clap_complete = { version = "^4", features = ["unstable-dynamic"] }
 console = "^0"
 crossbeam = "^0"
 dirs = "^6"

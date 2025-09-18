@@ -9,6 +9,7 @@ use clap::Args;
 use console::style;
 
 use crate::api::{PullRequest, PullRequestHead};
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::cmd::{CacheArgs, Command, UpstreamArgs};
 use crate::config::context::ConfigContext;
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
@@ -38,6 +39,10 @@ pub struct CreatePullRequestCommand {
 impl Command for CreatePullRequestCommand {
     fn name() -> &'static str {
         "pull-request"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["pr"]
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
@@ -169,5 +174,13 @@ impl Command for CreatePullRequestCommand {
                 web_url
             )
         })
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_branch))
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
+            .arg(WaitActionArgs::complete())
     }
 }

@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::scan::code_stats::get_code_stats;
 use crate::scan::ignore::Ignore;
@@ -58,5 +59,12 @@ impl Command for StatsCommand {
         )?;
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().dirs())
+            .arg(IgnoreArgs::complete())
+            .args(TableArgs::complete())
     }
 }

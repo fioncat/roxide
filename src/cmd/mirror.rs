@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::ThinArgs;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::mirror::MirrorSelector;
@@ -67,5 +68,11 @@ impl Command for MirrorCommand {
         debug!("[cmd] Mirror path: {:?}", mirror_op.path().display());
         println!("{}", mirror_op.path().display());
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_mirror_name))
+            .arg(ThinArgs::complete())
     }
 }

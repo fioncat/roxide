@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
 
+use crate::cmd::complete::CompleteArg;
 use crate::db::repo::LimitOptions;
 use crate::term;
 use crate::term::table::Table;
@@ -37,11 +38,11 @@ pub struct ListArgs {
     pub table: TableArgs,
 
     /// Page number, indicating which page of data to display.
-    #[arg(long, short, default_value = "1")]
+    #[arg(short, default_value = "1")]
     pub page: u32,
 
     /// Number of rows to display per page.
-    #[arg(long, short = 's', default_value = "20")]
+    #[arg(short = 's', default_value = "20")]
     pub page_size: u32,
 }
 
@@ -77,6 +78,13 @@ impl TableArgs {
 
         Ok(table.render())
     }
+
+    pub fn complete() -> [CompleteArg; 2] {
+        [
+            CompleteArg::new().long("json"),
+            CompleteArg::new().long("headless"),
+        ]
+    }
 }
 
 impl ListArgs {
@@ -103,6 +111,13 @@ impl ListArgs {
         let total_pages = total.div_ceil(self.page_size);
         let hint = format!("Page: {}/{total_pages}, Total: {}", self.page, total);
         Ok(format!("{hint}\n{text}"))
+    }
+
+    pub fn complete() -> Vec<CompleteArg> {
+        let mut args = TableArgs::complete().to_vec();
+        args.push(CompleteArg::new().short('p').no_complete_value());
+        args.push(CompleteArg::new().short('s').no_complete_value());
+        args
     }
 }
 

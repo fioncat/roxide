@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::Branch;
@@ -52,6 +53,10 @@ impl Command for SwitchCommand {
         let idx = ctx.fzf_search("Search branch to switch", &branches, None)?;
         debug!("[cmd] Selected branch: {:?}", branches[idx]);
         self.switch(&ctx, &branches[idx])
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_branch))
     }
 }
 

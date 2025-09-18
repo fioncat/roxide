@@ -5,6 +5,7 @@ use console::style;
 
 use crate::check::*;
 use crate::cmd::CacheArgs;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, QueryOptions};
 use crate::{cursor_up, debug, outputln};
@@ -71,6 +72,10 @@ impl Command for CheckCommand {
         }
 
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CacheArgs::complete())
     }
 }
 

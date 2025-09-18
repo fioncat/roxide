@@ -2,6 +2,7 @@ pub mod funcs;
 
 use std::collections::HashSet;
 use std::env;
+use std::fmt::Display;
 
 use anyhow::{Context, Result, bail};
 
@@ -22,6 +23,12 @@ pub struct CompleteContext {
     pub ctx: ConfigContext,
     pub current: String,
     pub args: Vec<String>,
+}
+
+impl Display for CompleteContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "args={:?}, current={:?}", self.args, self.current)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -126,6 +133,11 @@ impl CompleteArg {
         self
     }
 
+    pub fn no_complete_value(mut self) -> Self {
+        self.complete_func = Some(funcs::no_complete);
+        self
+    }
+
     fn run_complete(&self, cmp_ctx: CompleteContext) -> Result<CompleteResult> {
         if self.files {
             return Ok(CompleteResult::files());
@@ -184,6 +196,7 @@ impl CompleteResult {
 }
 
 const INIT_ENV: &str = "ROXIDE_INIT";
+const INDEX_ENV: &str = "ROXIDE_COMPLETE_INDEX";
 
 pub fn register_complete() -> Result<bool> {
     let Ok(shell) = env::var(INIT_ENV) else {
@@ -213,9 +226,28 @@ pub fn register_complete() -> Result<bool> {
         return Ok(true);
     }
 
-    args.remove(0); // remove binary path
+    let Ok(index) = env::var(INDEX_ENV) else {
+        debug!("[complete] Error: Complete index env not set");
+        return Ok(true);
+    };
 
-    let result = match complete_command(ctx, args, App::complete()) {
+    let index: usize = match index.parse() {
+        Ok(i) => i,
+        Err(e) => {
+            debug!("[complete] Error: Invalid complete index env: {e:#}");
+            return Ok(true);
+        }
+    };
+    let current = if index < args.len() {
+        args.remove(index)
+    } else {
+        String::new()
+    };
+    if !args.is_empty() {
+        args.remove(0); // remove binary path
+    }
+
+    let result = match complete_command(ctx, args, current, App::complete()) {
         Ok(r) => r,
         Err(e) => {
             debug!("[complete] Failed to complete: {e:#}");
@@ -240,10 +272,15 @@ pub fn register_complete() -> Result<bool> {
 fn complete_command(
     ctx: ConfigContext,
     mut args: Vec<String>,
+    current: String,
     cmd: CompleteCommand,
 ) -> Result<CompleteResult> {
+    debug!("[complete] The root command is: {cmd:?}");
+    debug!("[complete] Args: {args:?}, current: {current:?}");
+
     let cmd = get_final_command(cmd, &mut args);
-    debug!("[complete] The final command is: {cmd:?}, args: {args:?}");
+    debug!("[complete] The final command is: {cmd:?}, final args is: {args:?}");
+
     let Some(cmd) = cmd else {
         debug!("[complete] No such command");
         return Ok(CompleteResult::default());
@@ -262,16 +299,11 @@ fn complete_command(
         "[complete] No subcommands, try to complete flags or args for {:?}",
         cmd.name
     );
-    if args.is_empty() {
-        debug!("[complete] No args");
-        return Ok(CompleteResult::default());
-    }
     let Some(mut cmp_args) = cmd.args else {
         debug!("[complete] No args to complete");
         return Ok(CompleteResult::default());
     };
 
-    let current = args.pop().unwrap();
     if current.starts_with('-') {
         return Ok(complete_flag_name(cmp_args, args));
     }
@@ -468,12 +500,11 @@ fn get_final_command(cmd: CompleteCommand, args: &mut Vec<String>) -> Option<Com
     if cmd.subcommands.is_none() {
         return Some(cmd);
     }
-
-    let cmd_name = args.remove(0);
     if args.is_empty() {
         return Some(cmd);
     }
 
+    let cmd_name = args.remove(0);
     for subcommand in cmd.subcommands.unwrap() {
         if subcommand.name == cmd_name {
             return get_final_command(subcommand, args);

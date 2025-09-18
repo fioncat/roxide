@@ -9,6 +9,7 @@ use crate::api::{
     Action, HeadRepository, Job, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
 };
 use crate::cmd::UpstreamArgs;
+use crate::cmd::complete::{CompleteArg, funcs};
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
@@ -37,6 +38,16 @@ pub struct SelectRepoArgs {
     /// repository under the owner.
     /// Examples: "roxide", "vscode", "myproject"
     pub name: Option<String>,
+}
+
+impl SelectRepoArgs {
+    pub fn complete() -> [CompleteArg; 3] {
+        [
+            CompleteArg::new().complete(funcs::complete_head),
+            CompleteArg::new().complete(funcs::complete_owner),
+            CompleteArg::new().complete(funcs::complete_name),
+        ]
+    }
 }
 
 pub struct RepoSelector<'a, 'b> {

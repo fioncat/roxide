@@ -6,6 +6,7 @@ use console::style;
 use tokio::time;
 
 use crate::api::{Action, JobStatus, RemoteAPI};
+use crate::cmd::complete::CompleteArg;
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::exec::git::commit::get_current_commit;
@@ -16,7 +17,7 @@ pub struct WaitActionArgs {
     /// Wait for all jobs in the current action to complete before proceeding. This will
     /// query the Remote API every 2 seconds and display jobs that are still pending or
     /// running in real-time.
-    #[arg(name = "wait", long = "wait", short = 'w')]
+    #[arg(name = "wait", short = 'w')]
     pub enable: bool,
 }
 
@@ -159,6 +160,10 @@ impl WaitActionArgs {
         let count = jobs.len();
         let list = term::render_list(jobs, count, left);
         format!("{list_head}{list}")
+    }
+
+    pub fn complete() -> CompleteArg {
+        CompleteArg::new().short('w')
     }
 }
 

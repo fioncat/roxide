@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::secret::{BufferArgs, SecretArgs, encrypt_many, encrypt_one};
@@ -39,5 +40,9 @@ impl Command for EncryptCommand {
             )
             .await
         }
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(SecretArgs::complete())
     }
 }

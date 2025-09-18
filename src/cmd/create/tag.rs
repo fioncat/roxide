@@ -4,6 +4,7 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, UpdateTagRule};
 use crate::{confirm, debug, info, output};
@@ -60,5 +61,9 @@ impl Command for CreateTagCommand {
         )?;
 
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_tag_method))
     }
 }
