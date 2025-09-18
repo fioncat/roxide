@@ -327,24 +327,24 @@ fn complete_command(
 
 fn complete_flag_name(cmp_args: Vec<CompleteArg>, args: Vec<String>) -> CompleteResult {
     debug!("[complete] Complete flag name, args: {args:?}");
-    let mut exsisting_flags = HashSet::new();
+    let mut existing_flags = HashSet::new();
     for cmp_arg in cmp_args.iter() {
         if cmp_arg.array {
             // We allow array flag to be used multiple times, so don't filter it out
             continue;
         }
         if let Some(long) = cmp_arg.long {
-            exsisting_flags.insert(format!("--{long}"));
+            existing_flags.insert(format!("--{long}"));
         }
         if let Some(short) = cmp_arg.short {
-            exsisting_flags.insert(format!("-{short}"));
+            existing_flags.insert(format!("-{short}"));
         }
     }
-    debug!("[complete] Existing flags: {exsisting_flags:?}");
+    debug!("[complete] Existing flags: {existing_flags:?}");
 
     let mut excludes = HashSet::new();
     for arg in args {
-        if exsisting_flags.contains(&arg) {
+        if existing_flags.contains(&arg) {
             excludes.insert(arg);
         }
     }
