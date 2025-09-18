@@ -783,11 +783,11 @@ pub struct SelectPullRequestsArgs {
 
     /// By default, only filters pull requests with head as the current branch. With this
     /// option, ignores the current branch and selects all pull requests.
-    #[arg(long, short)]
+    #[arg(short)]
     pub all: bool,
 
     /// Filter pull requests by base branch name.
-    #[arg(long, short)]
+    #[arg(short)]
     pub base: Option<String>,
 
     #[clap(flatten)]
@@ -884,6 +884,17 @@ impl SelectPullRequestsArgs {
             head,
             base,
         })
+    }
+
+    pub fn complete() -> Vec<CompleteArg> {
+        let mut args = vec![
+            CompleteArg::new().short('a'),
+            CompleteArg::new()
+                .short('b')
+                .complete(funcs::complete_branch),
+        ];
+        args.push(UpstreamArgs::complete());
+        args
     }
 }
 

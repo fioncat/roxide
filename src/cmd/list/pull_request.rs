@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::cmd::{CacheArgs, Command};
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
@@ -26,6 +27,10 @@ pub struct ListPullRequestCommand {
 impl Command for ListPullRequestCommand {
     fn name() -> &'static str {
         "pull-request"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["pr"]
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
@@ -56,5 +61,12 @@ impl Command for ListPullRequestCommand {
         let text = self.table.render(titles, &prs)?;
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectPullRequestsArgs::complete())
+            .arg(CacheArgs::complete())
+            .args(TableArgs::complete())
     }
 }

@@ -13,7 +13,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
-use crate::cmd::complete::CompleteCommand;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 
 use super::Command;
@@ -85,6 +85,12 @@ pub struct RepoDiskUsageArgs {
     /// If enabled, calculates and displays current disk usage of repositories (or remotes,
     /// owners) sorted in descending order by size. In this mode, some irrelevant columns
     /// will be hidden. Use this option for convenient disk usage monitoring.
-    #[arg(name = "disk-usage", long = "du", short = 'd')]
+    #[arg(name = "disk-usage", short = 'd')]
     pub enable: bool,
+}
+
+impl RepoDiskUsageArgs {
+    pub fn complete() -> CompleteArg {
+        CompleteArg::new().short('d')
+    }
 }

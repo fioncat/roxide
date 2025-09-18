@@ -4,6 +4,7 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::wait_action::WaitActionArgs;
@@ -61,5 +62,11 @@ impl Command for ListActionCommand {
         }
 
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(WaitActionArgs::complete())
+            .args(TableArgs::complete())
     }
 }

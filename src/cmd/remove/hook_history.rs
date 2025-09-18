@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::db::DatabaseHandle;
 use crate::repo::current::get_current_repo;
@@ -15,12 +16,12 @@ use super::Command;
 #[derive(Debug, Args)]
 pub struct RemoveHookHistoryCommand {
     /// Remove all hook histories, not only for the current repository.
-    #[arg(long, short)]
+    #[arg(short)]
     pub all: bool,
 
     /// Remove orphan hook histories, which do not exists in hooks config or belong to any
     /// repository.
-    #[arg(long, short)]
+    #[arg(short)]
     pub orphan: bool,
 }
 
@@ -81,5 +82,11 @@ impl RemoveHookHistoryCommand {
             }
         }
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().short('a'))
+            .arg(CompleteArg::new().short('o'))
     }
 }

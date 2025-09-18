@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::mirror::MirrorSelector;
@@ -40,5 +41,9 @@ impl Command for ListMirrorCommand {
             .render(vec!["ID", "Name", "LastVisited", "Visited"], &repos)?;
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(TableArgs::complete())
     }
 }

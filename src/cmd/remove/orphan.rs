@@ -4,6 +4,7 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::outputln;
 use crate::repo::remove_dir_all;
@@ -14,7 +15,7 @@ use crate::{confirm, debug, info};
 #[derive(Debug, Args)]
 pub struct RemoveOrphanCommand {
     /// Show what would be removed without actually removing them.
-    #[arg(long, short)]
+    #[arg(short)]
     pub dry_run: bool,
 }
 
@@ -80,5 +81,9 @@ impl Command for RemoveOrphanCommand {
 
         info!("Done, {count} orphan path(s) removed");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().short('d'))
     }
 }

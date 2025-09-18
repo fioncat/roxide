@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -37,5 +38,12 @@ impl Command for OpenJobCommand {
         let action = self.wait_action.wait(&ctx, &repo, api.as_ref()).await?;
         let job = select_job_from_action(&ctx, action, self.id, None)?;
         open::that(&job.web_url).with_context(|| format!("failed to open job: {}", job.web_url))
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().no_complete_value())
+            .arg(WaitActionArgs::complete())
+            .args(TableArgs::complete())
     }
 }

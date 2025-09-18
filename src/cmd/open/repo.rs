@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::cmd::{CacheArgs, Command, UpstreamArgs};
 use crate::config::context::ConfigContext;
 use crate::debug;
@@ -15,7 +16,7 @@ use crate::repo::current::get_current_repo;
 pub struct OpenRepoCommand {
     /// By default, opens the repository's root directory. If specified, opens the current
     /// branch of the repository. Can also specify a branch name.
-    #[arg(long, short)]
+    #[arg(short)]
     pub branch: Option<Option<String>>,
 
     #[clap(flatten)]
@@ -61,5 +62,16 @@ impl Command for OpenRepoCommand {
 
         open::that(&web_url).with_context(|| format!("cannot open repo web url {web_url:?}"))?;
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(
+                CompleteArg::new()
+                    .short('b')
+                    .complete(funcs::complete_branch),
+            )
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
     }
 }

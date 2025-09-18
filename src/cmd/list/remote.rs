@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{RemoteDiskUsage, RemoteDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs, select_remotes};
@@ -46,5 +47,11 @@ impl Command for ListRemoteCommand {
         };
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(RepoDiskUsageArgs::complete())
+            .args(ListArgs::complete())
     }
 }

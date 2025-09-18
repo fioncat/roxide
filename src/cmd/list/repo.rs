@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteArg;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::outputln;
@@ -73,5 +75,14 @@ impl Command for ListRepoCommand {
 
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            .arg(CompleteArg::new().long("sync"))
+            .arg(CompleteArg::new().long("pin"))
+            .arg(RepoDiskUsageArgs::complete())
+            .args(ListArgs::complete())
     }
 }

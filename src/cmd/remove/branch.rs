@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::{Branch, BranchStatus};
@@ -69,5 +70,9 @@ impl Command for RemoveBranchCommand {
         }
 
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_branch))
     }
 }

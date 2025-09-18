@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -47,5 +48,12 @@ impl Command for ListJobCommand {
         let logs = api.get_job_log(&repo.owner, &repo.name, job.id).await?;
         print!("{logs}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().no_complete_value())
+            .arg(WaitActionArgs::complete())
+            .args(TableArgs::complete())
     }
 }

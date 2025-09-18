@@ -4,6 +4,7 @@ use clap::Args;
 
 use crate::cmd::CacheArgs;
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -33,6 +34,10 @@ impl Command for OpenPullRequestCommand {
         "pull-request"
     }
 
+    fn alias() -> Vec<&'static str> {
+        vec!["pr"]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run open pull request command: {:?}", self);
 
@@ -51,5 +56,13 @@ impl Command for OpenPullRequestCommand {
         open::that(&pr.web_url)
             .with_context(|| format!("cannot open pull request web url {:?}", pr.web_url))?;
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectPullRequestsArgs::complete())
+            .arg(CacheArgs::complete())
+            .args(TableArgs::complete())
+            .arg(WaitActionArgs::complete())
     }
 }

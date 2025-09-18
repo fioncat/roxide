@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -39,5 +40,9 @@ impl Command for RemoveMirrorCommand {
 
         remove_mirror(&ctx, &repo, mirror)?;
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_mirror_name))
     }
 }

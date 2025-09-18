@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::exec::git::branch::{Branch, BranchList};
 use crate::term::list::{ListArgs, pagination};
@@ -33,5 +34,9 @@ impl Command for ListBranchCommand {
 
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(ListArgs::complete())
     }
 }

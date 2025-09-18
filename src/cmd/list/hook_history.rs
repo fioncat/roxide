@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::term::list::TableArgs;
@@ -33,5 +34,9 @@ impl Command for ListHookHistoryCommand {
             .render(vec!["Name", "Success", "Time"], &histories)?;
         outputln!("{text}");
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(TableArgs::complete())
     }
 }
