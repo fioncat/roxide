@@ -17,6 +17,10 @@ pub struct ListBranchCommand {
 
 #[async_trait]
 impl Command for ListBranchCommand {
+    fn name() -> &'static str {
+        "branch"
+    }
+
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list branch command: {:?}", self);
         ctx.mute();
@@ -29,9 +33,5 @@ impl Command for ListBranchCommand {
 
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("branch")
     }
 }

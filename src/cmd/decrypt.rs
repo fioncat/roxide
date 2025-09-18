@@ -17,6 +17,10 @@ pub struct DecryptCommand {
 
 #[async_trait]
 impl Command for DecryptCommand {
+    fn name() -> &'static str {
+        "decrypt"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run decrypt command: {:?}", self);
 
@@ -27,9 +31,5 @@ impl Command for DecryptCommand {
         } else {
             decrypt_many(self.secret.into_many_base_dir(ctx)?, &password).await
         }
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("decrypt")
     }
 }

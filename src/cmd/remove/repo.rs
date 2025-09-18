@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::mirror::clean_mirrors;
@@ -33,6 +32,10 @@ pub struct RemoveRepoCommand {
 
 #[async_trait]
 impl Command for RemoveRepoCommand {
+    fn name() -> &'static str {
+        "repo"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove repo command: {:?}", self);
         ctx.lock()?;
@@ -65,10 +68,6 @@ impl Command for RemoveRepoCommand {
         }
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args(complete::repo_args())
     }
 }
 

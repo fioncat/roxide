@@ -19,6 +19,10 @@ pub struct ListMirrorCommand {
 
 #[async_trait]
 impl Command for ListMirrorCommand {
+    fn name() -> &'static str {
+        "mirror"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list mirror command: {:?}", self);
 
@@ -36,9 +40,5 @@ impl Command for ListMirrorCommand {
             .render(vec!["ID", "Name", "LastVisited", "Visited"], &repos)?;
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("mirror")
     }
 }

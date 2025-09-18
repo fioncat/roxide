@@ -8,7 +8,7 @@ use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
 use crate::{debug, info};
 
-use super::{CacheArgs, Command, complete};
+use super::{CacheArgs, Command};
 
 /// Attach a non-workspace git repository to roxide management.
 #[derive(Debug, Args)]
@@ -22,6 +22,10 @@ pub struct AttachCommand {
 
 #[async_trait]
 impl Command for AttachCommand {
+    fn name() -> &'static str {
+        "attach"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run attach command: {:?}", self);
         ctx.lock()?;
@@ -58,9 +62,5 @@ impl Command for AttachCommand {
             repo.full_name()
         );
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("attach").args([complete::remote_arg(), complete::owner_arg()])
     }
 }

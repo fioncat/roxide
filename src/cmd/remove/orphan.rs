@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use clap::{Arg, Args};
+use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
@@ -20,6 +20,10 @@ pub struct RemoveOrphanCommand {
 
 #[async_trait]
 impl Command for RemoveOrphanCommand {
+    fn name() -> &'static str {
+        "orphan"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove orphan command: {:?}", self);
 
@@ -76,9 +80,5 @@ impl Command for RemoveOrphanCommand {
 
         info!("Done, {count} orphan path(s) removed");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("orphan").arg(Arg::new("dry-run").long("dry-run").short('d'))
     }
 }

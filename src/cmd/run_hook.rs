@@ -8,7 +8,7 @@ use clap::Args;
 use console::style;
 
 use crate::batch::{self, Task};
-use crate::cmd::{ThinArgs, complete};
+use crate::cmd::ThinArgs;
 use crate::config::context::ConfigContext;
 use crate::config::hook::HookConfig;
 use crate::db::repo::Repository;
@@ -40,6 +40,10 @@ pub struct RunHookCommand {
 
 #[async_trait]
 impl Command for RunHookCommand {
+    fn name() -> &'static str {
+        "run-hook"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run run command: {:?}", self);
 
@@ -49,10 +53,6 @@ impl Command for RunHookCommand {
             return self.run_one(ctx, repo);
         }
         self.run_many(ctx).await
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("run-hook").args(complete::repo_args())
     }
 }
 

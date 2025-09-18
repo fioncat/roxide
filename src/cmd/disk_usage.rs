@@ -33,6 +33,10 @@ pub struct DiskUsageCommand {
 
 #[async_trait]
 impl Command for DiskUsageCommand {
+    fn name() -> &'static str {
+        "disk-usage"
+    }
+
     async fn run(self, _: ConfigContext) -> Result<()> {
         debug!("[cmd] Run disk-usage command: {:?}", self);
 
@@ -56,9 +60,5 @@ impl Command for DiskUsageCommand {
         }
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("disk-usage").alias("du")
     }
 }

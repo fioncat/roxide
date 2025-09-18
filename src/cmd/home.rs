@@ -4,7 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, ThinArgs, complete};
+use crate::cmd::{CacheArgs, ThinArgs};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::mirror::get_current_mirror;
@@ -34,6 +34,10 @@ pub struct HomeCommand {
 
 #[async_trait]
 impl Command for HomeCommand {
+    fn name() -> &'static str {
+        "home"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
@@ -67,10 +71,6 @@ impl Command for HomeCommand {
         debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("home").args(complete::repo_args())
     }
 }
 

@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, Command, UpstreamArgs, complete};
+use crate::cmd::{CacheArgs, Command, UpstreamArgs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::Branch;
@@ -27,6 +27,10 @@ pub struct OpenRepoCommand {
 
 #[async_trait]
 impl Command for OpenRepoCommand {
+    fn name() -> &'static str {
+        "repo"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run open repo command: {:?}", self);
         ctx.lock()?;
@@ -57,9 +61,5 @@ impl Command for OpenRepoCommand {
 
         open::that(&web_url).with_context(|| format!("cannot open repo web url {web_url:?}"))?;
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args([complete::branch_arg().short('b')])
     }
 }

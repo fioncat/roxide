@@ -29,6 +29,10 @@ pub struct StatsCommand {
 
 #[async_trait]
 impl Command for StatsCommand {
+    fn name() -> &'static str {
+        "stats"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run stats command: {:?}", self);
 
@@ -54,9 +58,5 @@ impl Command for StatsCommand {
         )?;
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("stats")
     }
 }

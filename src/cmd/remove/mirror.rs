@@ -2,7 +2,6 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -19,6 +18,10 @@ pub struct RemoveMirrorCommand {
 
 #[async_trait]
 impl Command for RemoveMirrorCommand {
+    fn name() -> &'static str {
+        "mirror"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove mirror command: {:?}", self);
         ctx.lock()?;
@@ -36,9 +39,5 @@ impl Command for RemoveMirrorCommand {
 
         remove_mirror(&ctx, &repo, mirror)?;
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("mirror").args([complete::mirror_name_arg()])
     }
 }

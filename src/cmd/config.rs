@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use clap::{Args, ValueEnum};
 use serde::{Deserialize, Serialize};
 
-use crate::cmd::complete;
 use crate::config::Config;
 use crate::config::context::ConfigContext;
 use crate::config::hook::HookRuns;
@@ -39,6 +38,10 @@ pub enum ConfigType {
 
 #[async_trait]
 impl Command for ConfigCommand {
+    fn name() -> &'static str {
+        "config"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run config command: {:?}", self);
 
@@ -79,11 +82,6 @@ impl Command for ConfigCommand {
                 Ok(())
             }
         }
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("config")
-            .args([complete::config_type_arg(), complete::config_name_arg()])
     }
 }
 

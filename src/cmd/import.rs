@@ -6,7 +6,6 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::repo::restore::RestoreData;
 use crate::term::list::TableArgs;
@@ -29,6 +28,10 @@ pub struct ImportCommand {
 
 #[async_trait]
 impl Command for ImportCommand {
+    fn name() -> &'static str {
+        "import"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run import command: {:?}", self);
         ctx.lock()?;
@@ -82,9 +85,5 @@ impl Command for ImportCommand {
         }
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("import").args(complete::repo_args())
     }
 }

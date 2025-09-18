@@ -23,6 +23,10 @@ pub struct ListRemoteCommand {
 
 #[async_trait]
 impl Command for ListRemoteCommand {
+    fn name() -> &'static str {
+        "remote"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list remote command: {:?}", self);
 
@@ -42,9 +46,5 @@ impl Command for ListRemoteCommand {
         };
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("remote")
     }
 }

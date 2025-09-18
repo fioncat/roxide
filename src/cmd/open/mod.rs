@@ -7,6 +7,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 
 use super::Command;
@@ -29,6 +30,10 @@ pub enum OpenCommands {
 
 #[async_trait]
 impl Command for OpenCommand {
+    fn name() -> &'static str {
+        "open"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             OpenCommands::Action(cmd) => cmd.run(ctx).await,
@@ -38,15 +43,11 @@ impl Command for OpenCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("open")
-            .disable_help_flag(true)
-            .disable_version_flag(true)
-            .subcommands([
-                action::OpenActionCommand::complete_command(),
-                job::OpenJobCommand::complete_command(),
-                pull_request::OpenPullRequestCommand::complete_command(),
-                repo::OpenRepoCommand::complete_command(),
-            ])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .subcommand(action::OpenActionCommand::complete())
+            .subcommand(job::OpenJobCommand::complete())
+            .subcommand(pull_request::OpenPullRequestCommand::complete())
+            .subcommand(repo::OpenRepoCommand::complete())
     }
 }

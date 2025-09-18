@@ -20,6 +20,10 @@ pub struct EncryptCommand {
 
 #[async_trait]
 impl Command for EncryptCommand {
+    fn name() -> &'static str {
+        "encrypt"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run encrypt command: {:?}", self);
 
@@ -35,9 +39,5 @@ impl Command for EncryptCommand {
             )
             .await
         }
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("encrypt")
     }
 }

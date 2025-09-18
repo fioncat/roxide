@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::outputln;
@@ -37,6 +36,10 @@ pub struct ListRepoCommand {
 
 #[async_trait]
 impl Command for ListRepoCommand {
+    fn name() -> &'static str {
+        "repo"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list repo command: {:?}", self);
 
@@ -70,9 +73,5 @@ impl Command for ListRepoCommand {
 
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args(complete::repo_args())
     }
 }

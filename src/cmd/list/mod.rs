@@ -13,6 +13,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 
 use super::Command;
@@ -41,6 +42,14 @@ pub enum ListCommands {
 
 #[async_trait]
 impl Command for ListCommand {
+    fn name() -> &'static str {
+        "list"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["ls"]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             ListCommands::Action(cmd) => cmd.run(ctx).await,
@@ -56,23 +65,18 @@ impl Command for ListCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("list")
-            .alias("ls")
-            .disable_help_flag(true)
-            .disable_version_flag(true)
-            .subcommands([
-                action::ListActionCommand::complete_command(),
-                branch::ListBranchCommand::complete_command(),
-                hook_history::ListHookHistoryCommand::complete_command(),
-                job::ListJobCommand::complete_command(),
-                mirror::ListMirrorCommand::complete_command(),
-                owner::ListOwnerCommand::complete_command(),
-                pull_request::ListPullRequestCommand::complete_command(),
-                remote::ListRemoteCommand::complete_command(),
-                repo::ListRepoCommand::complete_command(),
-                tag::ListTagCommand::complete_command(),
-            ])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .subcommand(action::ListActionCommand::complete())
+            .subcommand(branch::ListBranchCommand::complete())
+            .subcommand(hook_history::ListHookHistoryCommand::complete())
+            .subcommand(job::ListJobCommand::complete())
+            .subcommand(mirror::ListMirrorCommand::complete())
+            .subcommand(owner::ListOwnerCommand::complete())
+            .subcommand(pull_request::ListPullRequestCommand::complete())
+            .subcommand(remote::ListRemoteCommand::complete())
+            .subcommand(repo::ListRepoCommand::complete())
+            .subcommand(tag::ListTagCommand::complete())
     }
 }
 

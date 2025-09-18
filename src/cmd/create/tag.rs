@@ -4,7 +4,6 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, UpdateTagRule};
 use crate::{confirm, debug, info, output};
@@ -25,6 +24,10 @@ pub struct CreateTagCommand {
 
 #[async_trait]
 impl Command for CreateTagCommand {
+    fn name() -> &'static str {
+        "tag"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run create tag command: {:?}", self);
 
@@ -57,9 +60,5 @@ impl Command for CreateTagCommand {
         )?;
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("tag").arg(complete::tag_method_arg())
     }
 }

@@ -26,6 +26,10 @@ pub struct RemoveHookHistoryCommand {
 
 #[async_trait]
 impl Command for RemoveHookHistoryCommand {
+    fn name() -> &'static str {
+        "hook-history"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove hook_history command: {:?}", self);
 
@@ -37,10 +41,6 @@ impl Command for RemoveHookHistoryCommand {
         let repo = get_current_repo(&ctx)?;
         db.with_transaction(|tx| tx.hook_history().delete_by_repo_id(repo.id))?;
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("hook-history")
     }
 }
 

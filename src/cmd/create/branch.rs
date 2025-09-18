@@ -16,6 +16,10 @@ pub struct CreateBranchCommand {
 
 #[async_trait]
 impl Command for CreateBranchCommand {
+    fn name() -> &'static str {
+        "branch"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run create branch command: {:?}", self);
 
@@ -38,9 +42,5 @@ impl Command for CreateBranchCommand {
         )?;
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("branch")
     }
 }

@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::restore::RestoreData;
@@ -23,6 +22,10 @@ pub struct ExportCommand {
 
 #[async_trait]
 impl Command for ExportCommand {
+    fn name() -> &'static str {
+        "export"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run export command: {:?}", self);
 
@@ -40,9 +43,5 @@ impl Command for ExportCommand {
 
         println!("{data}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("export").args(complete::repo_args())
     }
 }

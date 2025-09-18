@@ -16,6 +16,10 @@ pub struct WhichCommand {}
 
 #[async_trait]
 impl Command for WhichCommand {
+    fn name() -> &'static str {
+        "which"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run which command: {:?}", self);
 
@@ -36,10 +40,6 @@ impl Command for WhichCommand {
         let icon = get_remote_icon(&ctx, &repo)?;
         println!("{icon} {}", repo.display_name(DisplayLevel::Owner));
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("which")
     }
 }
 

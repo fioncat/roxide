@@ -7,7 +7,7 @@ use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RepoOperator, SquashOptions};
 
-use super::{CacheArgs, Command, UpstreamArgs, complete};
+use super::{CacheArgs, Command, UpstreamArgs};
 
 /// Squash the current branch, combining multiple commits into one.
 #[derive(Debug, Args)]
@@ -29,6 +29,10 @@ pub struct SquashCommand {
 
 #[async_trait]
 impl Command for SquashCommand {
+    fn name() -> &'static str {
+        "squash"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run display command: {:?}", self);
         ctx.lock()?;
@@ -45,9 +49,5 @@ impl Command for SquashCommand {
         .await?;
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("squash").arg(complete::branch_arg())
     }
 }

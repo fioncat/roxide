@@ -20,6 +20,10 @@ pub struct CheckCommand {
 
 #[async_trait]
 impl Command for CheckCommand {
+    fn name() -> &'static str {
+        "check"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run check command: {:?}", self);
 
@@ -67,10 +71,6 @@ impl Command for CheckCommand {
         }
 
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("check")
     }
 }
 

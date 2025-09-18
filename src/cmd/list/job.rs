@@ -25,6 +25,10 @@ pub struct ListJobCommand {
 
 #[async_trait]
 impl Command for ListJobCommand {
+    fn name() -> &'static str {
+        "job"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list job command: {:?}", self);
 
@@ -43,9 +47,5 @@ impl Command for ListJobCommand {
         let logs = api.get_job_log(&repo.owner, &repo.name, job.id).await?;
         print!("{logs}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("job")
     }
 }

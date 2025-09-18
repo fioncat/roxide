@@ -25,6 +25,10 @@ pub struct OpenJobCommand {
 
 #[async_trait]
 impl Command for OpenJobCommand {
+    fn name() -> &'static str {
+        "job"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run open job command: {:?}", self);
 
@@ -33,9 +37,5 @@ impl Command for OpenJobCommand {
         let action = self.wait_action.wait(&ctx, &repo, api.as_ref()).await?;
         let job = select_job_from_action(&ctx, action, self.id, None)?;
         open::that(&job.web_url).with_context(|| format!("failed to open job: {}", job.web_url))
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("job")
     }
 }

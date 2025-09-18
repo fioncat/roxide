@@ -31,15 +31,33 @@ use clap::Args;
 use clap::error::ErrorKind as ArgsErrorKind;
 use clap::{Parser, Subcommand};
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::exec::SilentExit;
 use crate::{debug, warn};
 
 #[async_trait]
 pub trait Command: Args {
+    fn name() -> &'static str;
+
+    fn alias() -> Vec<&'static str> {
+        vec![]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()>;
 
-    fn complete_command() -> clap::Command;
+    fn default_complete() -> CompleteCommand {
+        let mut cmd = CompleteCommand::new(Self::name());
+        let alias = Self::alias();
+        for a in alias {
+            cmd = cmd.alias(a);
+        }
+        cmd
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+    }
 }
 
 #[derive(Parser)]
@@ -80,6 +98,10 @@ pub enum Commands {
 
 #[async_trait]
 impl Command for App {
+    fn name() -> &'static str {
+        "rox"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             Commands::Attach(cmd) => cmd.run(ctx).await,
@@ -107,35 +129,30 @@ impl Command for App {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("rox")
-            .disable_help_flag(true)
-            .disable_help_subcommand(true)
-            .disable_version_flag(true)
-            .subcommands([
-                attach::AttachCommand::complete_command(),
-                check::CheckCommand::complete_command(),
-                config::ConfigCommand::complete_command(),
-                create::CreateCommand::complete_command(),
-                decrypt::DecryptCommand::complete_command(),
-                detach::DetachCommand::complete_command(),
-                disk_usage::DiskUsageCommand::complete_command(),
-                encrypt::EncryptCommand::complete_command(),
-                export::ExportCommand::complete_command(),
-                home::HomeCommand::complete_command(),
-                import::ImportCommand::complete_command(),
-                list::ListCommand::complete_command(),
-                mirror::MirrorCommand::complete_command(),
-                open::OpenCommand::complete_command(),
-                rebase::RebaseCommand::complete_command(),
-                remove::RemoveCommand::complete_command(),
-                run_hook::RunHookCommand::complete_command(),
-                squash::SquashCommand::complete_command(),
-                stats::StatsCommand::complete_command(),
-                switch::SwitchCommand::complete_command(),
-                sync::SyncCommand::complete_command(),
-                which::WhichCommand::complete_command(),
-            ])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .subcommand(attach::AttachCommand::complete())
+            .subcommand(check::CheckCommand::complete())
+            .subcommand(config::ConfigCommand::complete())
+            .subcommand(create::CreateCommand::complete())
+            .subcommand(decrypt::DecryptCommand::complete())
+            .subcommand(detach::DetachCommand::complete())
+            .subcommand(disk_usage::DiskUsageCommand::complete())
+            .subcommand(encrypt::EncryptCommand::complete())
+            .subcommand(export::ExportCommand::complete())
+            .subcommand(home::HomeCommand::complete())
+            .subcommand(import::ImportCommand::complete())
+            .subcommand(list::ListCommand::complete())
+            .subcommand(mirror::MirrorCommand::complete())
+            .subcommand(open::OpenCommand::complete())
+            .subcommand(rebase::RebaseCommand::complete())
+            .subcommand(remove::RemoveCommand::complete())
+            .subcommand(run_hook::RunHookCommand::complete())
+            .subcommand(squash::SquashCommand::complete())
+            .subcommand(stats::StatsCommand::complete())
+            .subcommand(switch::SwitchCommand::complete())
+            .subcommand(sync::SyncCommand::complete())
+            .subcommand(which::WhichCommand::complete())
     }
 }
 

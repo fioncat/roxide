@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::batch::{self, Task};
-use crate::cmd::complete;
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::current::get_current_repo_optional;
@@ -38,6 +37,10 @@ pub struct SyncCommand {
 
 #[async_trait]
 impl Command for SyncCommand {
+    fn name() -> &'static str {
+        "sync"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run sync command: {:?}", self);
 
@@ -47,10 +50,6 @@ impl Command for SyncCommand {
             return self.sync_one(ctx, repo);
         }
         self.sync_many(ctx).await
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("sync").args(complete::repo_args())
     }
 }
 

@@ -18,6 +18,10 @@ pub struct ListHookHistoryCommand {
 
 #[async_trait]
 impl Command for ListHookHistoryCommand {
+    fn name() -> &'static str {
+        "hook-history"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list hook_history command: {:?}", self);
 
@@ -29,9 +33,5 @@ impl Command for ListHookHistoryCommand {
             .render(vec!["Name", "Success", "Time"], &histories)?;
         outputln!("{text}");
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("hook-history")
     }
 }
