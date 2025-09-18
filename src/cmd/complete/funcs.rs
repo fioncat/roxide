@@ -216,3 +216,290 @@ pub fn complete_mirror_name(cmp: CompleteContext) -> Result<Vec<String>> {
     debug!("[complete] Results: {items:?}");
     Ok(items)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::config::context;
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct CompleteCase {
+        args: Vec<&'static str>,
+        current: &'static str,
+        expect: Vec<&'static str>,
+    }
+
+    fn run_cases<I>(name: &str, cases: I, f: fn(CompleteContext) -> Result<Vec<String>>)
+    where
+        I: IntoIterator<Item = CompleteCase>,
+    {
+        for case in cases {
+            let name = format!("complete_{name}");
+            let mut ctx = context::tests::build_test_context(&name);
+
+            if name == "complete_mirror_name" {
+                let repo = ctx
+                    .get_db()
+                    .unwrap()
+                    .with_transaction(|tx| tx.repo().get("github", "fioncat", "roxide"))
+                    .unwrap()
+                    .unwrap();
+                let path = repo.get_path(&ctx.cfg.workspace);
+                ctx.current_dir = path;
+            }
+
+            let args: Vec<_> = case.args.iter().map(|s| s.to_string()).collect();
+            let cmp_ctx = CompleteContext {
+                ctx,
+                current: case.current.to_string(),
+                args,
+            };
+            let results = f(cmp_ctx).unwrap();
+            assert_eq!(results, case.expect, "{name} case {case:?} failed");
+        }
+    }
+
+    #[test]
+    fn test_complete_remote() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gi",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gith",
+                expect: vec!["github"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "rox",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("remote", cases, complete_remote);
+    }
+
+    #[test]
+    fn test_complete_head() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gi",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "gith",
+                expect: vec!["github"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "rox",
+                expect: vec!["roxide"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "temp",
+                expect: vec!["template"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "zzzz",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("head", cases, complete_head);
+    }
+
+    #[test]
+    fn test_complete_owner() {
+        let cases = [
+            CompleteCase {
+                args: vec!["github"],
+                current: "",
+                expect: vec!["kubernetes", "fioncat"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "f",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "k",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["github"],
+                current: "x",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["gitlab"],
+                current: "",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["gitlab"],
+                current: "fio",
+                expect: vec!["fioncat"],
+            },
+            CompleteCase {
+                args: vec!["test"],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["test"],
+                current: "test",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("owner", cases, complete_owner);
+    }
+
+    #[test]
+    fn test_complete_name() {
+        let cases = [
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "",
+                expect: vec!["nvimdots", "roxide", "otree"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "r",
+                expect: vec!["roxide"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "otr",
+                expect: vec!["otree"],
+            },
+            CompleteCase {
+                args: vec!["github", "fioncat"],
+                current: "x",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["github", "kubernetes"],
+                current: "",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["github", "kubernetes"],
+                current: "kube",
+                expect: vec!["kubernetes"],
+            },
+            CompleteCase {
+                args: vec!["gitlab", "fioncat"],
+                current: "",
+                expect: vec!["template", "someproject"],
+            },
+            CompleteCase {
+                args: vec!["gitlab", "fioncat"],
+                current: "some",
+                expect: vec!["someproject"],
+            },
+            CompleteCase {
+                args: vec!["test", "test"],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["test", "test"],
+                current: "test",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("name", cases, complete_name);
+    }
+
+    #[test]
+    fn test_complete_config_name() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "git",
+                expect: vec![],
+            },
+            CompleteCase {
+                args: vec!["remote"],
+                current: "",
+                expect: vec!["github", "gitlab", "test"],
+            },
+            CompleteCase {
+                args: vec!["remote"],
+                current: "git",
+                expect: vec!["github", "gitlab"],
+            },
+            CompleteCase {
+                args: vec!["hook"],
+                current: "",
+                expect: vec!["cargo-init", "gomod-init", "print-envs"],
+            },
+            CompleteCase {
+                args: vec!["hook"],
+                current: "go",
+                expect: vec!["gomod-init"],
+            },
+        ];
+
+        run_cases("config_name", cases, complete_config_name);
+    }
+
+    #[test]
+    fn test_complete_mirror_name() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide",
+                expect: vec!["roxide-golang", "roxide-mirror", "roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-go",
+                expect: vec!["roxide-golang"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "roxide-rs",
+                expect: vec!["roxide-rs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "xxx",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("mirror_name", cases, complete_mirror_name);
+    }
+}
