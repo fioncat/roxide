@@ -168,7 +168,7 @@ impl Cmd {
         if output::get_debug().is_some() {
             full = Some(self.full());
             debug!(
-                "[exec] Begin to execute command: {}",
+                "[exec] Beginning to execute command: {}",
                 full.as_ref().unwrap()
             );
         }

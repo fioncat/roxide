@@ -254,7 +254,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
                 }
 
                 debug!(
-                    "[select] Head {:?} is a keyword, fuzzy select from db",
+                    "[select] Head {:?} is a keyword, fuzzy selecting from db",
                     self.head
                 );
                 self.select_one_fuzzy("", "", self.head)

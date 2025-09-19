@@ -63,7 +63,7 @@ pub async fn scan_orphans(ctx: &ConfigContext) -> Result<Orphans> {
         })
         .collect::<HashSet<_>>();
     debug!(
-        "[orphan] Begin to scan orphans, remotes: {remotes:?}, owners: {owners:?}, repos: {repos:?}, mirrors: {mirrors:?}"
+        "[orphan] Beginning to scan orphans, remotes: {remotes:?}, owners: {owners:?}, repos: {repos:?}, mirrors: {mirrors:?}"
     );
 
     let workspace = PathBuf::from(&ctx.cfg.workspace);

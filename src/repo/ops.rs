@@ -96,7 +96,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         let owner = remote.get_owner(&repo.owner);
         let path = repo.get_path(&ctx.cfg.workspace);
         debug!(
-            "[op] Create operator for repo {:?}, path: {:?}",
+            "[op] Creating operator for repo {:?}, path: {:?}",
             repo.full_name(),
             path
         );
@@ -508,7 +508,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         for hook in self.ctx.cfg.hooks.iter() {
             debug!("[op] Checking hook: {hook:?}");
             if !matched_filters(self.repo, &hook.filters) {
-                debug!("[op] Hook not matched filter, skip");
+                debug!("[op] Hook not matched filter, skipping");
                 continue;
             }
             let mut should_run = false;
@@ -523,7 +523,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 debug!("[op] Hook will be run");
                 to_run.push(hook);
             } else {
-                debug!("[op] Hook conditions not matched, skip");
+                debug!("[op] Hook conditions not matched, skipping");
             }
         }
 
@@ -555,7 +555,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         for run in hook.run.iter() {
             debug!("[op] Running hook run: {run:?}");
             let Some(run_path) = self.ctx.cfg.hook_runs.get(run) else {
-                debug!("[op] Hook run {run:?} not found, skip");
+                debug!("[op] Hook run {run:?} not found, skipping");
                 continue;
             };
 

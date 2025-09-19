@@ -155,7 +155,7 @@ pub async fn check_remote(
         return (
             CheckItem {
                 status: CheckStatus::Ok,
-                message: format!("{remote} skip"),
+                message: format!("{remote}: skip"),
                 sub: false,
             },
             false,
