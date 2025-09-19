@@ -60,8 +60,9 @@ pub struct RepoSelector<'a, 'b> {
     fzf_filter: Option<&'static str>,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct SelectManyReposOptions {
+    pub language: Option<String>,
     pub sync: Option<bool>,
     pub pin: Option<bool>,
     pub limit: Option<LimitOptions>,
@@ -590,6 +591,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         debug!("[select] Selecting many, opts: {opts:?}");
 
         let mut query_opts = QueryOptions {
+            language: opts.language.as_deref(),
             sync: opts.sync,
             pin: opts.pin,
             limit: opts.limit,

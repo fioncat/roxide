@@ -295,6 +295,10 @@ impl<'a> RepositoryHandle<'a> {
     {
         count_owners(self.tx, remote)
     }
+
+    pub fn query_languages(&self) -> Result<Vec<LanguageState>> {
+        query_languages(self.tx)
+    }
 }
 
 const TABLE_SQL: &str = r#"
@@ -500,6 +504,8 @@ pub struct QueryOptions<'a> {
     pub owner: Option<&'a str>,
     pub name: Option<&'a str>,
 
+    pub language: Option<&'a str>,
+
     pub sync: Option<bool>,
     pub pin: Option<bool>,
 
@@ -560,6 +566,12 @@ impl<'a> QueryOptions<'a> {
                 conds.push(format!("name = ?{idx}"));
                 params.push(Value::Text(name.to_string()));
             }
+        }
+
+        if let Some(language) = self.language {
+            idx += 1;
+            conds.push(format!("language = ?{idx}"));
+            params.push(Value::Text(language.to_string()));
         }
 
         if let Some(sync) = self.sync {
@@ -799,6 +811,46 @@ where
     let count: u32 = tx.query_row(&sql, params_from_iter(params), |row| row.get(0))?;
     debug!("[db] Result: {count}");
     Ok(count)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LanguageState {
+    pub language: String,
+    pub count: u32,
+}
+
+impl ListItem for LanguageState {
+    fn row<'a>(&'a self, title: &str) -> Cow<'a, str> {
+        match title {
+            "Language" => Cow::Borrowed(&self.language),
+            "Count" => self.count.to_string().into(),
+            _ => Cow::Borrowed(""),
+        }
+    }
+}
+
+const QUERY_LANGUAGES_SQL: &str = r#"
+SELECT language, COUNT(*) FROM repo
+WHERE language IS NOT NULL
+GROUP BY language
+ORDER BY MAX(last_visited_at) DESC
+"#;
+
+fn query_languages(tx: &Transaction) -> Result<Vec<LanguageState>> {
+    debug!("[db] Querying languages");
+    let mut stmt = tx.prepare(QUERY_LANGUAGES_SQL)?;
+    let rows = stmt.query_map([], |row| {
+        Ok(LanguageState {
+            language: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(row?);
+    }
+    debug!("[db] Results: {results:?}");
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -1328,6 +1380,26 @@ pub mod tests {
     }
 
     #[test]
+    fn test_query_by_language() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let repos = query(
+            &tx,
+            QueryOptions {
+                language: Some("Rust"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut expects = test_repos()
+            .into_iter()
+            .filter(|r| r.language.as_deref() == Some("Rust"))
+            .collect::<Vec<Repository>>();
+        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        assert_eq!(repos, expects);
+    }
+
+    #[test]
     fn test_get_by_path() {
         let mut conn = build_conn();
         let tx = conn.transaction().unwrap();
@@ -1416,5 +1488,31 @@ pub mod tests {
         assert_eq!(count, 1);
         let count = count_owners(&tx, None::<&str>).unwrap();
         assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_query_languages() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let results = query_languages(&tx).unwrap();
+        let expects = vec![
+            LanguageState {
+                language: "Go".to_string(),
+                count: 1,
+            },
+            LanguageState {
+                language: "Lua".to_string(),
+                count: 1,
+            },
+            LanguageState {
+                language: "Rust".to_string(),
+                count: 2,
+            },
+            LanguageState {
+                language: "Python".to_string(),
+                count: 1,
+            },
+        ];
+        assert_eq!(results, expects);
     }
 }

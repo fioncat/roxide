@@ -2,6 +2,7 @@ mod action;
 mod branch;
 mod hook_history;
 mod job;
+mod language;
 mod mirror;
 mod owner;
 mod pull_request;
@@ -31,6 +32,7 @@ pub enum ListCommands {
     Branch(branch::ListBranchCommand),
     HookHistory(hook_history::ListHookHistoryCommand),
     Job(job::ListJobCommand),
+    Language(language::ListLanguageCommand),
     Mirror(mirror::ListMirrorCommand),
     Owner(owner::ListOwnerCommand),
     #[command(alias = "pr")]
@@ -56,6 +58,7 @@ impl Command for ListCommand {
             ListCommands::Branch(cmd) => cmd.run(ctx).await,
             ListCommands::HookHistory(cmd) => cmd.run(ctx).await,
             ListCommands::Job(cmd) => cmd.run(ctx).await,
+            ListCommands::Language(cmd) => cmd.run(ctx).await,
             ListCommands::Mirror(cmd) => cmd.run(ctx).await,
             ListCommands::Owner(cmd) => cmd.run(ctx).await,
             ListCommands::PullRequest(cmd) => cmd.run(ctx).await,
@@ -71,6 +74,7 @@ impl Command for ListCommand {
             .subcommand(branch::ListBranchCommand::complete())
             .subcommand(hook_history::ListHookHistoryCommand::complete())
             .subcommand(job::ListJobCommand::complete())
+            .subcommand(language::ListLanguageCommand::complete())
             .subcommand(mirror::ListMirrorCommand::complete())
             .subcommand(owner::ListOwnerCommand::complete())
             .subcommand(pull_request::ListPullRequestCommand::complete())

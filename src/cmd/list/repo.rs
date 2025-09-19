@@ -5,6 +5,7 @@ use clap::Args;
 use crate::cmd::Command;
 use crate::cmd::complete::CompleteArg;
 use crate::cmd::complete::CompleteCommand;
+use crate::cmd::complete::funcs;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::outputln;
@@ -20,6 +21,10 @@ use super::RepoDiskUsageArgs;
 pub struct ListRepoCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
+
+    /// Filter with language.
+    #[arg(short)]
+    pub language: Option<String>,
 
     /// Filter with sync flag.
     #[arg(long)]
@@ -48,6 +53,9 @@ impl Command for ListRepoCommand {
         let selector = RepoSelector::new(&ctx, &self.select_repo);
         let limit = self.list.limit();
         let mut opts = SelectManyReposOptions::default();
+        if let Some(lang) = self.language {
+            opts.language = Some(lang);
+        }
         if self.sync {
             opts.sync = Some(true);
         }
@@ -80,6 +88,11 @@ impl Command for ListRepoCommand {
     fn complete() -> CompleteCommand {
         Self::default_complete()
             .args(SelectRepoArgs::complete())
+            .arg(
+                CompleteArg::new()
+                    .short('l')
+                    .complete(funcs::complete_language),
+            )
             .arg(CompleteArg::new().long("sync"))
             .arg(CompleteArg::new().long("pin"))
             .arg(RepoDiskUsageArgs::complete())
