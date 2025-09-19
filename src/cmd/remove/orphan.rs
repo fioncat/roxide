@@ -1,9 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use clap::{Arg, Args};
+use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::outputln;
 use crate::repo::remove_dir_all;
@@ -14,12 +15,16 @@ use crate::{confirm, debug, info};
 #[derive(Debug, Args)]
 pub struct RemoveOrphanCommand {
     /// Show what would be removed without actually removing them.
-    #[arg(long, short)]
+    #[arg(short)]
     pub dry_run: bool,
 }
 
 #[async_trait]
 impl Command for RemoveOrphanCommand {
+    fn name() -> &'static str {
+        "orphan"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove orphan command: {:?}", self);
 
@@ -78,7 +83,7 @@ impl Command for RemoveOrphanCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("orphan").arg(Arg::new("dry-run").long("dry-run").short('d'))
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().short('d'))
     }
 }

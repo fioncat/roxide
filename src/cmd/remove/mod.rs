@@ -9,6 +9,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 
 use super::Command;
@@ -32,6 +33,14 @@ pub enum RemoveCommands {
 
 #[async_trait]
 impl Command for RemoveCommand {
+    fn name() -> &'static str {
+        "remove"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["rm"]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             RemoveCommands::Branch(cmd) => cmd.run(ctx).await,
@@ -43,18 +52,13 @@ impl Command for RemoveCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("remove")
-            .alias("rm")
-            .disable_help_flag(true)
-            .disable_version_flag(true)
-            .subcommands([
-                branch::RemoveBranchCommand::complete_command(),
-                hook_history::RemoveHookHistoryCommand::complete_command(),
-                mirror::RemoveMirrorCommand::complete_command(),
-                orphan::RemoveOrphanCommand::complete_command(),
-                repo::RemoveRepoCommand::complete_command(),
-                tag::RemoveTagCommand::complete_command(),
-            ])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .subcommand(branch::RemoveBranchCommand::complete())
+            .subcommand(hook_history::RemoveHookHistoryCommand::complete())
+            .subcommand(mirror::RemoveMirrorCommand::complete())
+            .subcommand(orphan::RemoveOrphanCommand::complete())
+            .subcommand(repo::RemoveRepoCommand::complete())
+            .subcommand(tag::RemoveTagCommand::complete())
     }
 }

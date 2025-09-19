@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::scan::disk_usage::disk_usage;
 use crate::scan::ignore::Ignore;
@@ -19,20 +20,28 @@ pub struct DiskUsageCommand {
     pub path: Option<String>,
 
     /// Display directory hierarchy levels.
-    #[arg(long, short, default_value = "1")]
+    #[arg(short, default_value = "1")]
     pub depth: usize,
 
     /// Ignore certain files or directories during calculation.
-    #[arg(long, short = 'I')]
+    #[arg(short)]
     pub ignore: Option<Vec<String>>,
 
     /// Display execution time and speed of the calculation.
-    #[arg(long, short)]
+    #[arg(short)]
     pub stats: bool,
 }
 
 #[async_trait]
 impl Command for DiskUsageCommand {
+    fn name() -> &'static str {
+        "disk-usage"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["du"]
+    }
+
     async fn run(self, _: ConfigContext) -> Result<()> {
         debug!("[cmd] Run disk-usage command: {:?}", self);
 
@@ -58,7 +67,11 @@ impl Command for DiskUsageCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("disk-usage").alias("du")
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().dirs())
+            .arg(CompleteArg::new().short('d').no_complete_value())
+            .arg(CompleteArg::new().short('i').no_complete_value())
+            .arg(CompleteArg::new().short('s'))
     }
 }

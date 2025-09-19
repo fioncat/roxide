@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::scan::code_stats::get_code_stats;
 use crate::scan::ignore::Ignore;
@@ -29,6 +30,10 @@ pub struct StatsCommand {
 
 #[async_trait]
 impl Command for StatsCommand {
+    fn name() -> &'static str {
+        "stats"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run stats command: {:?}", self);
 
@@ -56,7 +61,10 @@ impl Command for StatsCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("stats")
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().dirs())
+            .arg(IgnoreArgs::complete())
+            .args(TableArgs::complete())
     }
 }

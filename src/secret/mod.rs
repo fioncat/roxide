@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use crate::cmd::complete::CompleteArg;
 use crate::config::context::ConfigContext;
 use crate::info;
 
@@ -29,7 +30,7 @@ pub struct SecretArgs {
     pub src: Option<String>,
 
     /// Force update password, overwriting the existing password.
-    #[arg(long, short)]
+    #[arg(short)]
     pub update_password: bool,
 
     /// Indicates file mode. If a value is provided, the content is output to the target
@@ -39,7 +40,7 @@ pub struct SecretArgs {
     /// redirected, otherwise an error will occur.
     /// If this option is provided with a value, the target file cannot be the same as the
     /// source file, i.e., the encryption and decryption files cannot be the same.
-    #[arg(long, short)]
+    #[arg(short)]
     pub file: Option<Option<String>>,
 }
 
@@ -72,6 +73,14 @@ impl SecretArgs {
             bail!("the path you provided must be directory");
         }
         Ok(dir)
+    }
+
+    pub fn complete() -> [CompleteArg; 3] {
+        [
+            CompleteArg::new().files(),
+            CompleteArg::new().short('u'),
+            CompleteArg::new().short('f').files().array(),
+        ]
     }
 }
 

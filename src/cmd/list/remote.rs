@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{RemoteDiskUsage, RemoteDiskUsageList, repo_disk_usage};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs, select_remotes};
@@ -23,6 +24,10 @@ pub struct ListRemoteCommand {
 
 #[async_trait]
 impl Command for ListRemoteCommand {
+    fn name() -> &'static str {
+        "remote"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list remote command: {:?}", self);
 
@@ -44,7 +49,9 @@ impl Command for ListRemoteCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("remote")
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(RepoDiskUsageArgs::complete())
+            .args(ListArgs::complete())
     }
 }

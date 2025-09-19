@@ -4,6 +4,7 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::wait_action::WaitActionArgs;
@@ -22,6 +23,10 @@ pub struct ListActionCommand {
 
 #[async_trait]
 impl Command for ListActionCommand {
+    fn name() -> &'static str {
+        "action"
+    }
+
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list action command: {:?}", self);
         ctx.mute();
@@ -59,7 +64,9 @@ impl Command for ListActionCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("action")
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(WaitActionArgs::complete())
+            .args(TableArgs::complete())
     }
 }

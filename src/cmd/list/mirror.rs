@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::mirror::MirrorSelector;
@@ -19,6 +20,10 @@ pub struct ListMirrorCommand {
 
 #[async_trait]
 impl Command for ListMirrorCommand {
+    fn name() -> &'static str {
+        "mirror"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list mirror command: {:?}", self);
 
@@ -38,7 +43,7 @@ impl Command for ListMirrorCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("mirror")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(TableArgs::complete())
     }
 }

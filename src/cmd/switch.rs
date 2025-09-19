@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::Branch;
@@ -20,6 +20,10 @@ pub struct SwitchCommand {
 
 #[async_trait]
 impl Command for SwitchCommand {
+    fn name() -> &'static str {
+        "switch"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run switch command: {:?}", self);
 
@@ -51,8 +55,8 @@ impl Command for SwitchCommand {
         self.switch(&ctx, &branches[idx])
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("switch").arg(complete::branch_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_branch))
     }
 }
 

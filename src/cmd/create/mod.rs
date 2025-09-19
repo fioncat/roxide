@@ -6,6 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::{Args, Subcommand};
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 
 use super::Command;
@@ -27,6 +28,10 @@ pub enum CreateCommands {
 
 #[async_trait]
 impl Command for CreateCommand {
+    fn name() -> &'static str {
+        "create"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         match self.command {
             CreateCommands::Branch(cmd) => cmd.run(ctx).await,
@@ -35,14 +40,10 @@ impl Command for CreateCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("create")
-            .disable_help_flag(true)
-            .disable_version_flag(true)
-            .subcommands([
-                branch::CreateBranchCommand::complete_command(),
-                pull_request::CreatePullRequestCommand::complete_command(),
-                tag::CreateTagCommand::complete_command(),
-            ])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .subcommand(branch::CreateBranchCommand::complete())
+            .subcommand(pull_request::CreatePullRequestCommand::complete())
+            .subcommand(tag::CreateTagCommand::complete())
     }
 }

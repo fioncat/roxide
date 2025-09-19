@@ -3,12 +3,11 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::restore::RestoreData;
-use crate::repo::select::SelectRepoArgs;
-use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 
 /// Export repositories and mirrors to a JSON file or stdout.
 #[derive(Debug, Args)]
@@ -17,12 +16,16 @@ pub struct ExportCommand {
     pub select_repo: SelectRepoArgs,
 
     /// The file to export. If not specified, export to stdout.
-    #[arg(long, short)]
+    #[arg(short)]
     pub file: Option<String>,
 }
 
 #[async_trait]
 impl Command for ExportCommand {
+    fn name() -> &'static str {
+        "export"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run export command: {:?}", self);
 
@@ -42,7 +45,9 @@ impl Command for ExportCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("export").args(complete::repo_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            .arg(CompleteArg::new().short('f').files())
     }
 }

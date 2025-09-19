@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::exec::git::branch::{Branch, BranchList};
 use crate::term::list::{ListArgs, pagination};
@@ -17,6 +18,10 @@ pub struct ListBranchCommand {
 
 #[async_trait]
 impl Command for ListBranchCommand {
+    fn name() -> &'static str {
+        "branch"
+    }
+
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list branch command: {:?}", self);
         ctx.mute();
@@ -31,7 +36,7 @@ impl Command for ListBranchCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("branch")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(ListArgs::complete())
     }
 }

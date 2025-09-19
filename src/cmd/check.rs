@@ -5,6 +5,7 @@ use console::style;
 
 use crate::check::*;
 use crate::cmd::CacheArgs;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::db::repo::{DisplayLevel, QueryOptions};
 use crate::{cursor_up, debug, outputln};
@@ -20,6 +21,10 @@ pub struct CheckCommand {
 
 #[async_trait]
 impl Command for CheckCommand {
+    fn name() -> &'static str {
+        "check"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run check command: {:?}", self);
 
@@ -69,8 +74,8 @@ impl Command for CheckCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("check")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CacheArgs::complete())
     }
 }
 

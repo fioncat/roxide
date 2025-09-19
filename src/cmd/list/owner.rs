@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::repo::disk_usage::{OwnerDiskUsage, OwnerDiskUsageList, repo_disk_usage};
 use crate::repo::select::SelectRepoArgs;
@@ -28,6 +28,10 @@ pub struct ListOwnerCommand {
 
 #[async_trait]
 impl Command for ListOwnerCommand {
+    fn name() -> &'static str {
+        "owner"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list owner command: {:?}", self);
 
@@ -57,7 +61,10 @@ impl Command for ListOwnerCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("owner").arg(complete::remote_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_remote))
+            .arg(RepoDiskUsageArgs::complete())
+            .args(ListArgs::complete())
     }
 }

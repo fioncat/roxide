@@ -6,7 +6,7 @@ use clap::Args;
 use console::style;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::repo::restore::RestoreData;
 use crate::term::list::TableArgs;
@@ -16,11 +16,11 @@ use crate::{debug, outputln};
 #[derive(Debug, Args)]
 pub struct ImportCommand {
     /// The file to import. If not specified, import from stdin.
-    #[arg(long, short)]
+    #[arg(short)]
     pub file: Option<String>,
 
     /// Perform a trial run with no changes made.
-    #[arg(long, short)]
+    #[arg(short)]
     pub dry_run: bool,
 
     #[clap(flatten)]
@@ -29,6 +29,10 @@ pub struct ImportCommand {
 
 #[async_trait]
 impl Command for ImportCommand {
+    fn name() -> &'static str {
+        "import"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run import command: {:?}", self);
         ctx.lock()?;
@@ -84,7 +88,10 @@ impl Command for ImportCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("import").args(complete::repo_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().short('f').files())
+            .arg(CompleteArg::new().short('d'))
+            .args(TableArgs::complete())
     }
 }

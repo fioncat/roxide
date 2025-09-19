@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::exec::git::tag::{Tag, TagList};
 use crate::term::list::{ListArgs, pagination};
@@ -17,6 +18,10 @@ pub struct ListTagCommand {
 
 #[async_trait]
 impl Command for ListTagCommand {
+    fn name() -> &'static str {
+        "tag"
+    }
+
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list tag command: {:?}", self);
         ctx.mute();
@@ -31,7 +36,7 @@ impl Command for ListTagCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("tag")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(ListArgs::complete())
     }
 }

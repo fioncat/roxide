@@ -14,6 +14,10 @@ pub struct DetachCommand {}
 
 #[async_trait]
 impl Command for DetachCommand {
+    fn name() -> &'static str {
+        "detach"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run detach command: {:?}", self);
         ctx.lock()?;
@@ -33,9 +37,5 @@ impl Command for DetachCommand {
             repo.full_name()
         );
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("detach")
     }
 }

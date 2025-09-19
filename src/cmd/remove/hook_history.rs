@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::db::DatabaseHandle;
 use crate::repo::current::get_current_repo;
@@ -15,17 +16,21 @@ use super::Command;
 #[derive(Debug, Args)]
 pub struct RemoveHookHistoryCommand {
     /// Remove all hook histories, not only for the current repository.
-    #[arg(long, short)]
+    #[arg(short)]
     pub all: bool,
 
     /// Remove orphan hook histories, which do not exists in hooks config or belong to any
     /// repository.
-    #[arg(long, short)]
+    #[arg(short)]
     pub orphan: bool,
 }
 
 #[async_trait]
 impl Command for RemoveHookHistoryCommand {
+    fn name() -> &'static str {
+        "hook-history"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove hook_history command: {:?}", self);
 
@@ -37,10 +42,6 @@ impl Command for RemoveHookHistoryCommand {
         let repo = get_current_repo(&ctx)?;
         db.with_transaction(|tx| tx.hook_history().delete_by_repo_id(repo.id))?;
         Ok(())
-    }
-
-    fn complete_command() -> clap::Command {
-        clap::Command::new("hook-history")
     }
 }
 
@@ -81,5 +82,11 @@ impl RemoveHookHistoryCommand {
             }
         }
         Ok(())
+    }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().short('a'))
+            .arg(CompleteArg::new().short('o'))
     }
 }

@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::term::list::TableArgs;
@@ -18,6 +19,10 @@ pub struct ListHookHistoryCommand {
 
 #[async_trait]
 impl Command for ListHookHistoryCommand {
+    fn name() -> &'static str {
+        "hook-history"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list hook_history command: {:?}", self);
 
@@ -31,7 +36,7 @@ impl Command for ListHookHistoryCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("hook-history")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(TableArgs::complete())
     }
 }

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::tag::Tag;
@@ -19,6 +19,10 @@ pub struct RemoveTagCommand {
 
 #[async_trait]
 impl Command for RemoveTagCommand {
+    fn name() -> &'static str {
+        "tag"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove tag command: {:?}", self);
 
@@ -45,7 +49,7 @@ impl Command for RemoveTagCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("tag").arg(complete::tag_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_tag))
     }
 }

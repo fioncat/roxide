@@ -4,7 +4,8 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, Command, UpstreamArgs, complete};
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
+use crate::cmd::{CacheArgs, Command, UpstreamArgs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::Branch;
@@ -15,7 +16,7 @@ use crate::repo::current::get_current_repo;
 pub struct OpenRepoCommand {
     /// By default, opens the repository's root directory. If specified, opens the current
     /// branch of the repository. Can also specify a branch name.
-    #[arg(long, short)]
+    #[arg(short)]
     pub branch: Option<Option<String>>,
 
     #[clap(flatten)]
@@ -27,6 +28,10 @@ pub struct OpenRepoCommand {
 
 #[async_trait]
 impl Command for OpenRepoCommand {
+    fn name() -> &'static str {
+        "repo"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run open repo command: {:?}", self);
         ctx.lock()?;
@@ -59,7 +64,14 @@ impl Command for OpenRepoCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args([complete::branch_arg().short('b')])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(
+                CompleteArg::new()
+                    .short('b')
+                    .complete(funcs::complete_branch),
+            )
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
     }
 }

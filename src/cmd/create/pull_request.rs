@@ -9,7 +9,8 @@ use clap::Args;
 use console::style;
 
 use crate::api::{PullRequest, PullRequestHead};
-use crate::cmd::{CacheArgs, Command, UpstreamArgs, complete};
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
+use crate::cmd::{CacheArgs, Command, UpstreamArgs};
 use crate::config::context::ConfigContext;
 use crate::exec::git::commit::ensure_no_uncommitted_changes;
 use crate::repo::current::get_current_repo;
@@ -36,6 +37,14 @@ pub struct CreatePullRequestCommand {
 
 #[async_trait]
 impl Command for CreatePullRequestCommand {
+    fn name() -> &'static str {
+        "pull-request"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["pr"]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run create pull request command: {:?}", self);
         ensure_no_uncommitted_changes(ctx.git())?;
@@ -167,9 +176,11 @@ impl Command for CreatePullRequestCommand {
         })
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("pull-request")
-            .alias("pr")
-            .args([complete::branch_arg().short('b').long("base")])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_branch))
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
+            .arg(WaitActionArgs::complete())
     }
 }

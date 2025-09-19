@@ -8,7 +8,8 @@ use clap::Args;
 use console::style;
 
 use crate::batch::{self, Task};
-use crate::cmd::{ThinArgs, complete};
+use crate::cmd::ThinArgs;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::config::hook::HookConfig;
 use crate::db::repo::Repository;
@@ -27,11 +28,11 @@ pub struct RunHookCommand {
     pub select_repo: SelectRepoArgs,
 
     /// The hook names to run. If not specified, run only matched hooks
-    #[arg(long, short)]
+    #[arg(short)]
     pub names: Option<Vec<String>>,
 
     /// Run hooks for multiple repositories.
-    #[arg(long, short)]
+    #[arg(short)]
     pub recursive: bool,
 
     #[clap(flatten)]
@@ -40,6 +41,10 @@ pub struct RunHookCommand {
 
 #[async_trait]
 impl Command for RunHookCommand {
+    fn name() -> &'static str {
+        "run-hook"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run run command: {:?}", self);
 
@@ -51,8 +56,13 @@ impl Command for RunHookCommand {
         self.run_many(ctx).await
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("run-hook").args(complete::repo_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            // TODO: Support complete hook names
+            .arg(CompleteArg::new().short('n').no_complete_value())
+            .arg(CompleteArg::new().short('r'))
+            .arg(ThinArgs::complete())
     }
 }
 

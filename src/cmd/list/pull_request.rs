@@ -2,7 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, Command, complete};
+use crate::cmd::complete::CompleteCommand;
+use crate::cmd::{CacheArgs, Command};
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
 use crate::repo::select::SelectPullRequestsArgs;
@@ -24,6 +25,14 @@ pub struct ListPullRequestCommand {
 
 #[async_trait]
 impl Command for ListPullRequestCommand {
+    fn name() -> &'static str {
+        "pull-request"
+    }
+
+    fn alias() -> Vec<&'static str> {
+        vec!["pr"]
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list pull request command: {:?}", self);
 
@@ -54,9 +63,10 @@ impl Command for ListPullRequestCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("pull-request")
-            .alias("pr")
-            .args(complete::list_pull_requests_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectPullRequestsArgs::complete())
+            .arg(CacheArgs::complete())
+            .args(TableArgs::complete())
     }
 }

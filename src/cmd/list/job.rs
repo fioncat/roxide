@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
@@ -25,6 +26,10 @@ pub struct ListJobCommand {
 
 #[async_trait]
 impl Command for ListJobCommand {
+    fn name() -> &'static str {
+        "job"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run list job command: {:?}", self);
 
@@ -45,7 +50,10 @@ impl Command for ListJobCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("job")
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().no_complete_value())
+            .arg(WaitActionArgs::complete())
+            .args(TableArgs::complete())
     }
 }

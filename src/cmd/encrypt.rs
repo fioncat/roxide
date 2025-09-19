@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::CompleteCommand;
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::secret::{BufferArgs, SecretArgs, encrypt_many, encrypt_one};
@@ -20,6 +21,10 @@ pub struct EncryptCommand {
 
 #[async_trait]
 impl Command for EncryptCommand {
+    fn name() -> &'static str {
+        "encrypt"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run encrypt command: {:?}", self);
 
@@ -37,7 +42,7 @@ impl Command for EncryptCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("encrypt")
+    fn complete() -> CompleteCommand {
+        Self::default_complete().args(SecretArgs::complete())
     }
 }

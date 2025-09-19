@@ -2,12 +2,13 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RepoOperator, SquashOptions};
 
-use super::{CacheArgs, Command, UpstreamArgs, complete};
+use super::{CacheArgs, Command, UpstreamArgs};
 
 /// Squash the current branch, combining multiple commits into one.
 #[derive(Debug, Args)]
@@ -23,12 +24,16 @@ pub struct SquashCommand {
 
     /// The commit message for the squashed commit. If not specified, git might open
     /// an editor to edit the message.
-    #[arg(long, short)]
+    #[arg(short)]
     pub message: Option<String>,
 }
 
 #[async_trait]
 impl Command for SquashCommand {
+    fn name() -> &'static str {
+        "squash"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run display command: {:?}", self);
         ctx.lock()?;
@@ -47,7 +52,11 @@ impl Command for SquashCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("squash").arg(complete::branch_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_branch))
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
+            .arg(CompleteArg::new().short('m').no_complete_value())
     }
 }

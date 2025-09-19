@@ -9,6 +9,7 @@ use crate::api::{
     Action, HeadRepository, Job, ListPullRequestsOptions, PullRequest, PullRequestHead, RemoteAPI,
 };
 use crate::cmd::UpstreamArgs;
+use crate::cmd::complete::{CompleteArg, funcs};
 use crate::config::context::ConfigContext;
 use crate::db::repo::{
     DisplayLevel, LimitOptions, OwnerState, QueryOptions, RemoteState, Repository,
@@ -37,6 +38,16 @@ pub struct SelectRepoArgs {
     /// repository under the owner.
     /// Examples: "roxide", "vscode", "myproject"
     pub name: Option<String>,
+}
+
+impl SelectRepoArgs {
+    pub fn complete() -> [CompleteArg; 3] {
+        [
+            CompleteArg::new().complete(funcs::complete_head),
+            CompleteArg::new().complete(funcs::complete_owner),
+            CompleteArg::new().complete(funcs::complete_name),
+        ]
+    }
 }
 
 pub struct RepoSelector<'a, 'b> {
@@ -772,11 +783,11 @@ pub struct SelectPullRequestsArgs {
 
     /// By default, only filters pull requests with head as the current branch. With this
     /// option, ignores the current branch and selects all pull requests.
-    #[arg(long, short)]
+    #[arg(short)]
     pub all: bool,
 
     /// Filter pull requests by base branch name.
-    #[arg(long, short)]
+    #[arg(short)]
     pub base: Option<String>,
 
     #[clap(flatten)]
@@ -873,6 +884,17 @@ impl SelectPullRequestsArgs {
             head,
             base,
         })
+    }
+
+    pub fn complete() -> Vec<CompleteArg> {
+        let mut args = vec![
+            CompleteArg::new().short('a'),
+            CompleteArg::new()
+                .short('b')
+                .complete(funcs::complete_branch),
+        ];
+        args.push(UpstreamArgs::complete());
+        args
     }
 }
 

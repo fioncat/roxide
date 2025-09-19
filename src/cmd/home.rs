@@ -4,7 +4,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
-use crate::cmd::{CacheArgs, ThinArgs, complete};
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
+use crate::cmd::{CacheArgs, ThinArgs};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::mirror::get_current_mirror;
@@ -25,7 +26,7 @@ pub struct HomeCommand {
 
     /// When searching owners, only search local repositories without calling remote API.
     /// By default, it attempts to search repositories via remote API.
-    #[arg(long, short)]
+    #[arg(short)]
     pub local: bool,
 
     #[clap(flatten)]
@@ -34,6 +35,10 @@ pub struct HomeCommand {
 
 #[async_trait]
 impl Command for HomeCommand {
+    fn name() -> &'static str {
+        "home"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run home command: {:?}", self);
         ctx.lock()?;
@@ -69,8 +74,12 @@ impl Command for HomeCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("home").args(complete::repo_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            .arg(CacheArgs::complete())
+            .arg(CompleteArg::new().short('l'))
+            .arg(ThinArgs::complete())
     }
 }
 

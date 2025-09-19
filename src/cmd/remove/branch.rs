@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::exec::git::branch::{Branch, BranchStatus};
@@ -20,6 +20,10 @@ pub struct RemoveBranchCommand {
 
 #[async_trait]
 impl Command for RemoveBranchCommand {
+    fn name() -> &'static str {
+        "branch"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove branch command: {:?}", self);
 
@@ -68,7 +72,7 @@ impl Command for RemoveBranchCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("branch").arg(complete::branch_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete().arg(CompleteArg::new().complete(funcs::complete_branch))
     }
 }

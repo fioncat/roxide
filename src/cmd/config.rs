@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use clap::{Args, ValueEnum};
 use serde::{Deserialize, Serialize};
 
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::Config;
 use crate::config::context::ConfigContext;
 use crate::config::hook::HookRuns;
@@ -27,7 +27,7 @@ pub struct ConfigCommand {
     pub name: Option<String>,
 
     /// Edit the configuration file directly in the default editor.
-    #[arg(long, short)]
+    #[arg(short)]
     pub edit: bool,
 }
 
@@ -39,6 +39,10 @@ pub enum ConfigType {
 
 #[async_trait]
 impl Command for ConfigCommand {
+    fn name() -> &'static str {
+        "config"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run config command: {:?}", self);
 
@@ -81,9 +85,11 @@ impl Command for ConfigCommand {
         }
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("config")
-            .args([complete::config_type_arg(), complete::config_name_arg()])
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_config_type))
+            .arg(CompleteArg::new().complete(funcs::complete_config_name))
+            .arg(CompleteArg::new().short('e'))
     }
 }
 

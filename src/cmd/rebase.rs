@@ -2,12 +2,13 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Args;
 
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::debug;
 use crate::repo::current::get_current_repo;
 use crate::repo::ops::{RebaseOptions, RepoOperator};
 
-use super::{CacheArgs, Command, UpstreamArgs, complete};
+use super::{CacheArgs, Command, UpstreamArgs};
 
 /// Rebase the current branch.
 #[derive(Debug, Args)]
@@ -24,6 +25,10 @@ pub struct RebaseCommand {
 
 #[async_trait]
 impl Command for RebaseCommand {
+    fn name() -> &'static str {
+        "rebase"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run display command: {:?}", self);
 
@@ -40,7 +45,10 @@ impl Command for RebaseCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("rebase").arg(complete::branch_arg())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().complete(funcs::complete_branch))
+            .arg(CacheArgs::complete())
+            .arg(UpstreamArgs::complete())
     }
 }

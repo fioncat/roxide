@@ -4,13 +4,12 @@ use async_trait::async_trait;
 use clap::Args;
 
 use crate::cmd::Command;
-use crate::cmd::complete;
+use crate::cmd::complete::{CompleteArg, CompleteCommand};
 use crate::config::context::ConfigContext;
 use crate::db::repo::Repository;
 use crate::repo::mirror::clean_mirrors;
 use crate::repo::ops::RepoOperator;
-use crate::repo::select::SelectRepoArgs;
-use crate::repo::select::{RepoSelector, SelectManyReposOptions};
+use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 use crate::term::confirm::confirm_items;
 use crate::{confirm, debug, info};
 
@@ -21,18 +20,22 @@ pub struct RemoveRepoCommand {
     pub select_repo: SelectRepoArgs,
 
     /// Remove multiple repositories.
-    #[arg(long, short)]
+    #[arg(short)]
     pub recursive: bool,
 
     /// Force removal when removing multiple repositories. By default, repositories with pin
     /// flag will not be removed when removing multiple repositories.
     /// With this option, ignores the pin flag.
-    #[arg(long, short)]
+    #[arg(short)]
     pub force: bool,
 }
 
 #[async_trait]
 impl Command for RemoveRepoCommand {
+    fn name() -> &'static str {
+        "repo"
+    }
+
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Run remove repo command: {:?}", self);
         ctx.lock()?;
@@ -67,8 +70,11 @@ impl Command for RemoveRepoCommand {
         Ok(())
     }
 
-    fn complete_command() -> clap::Command {
-        clap::Command::new("repo").args(complete::repo_args())
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .args(SelectRepoArgs::complete())
+            .arg(CompleteArg::new().short('r'))
+            .arg(CompleteArg::new().short('f'))
     }
 }
 
