@@ -217,6 +217,22 @@ pub fn complete_mirror_name(cmp: CompleteContext) -> Result<Vec<String>> {
     Ok(items)
 }
 
+pub fn complete_hook(cmp: CompleteContext) -> Result<Vec<String>> {
+    debug!("[complete] Beginning to complete hook: {cmp}");
+    let existing_hooks = cmp.args.into_iter().collect::<HashSet<_>>();
+    let items = cmp
+        .ctx
+        .cfg
+        .hooks
+        .into_iter()
+        .filter(|h| !existing_hooks.contains(&h.name))
+        .filter(|h| h.name.starts_with(&cmp.current))
+        .map(|h| h.name)
+        .collect::<Vec<_>>();
+    debug!("[complete] Results: {items:?}");
+    Ok(items)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::config::context;
@@ -501,5 +517,43 @@ mod tests {
         ];
 
         run_cases("mirror_name", cases, complete_mirror_name);
+    }
+
+    #[test]
+    fn test_complete_hook() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["cargo-init", "gomod-init", "print-envs"],
+            },
+            CompleteCase {
+                args: vec!["gomod-init"],
+                current: "",
+                expect: vec!["cargo-init", "print-envs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "go",
+                expect: vec!["gomod-init"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "cargo",
+                expect: vec!["cargo-init"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "print",
+                expect: vec!["print-envs"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "xxx",
+                expect: vec![],
+            },
+        ];
+
+        run_cases("hook", cases, complete_hook);
     }
 }

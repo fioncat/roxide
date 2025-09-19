@@ -43,6 +43,12 @@ impl Command for RemoveHookHistoryCommand {
         db.with_transaction(|tx| tx.hook_history().delete_by_repo_id(repo.id))?;
         Ok(())
     }
+
+    fn complete() -> CompleteCommand {
+        Self::default_complete()
+            .arg(CompleteArg::new().short('a'))
+            .arg(CompleteArg::new().short('o'))
+    }
 }
 
 impl RemoveHookHistoryCommand {
@@ -82,11 +88,5 @@ impl RemoveHookHistoryCommand {
             }
         }
         Ok(())
-    }
-
-    fn complete() -> CompleteCommand {
-        Self::default_complete()
-            .arg(CompleteArg::new().short('a'))
-            .arg(CompleteArg::new().short('o'))
     }
 }
