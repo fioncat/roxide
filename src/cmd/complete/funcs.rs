@@ -233,6 +233,19 @@ pub fn complete_hook(cmp: CompleteContext) -> Result<Vec<String>> {
     Ok(items)
 }
 
+pub fn complete_language(cmp: CompleteContext) -> Result<Vec<String>> {
+    debug!("[complete] Beginning to complete language: {cmp}");
+    let db = cmp.ctx.get_db()?;
+    let languages = db.with_transaction(|tx| tx.repo().query_languages())?;
+    let items = languages
+        .into_iter()
+        .filter(|l| l.language.starts_with(&cmp.current))
+        .map(|l| l.language)
+        .collect::<Vec<_>>();
+    debug!("[complete] Results: {items:?}");
+    Ok(items)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::config::context;
@@ -555,5 +568,32 @@ mod tests {
         ];
 
         run_cases("hook", cases, complete_hook);
+    }
+
+    #[test]
+    fn test_complete_language() {
+        let cases = [
+            CompleteCase {
+                args: vec![],
+                current: "",
+                expect: vec!["Go", "Lua", "Rust", "Python"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "P",
+                expect: vec!["Python"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "Go",
+                expect: vec!["Go"],
+            },
+            CompleteCase {
+                args: vec![],
+                current: "X",
+                expect: vec![],
+            },
+        ];
+        run_cases("language", cases, complete_language);
     }
 }
