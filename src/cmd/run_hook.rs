@@ -9,7 +9,7 @@ use console::style;
 
 use crate::batch::{self, Task};
 use crate::cmd::ThinArgs;
-use crate::cmd::complete::{CompleteArg, CompleteCommand};
+use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
 use crate::config::context::ConfigContext;
 use crate::config::hook::HookConfig;
 use crate::db::repo::Repository;
@@ -59,8 +59,12 @@ impl Command for RunHookCommand {
     fn complete() -> CompleteCommand {
         Self::default_complete()
             .args(SelectRepoArgs::complete())
-            // TODO: Support complete hook names
-            .arg(CompleteArg::new().short('n').no_complete_value())
+            .arg(
+                CompleteArg::new()
+                    .short('n')
+                    .complete(funcs::complete_hook)
+                    .array(),
+            )
             .arg(CompleteArg::new().short('r'))
             .arg(ThinArgs::complete())
     }

@@ -3,13 +3,10 @@ use std::fs;
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use clap::{Args, ValueEnum};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::cmd::complete::{CompleteArg, CompleteCommand, funcs};
-use crate::config::Config;
 use crate::config::context::ConfigContext;
-use crate::config::hook::HookRuns;
-use crate::config::remote::RemoteConfig;
 use crate::debug;
 
 use super::Command;
@@ -100,13 +97,4 @@ where
     let toml = toml::to_string_pretty(value)?;
     println!("{toml}");
     Ok(())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ConfigDisplay {
-    pub base: Config,
-
-    pub remotes: Vec<RemoteConfig>,
-
-    pub hooks: HookRuns,
 }
