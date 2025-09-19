@@ -1351,4 +1351,134 @@ mod tests {
         let content = fs::read_to_string(path).unwrap();
         assert_eq!(content.trim(), ctx.cfg.default_branch);
     }
+
+    #[test]
+    fn test_is_updated() {
+        let ctx = context::tests::build_test_context("is_updated");
+        let mut repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        assert!(!op.is_updated().unwrap());
+
+        fs::write(op.path().join("test.txt"), "test").unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        assert!(op.is_updated().unwrap());
+
+        op.git()
+            .execute(["config", "user.name", "test-user"], "")
+            .unwrap();
+        op.git()
+            .execute(["config", "user.email", "test@example.com"], "")
+            .unwrap();
+        op.git().execute(["add", "."], "Adding file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test.txt"], "Committing file")
+            .unwrap();
+
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        assert!(op.is_updated().unwrap());
+
+        let commit = op.git().output(["rev-parse", "HEAD"], "").unwrap();
+        repo.commit = Some(commit);
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        assert!(!op.is_updated().unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_update_language() {
+        let ctx = context::tests::build_test_context("update_language");
+        let mut repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        let db = ctx.get_db().unwrap();
+        let id = db.with_transaction(|tx| tx.repo().insert(&repo)).unwrap();
+        repo.id = id;
+
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.update_language(false).await.unwrap();
+
+        let repo = db
+            .with_transaction(|tx| tx.repo().get_by_id(id))
+            .unwrap()
+            .unwrap();
+        assert_eq!(repo.language, None);
+
+        fs::write(op.path().join("test.rs"), "fn main() {}").unwrap();
+        fs::write(
+            op.path().join("test.json"),
+            r#"
+        {
+            "test_key": "test_value",
+            "age": 30
+        }
+        "#,
+        )
+        .unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.update_language(false).await.unwrap();
+
+        let repo = db
+            .with_transaction(|tx| tx.repo().get_by_id(id))
+            .unwrap()
+            .unwrap();
+        assert_eq!(repo.language, Some(Cow::Borrowed("Rust")));
+    }
+
+    #[test]
+    fn test_update_commit() {
+        let ctx = context::tests::build_test_context("update_commit");
+
+        let mut repo = Repository {
+            remote: "test".to_string(),
+            owner: "rust".to_string(),
+            name: "hello".to_string(),
+            ..Default::default()
+        };
+
+        let db = ctx.get_db().unwrap();
+        let id = db.with_transaction(|tx| tx.repo().insert(&repo)).unwrap();
+        repo.id = id;
+
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        op.ensure_create(true, None).unwrap();
+
+        fs::write(op.path().join("test.txt"), "test").unwrap();
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+        assert!(op.is_updated().unwrap());
+
+        op.git()
+            .execute(["config", "user.name", "test-user"], "")
+            .unwrap();
+        op.git()
+            .execute(["config", "user.email", "test@example.com"], "")
+            .unwrap();
+        op.git().execute(["add", "."], "Adding file").unwrap();
+        op.git()
+            .execute(["commit", "-m", "Add test.txt"], "Committing file")
+            .unwrap();
+
+        let commit = op.git().output(["rev-parse", "HEAD"], "").unwrap();
+
+        op.update_commit().unwrap();
+
+        let repo = db
+            .with_transaction(|tx| tx.repo().get_by_id(id))
+            .unwrap()
+            .unwrap();
+        assert_eq!(repo.commit, Some(commit));
+    }
 }
