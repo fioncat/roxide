@@ -31,7 +31,7 @@ impl Display for CompleteContext {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct CompleteResult {
     pub items: Vec<String>,
     pub files: bool,
@@ -519,4 +519,277 @@ fn get_final_command(cmd: CompleteCommand, args: &mut Vec<String>) -> Option<Com
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::context;
+
+    use super::*;
+
+    fn test_static_complete(cmp: CompleteContext) -> Result<Vec<String>> {
+        let items = vec![
+            "sample1".to_string(),
+            "sample2".to_string(),
+            "sample3".to_string(),
+            "york".to_string(),
+            "fioncat".to_string(),
+        ];
+        Ok(items
+            .into_iter()
+            .filter(|i| i.starts_with(&cmp.current))
+            .collect())
+    }
+
+    #[test]
+    fn test_complete() {
+        let cmd_with_flags = CompleteCommand::new("flags").args([
+            CompleteArg::new(),
+            CompleteArg::new().short('a'),
+            CompleteArg::new().short('f').files(),
+            CompleteArg::new().long("upstream"),
+            CompleteArg::new().short('i').no_complete_value().array(),
+        ]);
+        let cmd_with_args_static = CompleteCommand::new("static").args([
+            CompleteArg::new().complete(test_static_complete),
+            CompleteArg::new().files(),
+            CompleteArg::new().long("age").no_complete_value(),
+            CompleteArg::new().short('a'),
+        ]);
+        let cmd_with_args_file = CompleteCommand::new("files")
+            .alias("f")
+            .args([CompleteArg::new().files(), CompleteArg::new().dirs()]);
+        let cmd_empty = CompleteCommand::new("empty");
+        let cmd_sub_commands = CompleteCommand::new("sub")
+            .subcommand(CompleteCommand::new("sub1").arg(CompleteArg::new().files()))
+            .subcommand(
+                CompleteCommand::new("sub2")
+                    .arg(CompleteArg::new().long("age"))
+                    .arg(CompleteArg::new().short('a')),
+            )
+            .subcommand(CompleteCommand::new("sub3"));
+        let cmd = CompleteCommand::new("test")
+            .subcommand(cmd_with_flags)
+            .subcommand(cmd_with_args_static)
+            .subcommand(cmd_with_args_file)
+            .subcommand(cmd_empty)
+            .subcommand(cmd_sub_commands);
+
+        #[derive(Debug)]
+        struct Case {
+            args: Vec<&'static str>,
+            current: &'static str,
+            expect: CompleteResult,
+        }
+
+        let cases = [
+            Case {
+                args: vec![],
+                current: "",
+                expect: CompleteResult::items(vec![
+                    "flags".to_string(),
+                    "static".to_string(),
+                    "files".to_string(),
+                    "empty".to_string(),
+                    "sub".to_string(),
+                ]),
+            },
+            Case {
+                args: vec![],
+                current: "fl",
+                expect: CompleteResult::items(vec![
+                    "flags".to_string(),
+                    "static".to_string(),
+                    "files".to_string(),
+                    "empty".to_string(),
+                    "sub".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["none"],
+                current: "",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec!["flags"],
+                current: "",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec!["flags"],
+                current: "-",
+                expect: CompleteResult::items(vec![
+                    "-a".to_string(),
+                    "-f".to_string(),
+                    "--upstream".to_string(),
+                    "-i".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["flags", "-a", "-i", "target"],
+                current: "-",
+                expect: CompleteResult::items(vec![
+                    "-f".to_string(),
+                    "--upstream".to_string(),
+                    "-i".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["flags", "--upstream", "-i"],
+                current: "",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec![
+                    "flags",
+                    "-i",
+                    "test1",
+                    "-i",
+                    "test2",
+                    "-a",
+                    "--upstream",
+                    "-f",
+                ],
+                current: "-",
+                expect: CompleteResult::items(vec!["-i".to_string()]),
+            },
+            Case {
+                args: vec!["static"],
+                current: "",
+                expect: CompleteResult::items(vec![
+                    "sample1".to_string(),
+                    "sample2".to_string(),
+                    "sample3".to_string(),
+                    "york".to_string(),
+                    "fioncat".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["static"],
+                current: "sam",
+                expect: CompleteResult::items(vec![
+                    "sample1".to_string(),
+                    "sample2".to_string(),
+                    "sample3".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["static"],
+                current: "fi",
+                expect: CompleteResult::items(vec!["fioncat".to_string()]),
+            },
+            Case {
+                args: vec!["static", "--age"],
+                current: "fi",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec!["static", "--age", "23", "-a"],
+                current: "fi",
+                expect: CompleteResult::items(vec!["fioncat".to_string()]),
+            },
+            Case {
+                args: vec!["static", "test"],
+                current: "",
+                expect: CompleteResult {
+                    files: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["static", "fioncat", "-a"],
+                current: "test",
+                expect: CompleteResult {
+                    files: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["files"],
+                current: "",
+                expect: CompleteResult {
+                    files: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["f"],
+                current: "",
+                expect: CompleteResult {
+                    files: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["files", "test"],
+                current: "",
+                expect: CompleteResult {
+                    dirs: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["f", "test222"],
+                current: "",
+                expect: CompleteResult {
+                    dirs: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["empty"],
+                current: "",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec!["empty", "test"],
+                current: "hello",
+                expect: CompleteResult::default(),
+            },
+            Case {
+                args: vec!["sub"],
+                current: "",
+                expect: CompleteResult::items(vec![
+                    "sub1".to_string(),
+                    "sub2".to_string(),
+                    "sub3".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["sub"],
+                current: "sub",
+                expect: CompleteResult::items(vec![
+                    "sub1".to_string(),
+                    "sub2".to_string(),
+                    "sub3".to_string(),
+                ]),
+            },
+            Case {
+                args: vec!["sub", "sub1"],
+                current: "test",
+                expect: CompleteResult {
+                    files: true,
+                    ..Default::default()
+                },
+            },
+            Case {
+                args: vec!["sub", "sub2", "-a"],
+                current: "-",
+                expect: CompleteResult::items(vec!["--age".to_string()]),
+            },
+            Case {
+                args: vec!["sub", "sub3"],
+                current: "",
+                expect: CompleteResult::default(),
+            },
+        ];
+
+        for case in cases {
+            let ctx = context::tests::build_test_context("complete");
+            let args = case.args.iter().map(|s| s.to_string()).collect();
+            let result = complete_command(ctx, args, case.current.to_string(), cmd.clone())
+                .expect("complete command failed");
+            assert_eq!(result, case.expect, "case failed: {case:?}");
+        }
+    }
 }
