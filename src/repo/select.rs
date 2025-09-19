@@ -641,7 +641,7 @@ impl RepoList {
 impl List<Repository> for RepoList {
     fn titles(&self) -> Vec<&'static str> {
         let mut titles = self.level.titles();
-        titles.extend(vec!["Flags", "Visited", "LastVisited"]);
+        titles.extend(vec!["Language", "Flags", "Visited", "LastVisited"]);
         titles
     }
 
@@ -960,6 +960,8 @@ mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 path: None,
                 sync: true,
                 pin: true,
@@ -1017,6 +1019,8 @@ mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 path: None,
                 sync: true,
                 pin: true,
@@ -1140,6 +1144,8 @@ mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 path: None,
                 sync: true,
                 pin: true,
@@ -1163,6 +1169,8 @@ mod tests {
                 remote: "github".to_string(),
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
+                language: Some("Go".to_string().into()),
+                commit: Some("test-commit-kubernetes".to_string()),
                 path: None,
                 sync: false,
                 pin: true,
@@ -1187,6 +1195,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
                 path: None,
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 sync: true,
                 pin: true,
                 last_visited_at: 2234,
@@ -1229,6 +1239,8 @@ mod tests {
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
                 path: None,
+                language: Some("Go".to_string().into()),
+                commit: Some("test-commit-kubernetes".to_string()),
                 sync: false,
                 pin: true,
                 last_visited_at: 7777,
@@ -1253,6 +1265,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
                 path: None,
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 sync: true,
                 pin: true,
                 last_visited_at: 2234,
@@ -1282,6 +1296,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
                 path: None,
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 sync: true,
                 pin: true,
                 last_visited_at: 2234,
@@ -1309,6 +1325,8 @@ mod tests {
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
                 path: None,
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 sync: true,
                 pin: true,
                 last_visited_at: 2234,
@@ -1354,6 +1372,8 @@ mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 sync: true,
                 pin: true,
                 path: None,

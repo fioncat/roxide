@@ -15,7 +15,7 @@ use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 use crate::term::confirm::confirm_items;
 use crate::{debug, outputln};
 
-use super::Command;
+use super::{Command, RecursiveArgs};
 
 /// Synchronize one or multiple repositories. Include cloning, pushing, pulling, etc.
 #[derive(Debug, Args)]
@@ -23,11 +23,8 @@ pub struct SyncCommand {
     #[clap(flatten)]
     pub select_repo: SelectRepoArgs,
 
-    /// By default, if you are currently in a repository, sync will synchronize the current
-    /// repository; otherwise it will sync multiple repositories. With this option,
-    /// multiple repositories will be synced regardless of your current location.
-    #[arg(short)]
-    pub recursive: bool,
+    #[clap(flatten)]
+    pub recursive: RecursiveArgs,
 
     /// By default, when syncing multiple repositories, only repositories marked with sync
     /// flag will be synchronized. With this option, all repositories will be forcefully
@@ -45,7 +42,7 @@ impl Command for SyncCommand {
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Running sync command: {:?}", self);
 
-        if !self.recursive
+        if !self.recursive.enable
             && let Some(repo) = get_current_repo_optional(&ctx)?
         {
             return self.sync_one(ctx, repo);
@@ -56,7 +53,7 @@ impl Command for SyncCommand {
     fn complete() -> CompleteCommand {
         Self::default_complete()
             .args(SelectRepoArgs::complete())
-            .arg(CompleteArg::new().short('r'))
+            .arg(RecursiveArgs::complete())
             .arg(CompleteArg::new().short('f'))
     }
 }
@@ -75,7 +72,7 @@ impl SyncCommand {
         }
 
         let mut names = list.display_names();
-        confirm_items(&names, "Sync", "synchronization", "Repo", "Repos")?;
+        confirm_items(&names, "sync", "synchronization", "Repo", "Repos")?;
 
         let mut tasks = Vec::with_capacity(list.items.len());
         ctx.mute();

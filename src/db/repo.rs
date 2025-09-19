@@ -28,6 +28,10 @@ pub struct Repository {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 
+    pub language: Option<Cow<'static, str>>,
+
+    pub commit: Option<String>,
+
     pub pin: bool,
 
     pub sync: bool,
@@ -142,10 +146,12 @@ impl Repository {
             owner: row.get(2)?,
             name: row.get(3)?,
             path: row.get(4)?,
-            pin: row.get(5)?,
-            sync: row.get(6)?,
-            last_visited_at: row.get(7)?,
-            visited_count: row.get(8)?,
+            language: row.get(5)?,
+            commit: row.get(6)?,
+            pin: row.get(7)?,
+            sync: row.get(8)?,
+            last_visited_at: row.get(9)?,
+            visited_count: row.get(10)?,
             new_created: false,
         })
     }
@@ -154,9 +160,9 @@ impl Repository {
 impl DisplayLevel {
     pub fn titles(&self) -> Vec<&'static str> {
         match self {
-            Self::Remote => vec!["ID", "Remote", "Owner", "Name"],
-            Self::Owner => vec!["ID", "Owner", "Name"],
-            Self::Name => vec!["ID", "Name"],
+            Self::Remote => vec!["Remote", "Owner", "Name"],
+            Self::Owner => vec!["Owner", "Name"],
+            Self::Name => vec!["Name"],
         }
     }
 }
@@ -176,13 +182,20 @@ impl ListItem for Repository {
                 if self.pin {
                     flags.push("pin");
                 }
+                if flags.is_empty() {
+                    return Cow::Borrowed("<none>");
+                }
                 flags.join(",").into()
             }
+            "Language" => match self.language {
+                Some(ref lang) => Cow::Borrowed(lang),
+                None => Cow::Borrowed("<none>"),
+            },
             "LastVisited" => format_time(self.last_visited_at).into(),
             "Visited" => self.visited_count.to_string().into(),
             "Path" => match &self.path {
                 Some(p) => Cow::Borrowed(p),
-                None => Cow::Borrowed(""),
+                None => Cow::Borrowed("<none>"),
             },
             _ => Cow::Borrowed(""),
         }
@@ -228,6 +241,14 @@ impl<'a> RepositoryHandle<'a> {
     /// Update a repository's `last_visited_at` and `visited_count`.
     pub fn update(&self, repo: &Repository) -> Result<()> {
         update(self.tx, repo)
+    }
+
+    pub fn update_commit(&self, id: u64, commit: Option<&str>) -> Result<()> {
+        update_commit(self.tx, id, commit)
+    }
+
+    pub fn update_language(&self, id: u64, lang: Option<&str>) -> Result<()> {
+        update_language(self.tx, id, lang)
     }
 
     /// Delete a repository.
@@ -283,6 +304,8 @@ CREATE TABLE IF NOT EXISTS repo (
     owner TEXT NOT NULL,
     name TEXT NOT NULL,
     path TEXT,
+    language TEXT,
+    `commit` TEXT,
     pin INTEGER NOT NULL,
     sync INTEGER NOT NULL,
     last_visited_at INTEGER NOT NULL,
@@ -310,12 +333,14 @@ INSERT INTO repo (
     owner,
     name,
     path,
+    language,
+    `commit`,
     pin,
     sync,
     last_visited_at,
     visited_count
 ) VALUES (
-    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
 )
 "#;
 
@@ -328,6 +353,8 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
             repo.owner,
             repo.name,
             repo.path,
+            repo.language,
+            repo.commit,
             repo.pin,
             repo.sync,
             repo.last_visited_at,
@@ -340,7 +367,18 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
 }
 
 const GET_BY_ID_SQL: &str = r#"
-SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT
+    id,
+    remote,
+    owner,
+    name,
+    path,
+    language,
+    `commit`,
+    pin,
+    sync,
+    last_visited_at,
+    visited_count
 FROM repo
 WHERE id = ?1
 "#;
@@ -354,7 +392,18 @@ fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Repository>> {
 }
 
 const GET_SQL: &str = r#"
-SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT
+    id,
+    remote,
+    owner,
+    name,
+    path,
+    language,
+    `commit`,
+    pin,
+    sync,
+    last_visited_at,
+    visited_count
 FROM repo
 WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
@@ -370,7 +419,18 @@ fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Option
 }
 
 const GET_BY_PATH_SQL: &str = r#"
-SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT
+    id,
+    remote,
+    owner,
+    name,
+    path,
+    language,
+    `commit`,
+    pin,
+    sync,
+    last_visited_at,
+    visited_count
 FROM repo
 WHERE path = ?1
 "#;
@@ -400,6 +460,26 @@ fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
             repo.sync,
         ],
     )?;
+    Ok(())
+}
+
+const UPDATE_COMMIT_SQL: &str = r#"
+UPDATE repo SET `commit` = ?2 WHERE id = ?1
+"#;
+
+fn update_commit(tx: &Transaction, id: u64, commit: Option<&str>) -> Result<()> {
+    debug!("[db] Updating repo commit, id: {id}, commit: {commit:?}");
+    tx.execute(UPDATE_COMMIT_SQL, params![id, commit])?;
+    Ok(())
+}
+
+const UPDATE_LANGUAGE_SQL: &str = r#"
+UPDATE repo SET language = ?2 WHERE id = ?1
+"#;
+
+fn update_language(tx: &Transaction, id: u64, language: Option<&str>) -> Result<()> {
+    debug!("[db] Updating repo language, id: {id}, language: {language:?}");
+    tx.execute(UPDATE_LANGUAGE_SQL, params![id, language])?;
     Ok(())
 }
 
@@ -510,7 +590,18 @@ impl<'a> QueryOptions<'a> {
 }
 
 const QUERY_SQL: &str = r#"
-SELECT id, remote, owner, name, path, pin, sync, last_visited_at, visited_count
+SELECT
+    id,
+    remote,
+    owner,
+    name,
+    path,
+    language,
+    `commit`,
+    pin,
+    sync,
+    last_visited_at,
+    visited_count
 FROM repo
 {{where}}
 ORDER BY last_visited_at DESC
@@ -520,8 +611,10 @@ ORDER BY last_visited_at DESC
 fn query(tx: &Transaction, opts: QueryOptions) -> Result<Vec<Repository>> {
     debug!("[db] Querying repos, options: {opts:?}");
     let (sql, params) = opts.build(QUERY_SQL);
+    let sql = sql.replace('\n', " ");
+    let sql = sql.trim();
     debug!("[db] Query SQL: {sql:?}, params: {params:?}");
-    let mut stmt = tx.prepare(&sql)?;
+    let mut stmt = tx.prepare(sql)?;
     let rows = stmt.query_map(params_from_iter(params), Repository::from_row)?;
     let mut results = Vec::new();
     for row in rows {
@@ -539,8 +632,9 @@ SELECT COUNT(*) FROM repo {{where}}
 fn count(tx: &Transaction, opts: QueryOptions) -> Result<u32> {
     debug!("[db] Counting repos, options: {opts:?}");
     let (sql, params) = opts.build(COUNT_SQL);
+    let sql = sql.trim();
     debug!("[db] Count SQL: {sql}, params: {params:?}");
-    let count: u32 = tx.query_row(&sql, params_from_iter(params), |row| row.get(0))?;
+    let count: u32 = tx.query_row(sql, params_from_iter(params), |row| row.get(0))?;
 
     debug!("[db] Count result: {count}");
     Ok(count)
@@ -767,6 +861,8 @@ pub mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "roxide".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-roxide".to_string()),
                 path: None,
                 sync: true,
                 pin: true,
@@ -779,6 +875,8 @@ pub mod tests {
                 remote: "github".to_string(),
                 owner: "fioncat".to_string(),
                 name: "otree".to_string(),
+                language: Some("Rust".to_string().into()),
+                commit: Some("test-commit-otree".to_string()),
                 path: None,
                 sync: true,
                 pin: true,
@@ -792,6 +890,8 @@ pub mod tests {
                 owner: "fioncat".to_string(),
                 name: "nvimdots".to_string(),
                 path: Some("/path/to/nvimdots".to_string()),
+                language: Some("Lua".to_string().into()),
+                commit: Some("test-commit-nvimdots".to_string()),
                 sync: true,
                 pin: true,
                 last_visited_at: 3333,
@@ -803,6 +903,8 @@ pub mod tests {
                 remote: "github".to_string(),
                 owner: "kubernetes".to_string(),
                 name: "kubernetes".to_string(),
+                language: Some("Go".to_string().into()),
+                commit: Some("test-commit-kubernetes".to_string()),
                 path: None,
                 sync: false,
                 pin: true,
@@ -815,6 +917,8 @@ pub mod tests {
                 remote: "gitlab".to_string(),
                 owner: "fioncat".to_string(),
                 name: "someproject".to_string(),
+                language: Some("Python".to_string().into()),
+                commit: Some("test-commit-someproject".to_string()),
                 path: None,
                 sync: false,
                 pin: false,
@@ -827,6 +931,8 @@ pub mod tests {
                 remote: "gitlab".to_string(),
                 owner: "fioncat".to_string(),
                 name: "template".to_string(),
+                language: None,
+                commit: Some("test-commit-template".to_string()),
                 path: None,
                 sync: false,
                 pin: false,
@@ -892,6 +998,32 @@ pub mod tests {
         update(&tx, &repo).unwrap();
         tx.commit().unwrap();
 
+        let tx = conn.transaction().unwrap();
+        let result = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
+        assert_eq!(result, repo);
+    }
+
+    #[test]
+    fn test_update_commit() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let mut repo = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
+        repo.commit = Some("new-commit".to_string());
+        update_commit(&tx, repo.id, Some("new-commit")).unwrap();
+        tx.commit().unwrap();
+        let tx = conn.transaction().unwrap();
+        let result = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
+        assert_eq!(result, repo);
+    }
+
+    #[test]
+    fn test_update_language() {
+        let mut conn = build_conn();
+        let tx = conn.transaction().unwrap();
+        let mut repo = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
+        repo.language = Some("NewLang".to_string().into());
+        update_language(&tx, repo.id, Some("NewLang")).unwrap();
+        tx.commit().unwrap();
         let tx = conn.transaction().unwrap();
         let result = get(&tx, "github", "fioncat", "roxide").unwrap().unwrap();
         assert_eq!(result, repo);

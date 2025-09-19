@@ -56,6 +56,8 @@ pub struct CodeStats {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub struct CodeStatsItem {
     pub name: &'static str,
+    /// Main is false for some special files like config, markdown
+    pub main: bool,
     pub files: u64,
     pub code: u64,
     pub comment: u64,
@@ -78,20 +80,20 @@ impl ListItem for CodeStatsItem {
 }
 
 impl CodeStatsItem {
-    fn scan<P>(path: P) -> Result<Option<(&'static str, CodeStatsItem)>>
+    fn scan<P>(path: P) -> Result<Option<(&'static str, bool, CodeStatsItem)>>
     where
         P: AsRef<Path>,
     {
-        let Some((name, mut parser)) = Self::get_parser(path.as_ref()) else {
+        let Some((name, main, mut parser)) = Self::get_parser(path.as_ref()) else {
             return Ok(None);
         };
 
         let stats = read_file(path.as_ref(), parser.as_mut())
             .with_context(|| format!("failed to read file {:?}", path.as_ref().display()))?;
-        Ok(Some((name, stats)))
+        Ok(Some((name, main, stats)))
     }
 
-    fn get_parser(path: &Path) -> Option<(&'static str, Box<dyn CodeParser>)> {
+    fn get_parser(path: &Path) -> Option<(&'static str, bool, Box<dyn CodeParser>)> {
         let Some(Some(extension)) = path.extension().map(|e| e.to_str()) else {
             let name = path.file_name()?.to_str()?;
             let special = parse::get_special_file(name)?;
@@ -107,6 +109,7 @@ impl Add for CodeStatsItem {
     fn add(self, other: Self) -> Self {
         Self {
             name: self.name,
+            main: self.main,
             files: self.files + other.files,
             code: self.code + other.code,
             comment: self.comment + other.comment,
@@ -124,12 +127,13 @@ struct ScanCodeHandler {
 
 impl ScanHandler<()> for ScanCodeHandler {
     fn handle_file(&self, file: ScanTask<()>) -> Result<()> {
-        let Some((name, item)) = CodeStatsItem::scan(file.path)? else {
+        let Some((name, main, item)) = CodeStatsItem::scan(file.path)? else {
             return Ok(());
         };
         let mut stats = self.stats.lock().unwrap();
         let current_item = stats.data.get(name).copied().unwrap_or(CodeStatsItem {
             name,
+            main,
             ..Default::default()
         });
         let new_item = current_item + item;
@@ -291,6 +295,7 @@ mod tests {
         let expect_items = vec![
             CodeStatsItem {
                 name: "Rust",
+                main: true,
                 files: 2,
                 code: 6,
                 comment: 6,
@@ -299,6 +304,7 @@ mod tests {
             },
             CodeStatsItem {
                 name: "Python",
+                main: true,
                 files: 1,
                 code: 3,
                 comment: 2,
@@ -307,6 +313,7 @@ mod tests {
             },
             CodeStatsItem {
                 name: "Makefile",
+                main: false,
                 files: 1,
                 code: 4,
                 comment: 1,
@@ -315,6 +322,7 @@ mod tests {
             },
             CodeStatsItem {
                 name: "JSON",
+                main: false,
                 files: 1,
                 code: 5,
                 comment: 0,
@@ -323,6 +331,7 @@ mod tests {
             },
             CodeStatsItem {
                 name: "Go",
+                main: true,
                 files: 1,
                 code: 1,
                 comment: 1,

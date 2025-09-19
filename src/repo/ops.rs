@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use anyhow::{Result, bail};
 use console::style;
@@ -11,10 +12,14 @@ use crate::db::hook_history::HookHistory;
 use crate::db::repo::Repository;
 use crate::exec::git::GitCmd;
 use crate::exec::git::branch::{Branch, BranchStatus};
-use crate::exec::git::commit::{count_uncommitted_changes, ensure_no_uncommitted_changes};
+use crate::exec::git::commit::{
+    count_uncommitted_changes, ensure_no_uncommitted_changes, get_current_commit,
+};
 use crate::exec::git::remote::Remote;
 use crate::format::now;
 use crate::repo::hook::filter::matched_filters;
+use crate::scan::code_stats::get_code_stats;
+use crate::scan::ignore::Ignore;
 use crate::{confirm, debug, info, outputln};
 
 macro_rules! show_info {
@@ -33,6 +38,9 @@ pub struct RepoOperator<'a, 'b> {
     repo: &'b Repository,
 
     path: PathBuf,
+
+    current_commit: OnceLock<Option<String>>,
+    updated: OnceLock<Result<bool>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +124,8 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             owner,
             repo,
             path,
+            current_commit: OnceLock::new(),
+            updated: OnceLock::new(),
         }
     }
 
@@ -617,6 +627,118 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             ("CURRENT_BRANCH", current_branch.into()),
             ("DEFAULT_BRANCH", default_branch.into()),
         ]
+    }
+
+    pub fn get_current_commit(&self) -> Option<&str> {
+        debug!("[op] Getting current commit");
+        self.current_commit
+            .get_or_init(|| {
+                let commit = get_current_commit(self.git().mute()).ok();
+                debug!("[op] Current commit: {commit:?}");
+                commit
+            })
+            .as_deref()
+    }
+
+    pub fn is_updated(&self) -> Result<bool> {
+        debug!("[op] Checking if repo is updated");
+        let updated = self.updated.get_or_init(|| {
+            if count_uncommitted_changes(self.git().mute())? > 0 {
+                debug!("[op] Repo has uncommitted changes, updated");
+                return Ok(true);
+            }
+            if self.repo.commit.as_deref() != self.get_current_commit() {
+                debug!(
+                    "[op] Repo current commit {:?} is different from current commit {:?}, updated",
+                    self.repo.commit,
+                    self.get_current_commit()
+                );
+                return Ok(true);
+            }
+            debug!("[op] Repo is not updated");
+            Ok(false)
+        });
+        match updated {
+            Ok(v) => Ok(*v),
+            Err(e) => bail!(e.to_string()),
+        }
+    }
+
+    pub async fn update_language(&self, force: bool) -> Result<()> {
+        debug!("[op] Updating language");
+        let db = self.ctx.get_db()?;
+        if let Some(language) = self.detect(force).await? {
+            if self.repo.language.as_deref() != language {
+                debug!("[op] Updating language to {language:?}");
+                show_info!(
+                    self,
+                    "Updating language to {}",
+                    language
+                        .map(|lang| format!("{lang:?}").into())
+                        .unwrap_or(Cow::Borrowed("<none>"))
+                );
+                db.with_transaction(|tx| tx.repo().update_language(self.repo.id, language))?;
+            } else {
+                debug!("[op] Language is already up to date, skipping update");
+            }
+        } else {
+            debug_assert!(!force); // When force is true, detect should always returns Some
+            debug!("[op] Auto detect disabled or no update needed, skipping update");
+        }
+
+        Ok(())
+    }
+
+    async fn detect(&self, force: bool) -> Result<Option<Option<&'static str>>> {
+        debug!("[op] Detecting language");
+        if !force {
+            if self.ctx.cfg.disable_auto_detect {
+                debug!("[op] Auto detect is disabled, skipping");
+                return Ok(None);
+            }
+            if !self.is_updated()? {
+                debug!("[op] Repo is not updated, skipping detect");
+                return Ok(None);
+            }
+        }
+
+        let ignore = if self.ctx.cfg.stats_ignore.is_empty() {
+            Ignore::default()
+        } else {
+            Ignore::parse(&self.path, &self.ctx.cfg.stats_ignore)?
+        };
+
+        let mut stats = get_code_stats(self.path.clone(), ignore).await?;
+        if stats.items.is_empty() {
+            debug!("[op] No code stats found, setting language to None");
+            return Ok(Some(None));
+        }
+
+        if let Some(pos) = stats.items.iter().position(|item| item.main) {
+            let top_item = stats.items.remove(pos);
+            debug!("[op] Main code stats item: {top_item:?}");
+            return Ok(Some(Some(top_item.name)));
+        }
+
+        let top_item = stats.items.remove(0);
+        debug!("[op] No main top code stats item: {top_item:?}");
+        Ok(Some(Some(top_item.name)))
+    }
+
+    pub fn update_commit(&self) -> Result<()> {
+        debug!("[op] Updating repo commit");
+        let db = self.ctx.get_db()?;
+        let current_commit = self.get_current_commit();
+        if self.repo.commit.as_deref() != current_commit {
+            debug!(
+                "[op] Repo current commit {:?} is different from current commit {:?}, updating",
+                self.repo.commit, current_commit
+            );
+            db.with_transaction(|tx| tx.repo().update_commit(self.repo.id, current_commit))?;
+        } else {
+            debug!("[op] Repo commit is already up to date, skipping update");
+        }
+        Ok(())
     }
 
     pub fn ctx(&self) -> &ConfigContext {
