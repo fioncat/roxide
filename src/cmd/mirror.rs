@@ -33,7 +33,7 @@ impl Command for MirrorCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run mirror command: {:?}", self);
+        debug!("[cmd] Running mirror command: {:?}", self);
         ctx.lock()?;
 
         let repo = get_current_repo(&ctx)?;

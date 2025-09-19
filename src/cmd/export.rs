@@ -27,7 +27,7 @@ impl Command for ExportCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run export command: {:?}", self);
+        debug!("[cmd] Running export command: {:?}", self);
 
         let selector = RepoSelector::new(&ctx, &self.select_repo);
         let list = selector.select_many(SelectManyReposOptions::default())?;

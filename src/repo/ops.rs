@@ -120,7 +120,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub fn ensure_create(&self, thin: bool, clone_url: Option<String>) -> Result<CreateResult> {
-        debug!("[op] Ensure repo create");
+        debug!("[op] Ensuring repo create");
 
         if self.path.exists() {
             debug!("[op] Repo already exists, return");
@@ -134,7 +134,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         debug!("[op] Clone URL: {clone_url:?}");
         let result = match clone_url {
             Some(url) => {
-                debug!("[op] Clone repo from {url:?}");
+                debug!("[op] Cloning repo from {url:?}");
                 let message = format!("Cloning from {url}");
                 let path = format!("{}", self.path.display());
                 let args = if thin {
@@ -149,7 +149,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             }
             None => {
                 debug!(
-                    "[op] Create empty repo, default branch: {}",
+                    "[op] Creating empty repo, default branch: {}",
                     self.ctx.cfg.default_branch
                 );
 
@@ -172,15 +172,15 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub fn ensure_remote(&self) -> Result<()> {
-        debug!("[op] Ensure repo remote");
+        debug!("[op] Ensuring repo remote");
 
         let Some(url) = self.get_clone_url() else {
-            debug!("[op] Remote does not support clone, skip ensure_remote");
+            debug!("[op] Remote does not support clone, skipping ensure_remote");
             return Ok(());
         };
 
         let Some(remote) = Remote::origin(self.git())? else {
-            debug!("[op] Repo has no origin remote, add: {url:?}");
+            debug!("[op] Repo has no origin remote, adding: {url:?}");
             return self.git().execute(
                 ["remote", "add", "origin", &url],
                 format!("Adding origin remote: {url}"),
@@ -202,13 +202,13 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
     pub fn ensure_user(&self) -> Result<()> {
         if let Some(ref user) = self.owner.user {
-            debug!("[op] Set user.name to {user:?}");
+            debug!("[op] Setting user.name to {user:?}");
             let message = format!("Setting user to {user:?}");
             self.git().execute(["config", "user.name", user], message)?;
         }
 
         if let Some(ref email) = self.owner.email {
-            debug!("[op] Set user.email to {email:?}");
+            debug!("[op] Setting user.email to {email:?}");
             let message = format!("Setting email to {email:?}");
             self.git()
                 .execute(["config", "user.email", email], message)?;
@@ -218,24 +218,24 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub async fn get_git_remote(&self, upstream: bool, force_no_cache: bool) -> Result<Remote> {
-        debug!("[op] Get git remote, upstream: {upstream}, force_no_cache: {force_no_cache}");
+        debug!("[op] Getting git remote, upstream: {upstream}, force_no_cache: {force_no_cache}");
         if !upstream {
             let Some(remote) = Remote::origin(self.git())? else {
                 bail!("repository does not have origin remote, please sync first");
             };
-            debug!("[op] Get origin remote: {remote:?}");
+            debug!("[op] Getting origin remote: {remote:?}");
             return Ok(remote);
         }
 
         let remotes = Remote::list(self.git())?;
         for remote in remotes {
             if remote.as_str() == "upstream" {
-                debug!("[op] Get upstream remote: {remote:?}");
+                debug!("[op] Getting upstream remote: {remote:?}");
                 return Ok(remote);
             }
         }
 
-        debug!("[op] Upstream remote not found, try to add it");
+        debug!("[op] Upstream remote not found, trying to add it");
         let Some(ref domain) = self.remote.clone else {
             bail!(
                 "remote {:?} does not support clone, cannot get upstream",
@@ -282,15 +282,15 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         )?;
 
         let remote = Remote::new("upstream");
-        debug!("[op] Add upstream remote: {remote:?}");
+        debug!("[op] Adding upstream remote: {remote:?}");
         Ok(remote)
     }
 
     pub fn sync(&self) -> Result<SyncResult> {
-        debug!("[op] Begin to sync repo");
+        debug!("[op] Beginning to sync repo");
         let result = self.ensure_create(false, None)?;
         if !matches!(result, CreateResult::Cloned) {
-            debug!("[op] Repo not cloned, ensure user and remote");
+            debug!("[op] Repo not cloned, ensuring user and remote");
             self.ensure_user()?;
             self.ensure_remote()?;
         }
@@ -307,7 +307,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
         let uncommitted = count_uncommitted_changes(self.git())?;
         if uncommitted > 0 {
-            debug!("[op] Repo has {uncommitted} uncommitted changes, skip sync branches");
+            debug!("[op] Repo has {uncommitted} uncommitted changes, skipping sync branches");
             result.uncommitted = uncommitted;
             return Ok(result);
         }
@@ -316,7 +316,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         let default_branch = Branch::default(self.git())?;
         let mut back = default_branch.clone();
         debug!(
-            "[op] Begin to sync branches, default_branch: {default_branch}, branches: {branches:?}"
+            "[op] Beginning to sync branches, default_branch: {default_branch}, branches: {branches:?}"
         );
 
         let mut tasks = vec![];
@@ -365,7 +365,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             tasks.push(task);
         }
 
-        debug!("[op] Sync branch tasks: {tasks:?}, back: {back}, current: {current}");
+        debug!("[op] Syncing branch tasks: {tasks:?}, back: {back}, current: {current}");
 
         if tasks.is_empty() {
             debug!("[op] No branch to sync");
@@ -376,11 +376,11 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         show_info!(self, "Backup branch is {}", style(&back).magenta().bold());
 
         for task in tasks {
-            debug!("[op] Begin to handle sync branch task: {task:?}");
+            debug!("[op] Beginning to handle sync branch task: {task:?}");
             match task.action {
                 BranchAction::Push | BranchAction::Pull => {
                     if current != task.branch {
-                        debug!("[op] Checkout to branch {} to push or pull", task.branch);
+                        debug!("[op] Checkouting to branch {} to push or pull", task.branch);
                         // checkout to this branch to perform push/pull
                         self.git().execute(
                             ["checkout", &task.branch],
@@ -402,7 +402,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 }
                 BranchAction::Delete => {
                     if current == task.branch {
-                        debug!("[op] Checkout to default branch {default_branch} before delete");
+                        debug!("[op] Checkouting to default branch {default_branch} before delete");
                         // we cannot delete branch when we are inside it, checkout
                         // to default branch first.
                         self.git().execute(
@@ -426,7 +426,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
 
         if current != back {
-            debug!("[op] Checkout to backup branch {back:?}");
+            debug!("[op] Checkouting to backup branch {back:?}");
             self.git().execute(
                 ["checkout", &back],
                 format!("Checkouting to backup branch {back}"),
@@ -438,29 +438,29 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub async fn rebase(&self, opts: RebaseOptions<'_>) -> Result<()> {
-        debug!("[op] Begin to rebase repo, options: {opts:?}");
+        debug!("[op] Beginning to rebase repo, options: {opts:?}");
         ensure_no_uncommitted_changes(self.git())?;
 
         let remote = self
             .get_git_remote(opts.upstream, opts.force_no_cache)
             .await?;
-        debug!("[op] Get remote for rebase: {remote:?}");
+        debug!("[op] Getting remote for rebase: {remote:?}");
 
         let target = remote.get_target(self.git(), opts.target)?;
-        debug!("[op] Get target for rebase: {target:?}");
+        debug!("[op] Getting target for rebase: {target:?}");
 
         self.git()
             .execute(["rebase", &target], format!("Rebasing from {target}"))
     }
 
     pub async fn squash(&self, opts: SquashOptions<'_>) -> Result<()> {
-        debug!("[op] Begin to squash repo, options: {opts:?}");
+        debug!("[op] Beginning to squash repo, options: {opts:?}");
         ensure_no_uncommitted_changes(self.git())?;
 
         let remote = self
             .get_git_remote(opts.upstream, opts.force_no_cache)
             .await?;
-        debug!("[op] Get remote for squash: {remote:?}");
+        debug!("[op] Getting remote for squash: {remote:?}");
 
         let commits = remote.commits_between(self.git(), opts.target, true)?;
         debug!("[op] Commits between: {commits:?}");
@@ -485,12 +485,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             confirm!("Continue");
         }
 
-        debug!("[op] Soft reset to squash commits");
+        debug!("[op] Soft resetting to squash commits");
         let set = format!("HEAD~{}", commits.len());
         self.git()
             .execute(["reset", "--soft", &set], "Soft resetting to squash")?;
 
-        debug!("[op] Commit squashed changes");
+        debug!("[op] Committing squashed changes");
         let args = if let Some(message) = opts.message {
             vec!["commit", "--message", message.as_str()]
         } else {
@@ -534,7 +534,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
 
         let mut results = vec![];
         let envs = self.build_hook_envs();
-        debug!("[op] Run hooks with envs: {envs:?}");
+        debug!("[op] Running hooks with envs: {envs:?}");
         for hook in to_run {
             let success = self.run_hook(hook, &envs)?;
             results.push(HookResult {
@@ -553,7 +553,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         );
         let mut success = true;
         for run in hook.run.iter() {
-            debug!("[op] Run hook run: {run:?}");
+            debug!("[op] Running hook run: {run:?}");
             let Some(run_path) = self.ctx.cfg.hook_runs.get(run) else {
                 debug!("[op] Hook run {run:?} not found, skip");
                 continue;

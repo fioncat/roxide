@@ -34,7 +34,7 @@ impl Command for ListPullRequestCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list pull request command: {:?}", self);
+        debug!("[cmd] Running list pull request command: {:?}", self);
 
         let mut titles = vec![];
         if self.select_pull_requests.id.is_some() {

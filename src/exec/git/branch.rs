@@ -54,7 +54,7 @@ fn get_branch_re() -> &'static Regex {
 
 impl Branch {
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
-        debug!("[branch] List branch, cmd: {cmd:?}");
+        debug!("[branch] Listing branch, cmd: {cmd:?}");
         let lines = cmd.lines(["branch", "-vv"], "Listing git branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
@@ -67,7 +67,7 @@ impl Branch {
     }
 
     pub fn list_remote(cmd: GitCmd) -> Result<Vec<String>> {
-        debug!("[branch] List remote branch, cmd: {cmd:?}");
+        debug!("[branch] Listing remote branch, cmd: {cmd:?}");
         let lines = cmd.lines(["branch", "-al"], "Listing git remote branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
@@ -100,7 +100,7 @@ impl Branch {
     }
 
     pub fn remote_default(cmd: GitCmd, remote: &str) -> Result<String> {
-        debug!("[branch] Get remote default branch, cmd: {cmd:?}, remote: {remote}");
+        debug!("[branch] Getting remote default branch, cmd: {cmd:?}, remote: {remote}");
 
         let head_ref = format!("refs/remotes/{remote}/HEAD");
         let remote_ref = format!("refs/remotes/{remote}/");
@@ -110,7 +110,7 @@ impl Branch {
             "Getting default branch by symbolic-ref",
         );
         if let Ok(out) = result {
-            debug!("[branch] Use symbolic-ref to get default branch ok, output: {out:?}");
+            debug!("[branch] Using symbolic-ref to get default branch ok, output: {out:?}");
             let branch = out.trim_start_matches(remote_ref.as_str()).trim();
             if branch.is_empty() {
                 bail!("remote default branch is empty");
@@ -141,7 +141,7 @@ impl Branch {
     }
 
     pub fn current(cmd: GitCmd) -> Result<String> {
-        debug!("[branch] Get current branch, cmd: {cmd:?}");
+        debug!("[branch] Getting current branch, cmd: {cmd:?}");
         let branch = cmd.output(["branch", "--show-current"], "Getting current branch")?;
         if branch.is_empty() {
             bail!("current branch is empty");
@@ -151,7 +151,7 @@ impl Branch {
     }
 
     pub fn parse(line: &str) -> Result<Self> {
-        debug!("[branch] Parse branch line: {line:?}");
+        debug!("[branch] Parsing branch line: {line:?}");
         let mut iter = get_branch_re().captures_iter(line);
         let caps = match iter.next() {
             Some(caps) => caps,

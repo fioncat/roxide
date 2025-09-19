@@ -23,7 +23,7 @@ impl Command for DecryptCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run decrypt command: {:?}", self);
+        debug!("[cmd] Running decrypt command: {:?}", self);
 
         let password = self.secret.get_password(&ctx)?;
 

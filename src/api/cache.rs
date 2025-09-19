@@ -28,7 +28,7 @@ impl RemoteAPI for Cache {
     }
 
     async fn list_repos(&self, remote: &str, owner: &str) -> Result<Vec<String>> {
-        debug!("[cache] List repos for {remote}:{owner}");
+        debug!("[cache] Listing repos for {remote}:{owner}");
         let cache = self.db.with_transaction(|tx| {
             let cache = tx.remote_owner().get_optional(remote, owner)?;
             let Some(cache) = cache else {
@@ -58,7 +58,7 @@ impl RemoteAPI for Cache {
             expire_at: self.now + self.expire,
         };
 
-        debug!("[cache] Save owner cache: {cache:?}");
+        debug!("[cache] Saving owner cache: {cache:?}");
         self.db
             .with_transaction(|tx| tx.remote_owner().insert(&cache))?;
         Ok(cache.repos)
@@ -70,7 +70,7 @@ impl RemoteAPI for Cache {
         owner: &str,
         name: &str,
     ) -> Result<RemoteRepository<'static>> {
-        debug!("[cache] Get repo for {remote}:{owner}:{name}");
+        debug!("[cache] Getting repo for {remote}:{owner}:{name}");
         let cache = self.db.with_transaction(|tx| {
             let cache = tx.remote_repo().get_optional(remote, owner, name)?;
             let Some(cache) = cache else {
@@ -93,7 +93,7 @@ impl RemoteAPI for Cache {
 
         let mut repo = self.upstream.get_repo(remote, owner, name).await?;
         repo.expire_at = self.now + self.expire;
-        debug!("[cache] Save repo cache: {repo:?}");
+        debug!("[cache] Saving repo cache: {repo:?}");
         self.db
             .with_transaction(|tx| tx.remote_repo().insert(&repo))?;
         Ok(repo)

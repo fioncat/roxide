@@ -19,7 +19,7 @@ where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
 {
-    debug!("[batch] Run {desc:?} with {} tasks", tasks.len());
+    debug!("[batch] Running {desc:?} with {} tasks", tasks.len());
     if tasks.is_empty() {
         debug!("[batch] No tasks to run, return immediately");
         return Ok(vec![]);

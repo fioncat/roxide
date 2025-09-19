@@ -13,7 +13,7 @@ where
     if let Some(f) = filter {
         cmd = cmd.args(["--filter", f]);
     }
-    debug!("[fzf] Begin to run fzf search for {items:?}");
+    debug!("[fzf] Beginning to run fzf search for {items:?}");
 
     let mut input = String::new();
     for item in items {

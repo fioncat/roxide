@@ -24,7 +24,7 @@ impl Command for RemoveTagCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove tag command: {:?}", self);
+        debug!("[cmd] Running remove tag command: {:?}", self);
 
         let tag = match self.tag {
             Some(ref tag) => Tag::get(ctx.git(), tag)?.name,
@@ -33,7 +33,7 @@ impl Command for RemoveTagCommand {
                     .into_iter()
                     .map(|t| t.name)
                     .collect::<Vec<_>>();
-                let idx = ctx.fzf_search("Select a tag to remove", &tags, None)?;
+                let idx = ctx.fzf_search("Selecting a tag to remove", &tags, None)?;
                 take(&mut tags[idx])
             }
         };

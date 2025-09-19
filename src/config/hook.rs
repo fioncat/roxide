@@ -36,7 +36,7 @@ pub struct HookRuns {
 
 impl HookConfig {
     pub fn validate_hooks(hooks: &mut [HookConfig], runs: &HookRuns) -> Result<()> {
-        debug!("[config] Validate hooks config: {hooks:?}");
+        debug!("[config] Validating hooks config: {hooks:?}");
         let mut names = HashSet::new();
         for hook in hooks {
             if names.contains(&hook.name) {
@@ -74,7 +74,7 @@ impl HookConfig {
 
 impl HookRuns {
     pub fn read(dir: &Path) -> Result<Self> {
-        debug!("[config] Read hooks config from {}", dir.display());
+        debug!("[config] Reading hooks config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
             Ok(d) => {
                 debug!("[config] Hooks dir found");

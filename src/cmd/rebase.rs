@@ -30,7 +30,7 @@ impl Command for RebaseCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run display command: {:?}", self);
+        debug!("[cmd] Running display command: {:?}", self);
 
         let repo = get_current_repo(&ctx)?;
 

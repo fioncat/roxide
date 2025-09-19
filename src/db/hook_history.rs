@@ -108,7 +108,7 @@ ON hook_history (repo_id, name);
 "#;
 
 fn ensure_table(tx: &Transaction) -> Result<()> {
-    debug!("[db] Ensure hook_history table exists");
+    debug!("[db] Ensuring hook_history table exists");
     tx.execute_batch(TABLE_SQL)?;
     Ok(())
 }
@@ -123,7 +123,7 @@ INSERT INTO hook_history (
 "#;
 
 fn insert(tx: &Transaction, history: &HookHistory) -> Result<u64> {
-    debug!("[db] Insert hook_history: {history:?}");
+    debug!("[db] Inserting hook_history: {history:?}");
     tx.execute(
         INSERT_SQL,
         params![history.repo_id, history.name, history.success, history.time,],
@@ -140,7 +140,7 @@ WHERE repo_id = ?1 AND name = ?2
 "#;
 
 fn get(tx: &Transaction, repo_id: u64, name: &str) -> Result<Option<HookHistory>> {
-    debug!("[db] Get hook_history: repo_id={repo_id}, name={name}");
+    debug!("[db] Getting hook_history: repo_id={repo_id}, name={name}");
     let history = tx
         .query_row(GET_SQL, params![repo_id, name], HookHistory::from_row)
         .optional()?;
@@ -155,7 +155,7 @@ WHERE id = ?1
 "#;
 
 fn update(tx: &Transaction, history: &HookHistory) -> Result<()> {
-    debug!("[db] Update hook_history: {history:?}");
+    debug!("[db] Updating hook_history: {history:?}");
     tx.execute(
         UPDATE_SQL,
         params![history.id, history.success, history.time],
@@ -169,7 +169,7 @@ WHERE id = ?1
 "#;
 
 fn delete(tx: &Transaction, id: u64) -> Result<()> {
-    debug!("[db] Delete hook_history: {id}");
+    debug!("[db] Deleting hook_history: {id}");
     tx.execute(DELETE_SQL, params![id])?;
     Ok(())
 }
@@ -180,7 +180,7 @@ WHERE repo_id = ?1
 "#;
 
 fn delete_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<()> {
-    debug!("[db] Delete hook_history by repo_id: {repo_id}");
+    debug!("[db] Deleting hook_history by repo_id: {repo_id}");
     tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id])?;
     Ok(())
 }
@@ -192,7 +192,7 @@ ORDER BY time DESC
 "#;
 
 fn query_all(tx: &Transaction) -> Result<Vec<HookHistory>> {
-    debug!("[db] Query all hook_history");
+    debug!("[db] Querying all hook_history");
     let mut stmt = tx.prepare(QUERY_ALL_SQL)?;
     let rows = stmt.query_map([], HookHistory::from_row)?;
     let mut results = Vec::new();
@@ -211,7 +211,7 @@ ORDER BY time DESC
 "#;
 
 fn query_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<Vec<HookHistory>> {
-    debug!("[db] Query hook_history by repo_id: {repo_id}");
+    debug!("[db] Querying hook_history by repo_id: {repo_id}");
     let mut stmt = tx.prepare(QUERY_BY_REPO_ID_SQL)?;
     let rows = stmt.query_map(params![repo_id], HookHistory::from_row)?;
     let mut results = Vec::new();

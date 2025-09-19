@@ -53,7 +53,7 @@ impl<'ctx, 'repo> MirrorSelector<'ctx, 'repo> {
         let items = mirrors.iter().map(|m| m.name.as_str()).collect::<Vec<_>>();
         let idx = self
             .ctx
-            .fzf_search("Select a mirror", &items, self.fzf_filter)?;
+            .fzf_search("Selecting a mirror", &items, self.fzf_filter)?;
         Ok(mirrors.remove(idx))
     }
 
@@ -65,7 +65,7 @@ impl<'ctx, 'repo> MirrorSelector<'ctx, 'repo> {
 
 pub fn get_current_mirror(ctx: &ConfigContext) -> Result<Option<(Repository, Mirror)>> {
     debug!(
-        "[mirror] Try to get current mirror in {:?}",
+        "[mirror] Trying to get current mirror in {:?}",
         ctx.current_dir
     );
     let Some((remote, owner, mirror_name)) =
@@ -97,7 +97,7 @@ pub fn get_current_mirror(ctx: &ConfigContext) -> Result<Option<(Repository, Mir
 pub fn remove_mirror(ctx: &ConfigContext, repo: &Repository, mirror: Mirror) -> Result<()> {
     let path = mirror.get_path(&ctx.cfg.mirrors_dir);
     debug!(
-        "[mirror] Remove mirror {mirror:?} for repo: {repo:?}, path: {:?}",
+        "[mirror] Removing mirror {mirror:?} for repo: {repo:?}, path: {:?}",
         path.display()
     );
 
@@ -115,7 +115,7 @@ pub fn remove_mirror(ctx: &ConfigContext, repo: &Repository, mirror: Mirror) -> 
 }
 
 pub fn clean_mirrors(ctx: &ConfigContext, repo: &Repository) -> Result<()> {
-    debug!("[mirror] Clean mirrors for repo: {repo:?}");
+    debug!("[mirror] Cleaning mirrors for repo: {repo:?}");
     let db = ctx.get_db()?;
     let mirrors = db.with_transaction(|tx| tx.mirror().query_by_repo_id(repo.id))?;
     if mirrors.is_empty() {
@@ -135,7 +135,7 @@ pub fn clean_mirrors(ctx: &ConfigContext, repo: &Repository) -> Result<()> {
         mirror_op.remove()?;
     }
 
-    debug!("[mirror] Remove mirrors {ids:?} from database");
+    debug!("[mirror] Removing mirrors {ids:?} from database");
     db.with_transaction(|tx| {
         for id in ids {
             tx.mirror().delete(id)?;

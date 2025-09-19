@@ -41,7 +41,7 @@ impl Remote {
     }
 
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
-        debug!("[remote] List remotes, cmd: {cmd:?}");
+        debug!("[remote] Listing remotes, cmd: {cmd:?}");
         let lines = cmd.lines(["remote"], "Listing remote")?;
         let remotes = lines.into_iter().map(Remote).collect::<Vec<_>>();
         debug!("[remote] Remotes: {remotes:?}");
@@ -49,7 +49,7 @@ impl Remote {
     }
 
     pub fn get_url(&self, cmd: GitCmd) -> Result<String> {
-        debug!("[remote] Get url for remote {:?}", self.as_str());
+        debug!("[remote] Getting url for remote {:?}", self.as_str());
         let url = cmd.output(
             ["remote", "get-url", self.as_str()],
             format!("Getting url for remote {}", self.as_str()),
@@ -62,7 +62,7 @@ impl Remote {
     }
 
     pub fn get_target(&self, cmd: GitCmd, branch: &str) -> Result<String> {
-        debug!("[remote] Get target for {:?}, branch: {branch}", self);
+        debug!("[remote] Getting target for {:?}, branch: {branch}", self);
         let branch = if branch.is_empty() {
             let default_branch = Branch::remote_default(cmd, self.as_str())?;
             Cow::Owned(default_branch)

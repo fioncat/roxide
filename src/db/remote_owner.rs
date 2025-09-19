@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS remote_owner (
 "#;
 
 fn ensure_table(tx: &Transaction) -> Result<()> {
-    debug!("[db] Ensure remote_owner table exists");
+    debug!("[db] Ensuring remote_owner table exists");
     tx.execute_batch(TABLE_SQL)?;
     Ok(())
 }
@@ -79,7 +79,7 @@ VALUES (?1, ?2, ?3, ?4)
 "#;
 
 fn insert(tx: &Transaction, owner: &RemoteOwner) -> Result<()> {
-    debug!("[db] Insert remote_owner: {owner:?}");
+    debug!("[db] Inserting remote_owner: {owner:?}");
     tx.execute(
         INSERT_SQL,
         params![
@@ -103,7 +103,7 @@ fn get_optional(
     remote: &str,
     owner: &str,
 ) -> Result<Option<RemoteOwner<'static>>> {
-    debug!("[db] Get remote_owner: {remote}:{owner}");
+    debug!("[db] Getting remote_owner: {remote}:{owner}");
     let mut stmt = tx.prepare(GET_SQL)?;
     let remote_owner = stmt
         .query_row(params![remote, owner], RemoteOwner::from_row)
@@ -118,7 +118,7 @@ WHERE remote = ?1 AND owner = ?2
 "#;
 
 fn delete(tx: &Transaction, remote_owner: &RemoteOwner) -> Result<()> {
-    debug!("[db] Delete remote_owner: {remote_owner:?}");
+    debug!("[db] Deleting remote_owner: {remote_owner:?}");
     tx.execute(DELETE_SQL, params![remote_owner.remote, remote_owner.owner])?;
     Ok(())
 }

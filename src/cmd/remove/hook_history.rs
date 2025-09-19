@@ -32,7 +32,7 @@ impl Command for RemoveHookHistoryCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove hook_history command: {:?}", self);
+        debug!("[cmd] Running remove hook_history command: {:?}", self);
 
         let db = ctx.get_db()?;
         if self.all || self.orphan {

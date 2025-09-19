@@ -11,7 +11,7 @@ pub fn no_complete(_cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_head(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete head: {cmp}");
+    debug!("[complete] Beginning to complete head: {cmp}");
     if cmp.current.is_empty() {
         debug!("[complete] Current is empty, complete remote");
         return complete_remote(cmp);
@@ -42,7 +42,7 @@ pub fn complete_head(cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_remote(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete remote: {cmp}");
+    debug!("[complete] Beginning to complete remote: {cmp}");
     let db = cmp.ctx.get_db()?;
     let remotes = db.with_transaction(|tx| tx.repo().query_remotes(None))?;
     debug!("[complete] Remotes: {remotes:?}");
@@ -60,7 +60,7 @@ pub fn remote_items(remotes: Vec<RemoteState>, current: &str) -> Vec<String> {
 }
 
 pub fn complete_owner(mut cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete owner: {cmp}");
+    debug!("[complete] Beginning to complete owner: {cmp}");
     let Some(remote) = cmp.args.pop() else {
         debug!("[complete] Remote is required to complete owner, skip");
         return Ok(vec![]);
@@ -79,7 +79,7 @@ pub fn complete_owner(mut cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_name(mut cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete name: {cmp}");
+    debug!("[complete] Beginning to complete name: {cmp}");
     let Some(owner) = cmp.args.pop() else {
         debug!("[complete] Owner is required to complete name, skip");
         return Ok(vec![]);
@@ -110,7 +110,7 @@ pub fn complete_name(mut cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_branch(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete branch: {cmp}");
+    debug!("[complete] Beginning to complete branch: {cmp}");
 
     let branches = Branch::list(cmp.ctx.git().mute())?;
     debug!("[complete] Branches: {branches:?}");
@@ -126,7 +126,7 @@ pub fn complete_branch(cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_tag(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete tag: {cmp}");
+    debug!("[complete] Beginning to complete tag: {cmp}");
 
     let tags = Tag::list(cmp.ctx.git().mute())?;
     debug!("[complete] Tags: {tags:?}");
@@ -142,7 +142,7 @@ pub fn complete_tag(cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_tag_method(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete tag method: {cmp}");
+    debug!("[complete] Beginnnig to complete tag method: {cmp}");
 
     let items = vec!["patch", "minor", "major", "date", "date-dash", "date-dot"]
         .into_iter()
@@ -155,7 +155,7 @@ pub fn complete_tag_method(cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_config_type(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete config type: {cmp}");
+    debug!("[complete] Beginning to complete config type: {cmp}");
     let items = vec!["remote", "hook"]
         .into_iter()
         .filter(|m| m.starts_with(&cmp.current))
@@ -166,7 +166,7 @@ pub fn complete_config_type(cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_config_name(mut cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete config name: {cmp}");
+    debug!("[complete] Beginnnig to complete config name: {cmp}");
     let Some(config_type) = cmp.args.pop() else {
         debug!("[complete] Config type is required to complete config name, skip");
         return Ok(vec![]);
@@ -200,7 +200,7 @@ pub fn complete_config_name(mut cmp: CompleteContext) -> Result<Vec<String>> {
 }
 
 pub fn complete_mirror_name(cmp: CompleteContext) -> Result<Vec<String>> {
-    debug!("[complete] Begin to complete mirror name: {cmp}");
+    debug!("[complete] Beginning to complete mirror name: {cmp}");
 
     let repo = get_current_repo(&cmp.ctx)?;
     debug!("[complete] Current repo: {repo:?}");

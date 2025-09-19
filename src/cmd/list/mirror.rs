@@ -25,7 +25,7 @@ impl Command for ListMirrorCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list mirror command: {:?}", self);
+        debug!("[cmd] Running list mirror command: {:?}", self);
 
         let repo = get_current_repo(&ctx)?;
         let selector = MirrorSelector::new(&ctx, &repo);

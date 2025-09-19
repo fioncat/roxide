@@ -83,7 +83,7 @@ enum SelectOneType<'a> {
 
 impl<'a, 'b> RepoSelector<'a, 'b> {
     pub fn new(ctx: &'a ConfigContext, args: &'b SelectRepoArgs) -> Self {
-        debug!("[select] Create repo selector, args: {args:?}");
+        debug!("[select] Creating repo selector, args: {args:?}");
         Self {
             ctx,
             head: args.head.as_deref().unwrap_or(""),
@@ -105,7 +105,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
     }
 
     pub async fn select_one(&self, force_no_cache: bool, local: bool) -> Result<Repository> {
-        debug!("[select] Select one, local: {local}, force_no_cache: {force_no_cache}");
+        debug!("[select] Selecting one, local: {local}, force_no_cache: {force_no_cache}");
         if self.head.is_empty() {
             return self.select_one_from_db("", "", false);
         }
@@ -134,7 +134,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
     }
 
     async fn select_remote_inner(&self, force_no_cache: bool) -> Result<Repository> {
-        debug!("[select] Select one remote repo, force_no_cache: {force_no_cache}");
+        debug!("[select] Selecting one remote repo, force_no_cache: {force_no_cache}");
         if self.head.is_empty() {
             bail!("head cannot be empty when selecting from remote");
         }
@@ -144,7 +144,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         }
 
         if !self.name.is_empty() {
-            debug!("[select] Select one remote repo from name");
+            debug!("[select] Selecting one remote repo from name");
             return self.get_or_create(self.head, self.owner, self.name);
         }
 
@@ -181,17 +181,17 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
 
         let idx = self
             .ctx
-            .fzf_search("Search remote repos", &remote_repos, self.fzf_filter)?;
+            .fzf_search("Searching remote repos", &remote_repos, self.fzf_filter)?;
         let name = &remote_repos[idx];
         let repo = self.get_or_create(&remote.name, self.owner, name)?;
-        debug!("[select] Select remote repo: {repo:?}");
+        debug!("[select] Selecting remote repo: {repo:?}");
         Ok(repo)
     }
 
     fn select_one_from_head(&self, remote_mode: bool) -> Result<Repository> {
-        debug!("[select] Select one from head, remote_mode: {remote_mode}");
+        debug!("[select] Selecting one from head, remote_mode: {remote_mode}");
         if self.head == "-" {
-            debug!("[select] Select latest from db");
+            debug!("[select] Selecting latest from db");
             if remote_mode {
                 bail!("cannot use '-' to select latest when selecting from remote");
             }
@@ -233,7 +233,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
                 Err(_) => SelectOneType::Direct,
             }
         };
-        debug!("[select] Select type: {select_type:?}");
+        debug!("[select] Selecting type: {select_type:?}");
 
         match select_type {
             SelectOneType::Url(url) => self.select_one_from_url(&url),
@@ -265,7 +265,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
     const GITHUB_DOMAIN: &'static str = "github.com";
 
     fn select_one_from_url(&self, url: &Url) -> Result<Repository> {
-        debug!("[select] Select one from url: {url:?}");
+        debug!("[select] Selecting one from url: {url:?}");
 
         let Some(domain) = url.domain() else {
             bail!("cannot get domain from url: {url:?}");
@@ -349,7 +349,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
 
         debug!("[select] Parsed owner: {owner:?}, name: {name:?}");
         let repo = self.get_or_create(&remote.name, &owner, &name)?;
-        debug!("[select] Select repo: {repo:?}");
+        debug!("[select] Selected repo: {repo:?}");
         Ok(repo)
     }
 
@@ -377,7 +377,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         force_no_cache: bool,
         mut local: bool,
     ) -> Result<Repository> {
-        debug!("[select] Select one from owner");
+        debug!("[select] Selecting one from owner");
         let remote = self.ctx.cfg.get_remote(self.head)?;
         if remote.api.is_none() && !local {
             debug!(
@@ -387,13 +387,13 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             local = true;
         }
         if self.owner == "-" {
-            debug!("[select] Select latest from db");
+            debug!("[select] Selecting latest from db");
             return self.select_one_from_db(self.head, "", true);
         }
 
         let db = self.ctx.get_db()?;
         if local {
-            debug!("[select] Local mode, select from db");
+            debug!("[select] Local mode, selecting from db");
             let count = db.with_transaction(|tx| {
                 tx.repo().count(QueryOptions {
                     remote: Some(&remote.name),
@@ -402,20 +402,20 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
                 })
             })?;
             if count > 0 {
-                debug!("[select] {:?} is an owner, select from db", self.owner);
+                debug!("[select] {:?} is an owner, selecting from db", self.owner);
                 return self.select_one_from_db(self.head, self.owner, false);
             }
 
             // This is not an owner, consider it as a fuzzy keyword to search
             debug!(
-                "[select] {:?} is not an owner, fuzzy select from db",
+                "[select] {:?} is not an owner, fuzzy selecting from db",
                 self.owner
             );
             let name = self.owner;
             return self.select_one_fuzzy(&remote.name, "", name);
         }
 
-        debug!("[select] No local mode, list remote repos");
+        debug!("[select] No local mode, listing remote repos");
         let api = self.ctx.get_api(remote.name.as_str(), force_no_cache)?;
         let remote_repos = api.list_repos(&remote.name, self.owner).await?;
         if remote_repos.is_empty() {
@@ -436,20 +436,20 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         debug!("[select] Local repos: {locals:?}, remote repos: {remote_repos:?}");
         let items = merge_sorted(locals, remote_repos);
 
-        debug!("[select] Use fzf to select items: {items:?}");
+        debug!("[select] Using fzf to select items: {items:?}");
         let idx = self
             .ctx
-            .fzf_search("Search repos", &items, self.fzf_filter)?;
+            .fzf_search("Searching repos", &items, self.fzf_filter)?;
         let name = &items[idx];
         let repo = self.get_or_create(&remote.name, self.owner, name)?;
-        debug!("[select] Select repo: {repo:?}");
+        debug!("[select] Selecting repo: {repo:?}");
         Ok(repo)
     }
 
     fn select_one_from_name(&self, local: bool) -> Result<Repository> {
-        debug!("[select] Select one from name");
+        debug!("[select] Selecting one from name");
         if self.name == "-" {
-            debug!("[select] Select latest from db");
+            debug!("[select] Selecting latest from db");
             return self.select_one_from_db(self.head, self.owner, true);
         }
 
@@ -467,16 +467,18 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             if count == 0 {
                 bail!("no repo found in owner {:?}", self.owner);
             }
-            debug!("[select] Local mode, fuzzy select from db");
+            debug!("[select] Local mode, fuzzy selecting from db");
             return self.select_one_fuzzy(&remote.name, self.owner, self.name);
         }
 
-        debug!("[select] No local mode, get or create from db");
+        debug!("[select] No local mode, getting or creating from db");
         self.get_or_create(&remote.name, self.owner, self.name)
     }
 
     fn select_one_fuzzy(&self, remote: &str, owner: &str, name: &str) -> Result<Repository> {
-        debug!("[select] Select one fuzzy, remote: {remote:?}, owner: {owner:?}, name: {name:?}");
+        debug!(
+            "[select] Selecting one fuzzy, remote: {remote:?}, owner: {owner:?}, name: {name:?}"
+        );
         let db = self.ctx.get_db()?;
 
         let repos = db.with_transaction(|tx| {
@@ -496,11 +498,11 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         for repo in repos {
             let path = repo.get_path(&self.ctx.cfg.workspace);
             if self.ctx.current_dir.starts_with(&path) {
-                debug!("[select] The current dir is under repo {repo:?}, skip it");
+                debug!("[select] The current dir is under repo {repo:?}, skipping it");
                 continue;
             }
 
-            debug!("[select] Fuzzy select repo: {repo:?}");
+            debug!("[select] Fuzzy selecting repo: {repo:?}");
             return Ok(repo);
         }
 
@@ -509,7 +511,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
 
     fn select_one_from_db(&self, remote: &str, owner: &str, latest: bool) -> Result<Repository> {
         debug!(
-            "[select] Select one from db, remote: {remote:?}, owner: {owner:?}, latest: {latest}"
+            "[select] Selecting one from db, remote: {remote:?}, owner: {owner:?}, latest: {latest}"
         );
         let db = self.ctx.get_db()?;
         let mut level = DisplayLevel::Remote;
@@ -532,12 +534,12 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         for repo in repos {
             let path = repo.get_path(&self.ctx.cfg.workspace);
             if self.ctx.current_dir == path {
-                debug!("[select] The current dir equals to repo {repo:?}, skip it");
+                debug!("[select] The current dir equals to repo {repo:?}, skipping it");
                 continue;
             }
 
             if remote.is_empty() && self.ctx.current_dir.starts_with(&path) {
-                debug!("[select] The current dir is under repo {repo:?}, select it directly");
+                debug!("[select] The current dir is under repo {repo:?}, selecting it directly");
                 return Ok(repo);
             }
             filtered.push(repo);
@@ -549,7 +551,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         }
 
         if latest {
-            debug!("[select] Select latest repo {:?}", repos[0]);
+            debug!("[select] Selecting latest repo {:?}", repos[0]);
             return Ok(repos.remove(0));
         }
 
@@ -557,11 +559,11 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             .iter()
             .map(|r| r.search_item(level))
             .collect::<Vec<_>>();
-        debug!("[select] Use fzf to select items: {items:?}");
-        let idx = self
-            .ctx
-            .fzf_search("Select one repo from database", &items, self.fzf_filter)?;
-        debug!("[select] Select repo: {:?}", repos[idx]);
+        debug!("[select] Using fzf to select items: {items:?}");
+        let idx =
+            self.ctx
+                .fzf_search("Selecting one repo from database", &items, self.fzf_filter)?;
+        debug!("[select] Selecting repo: {:?}", repos[idx]);
         Ok(repos.remove(idx))
     }
 
@@ -585,7 +587,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
     }
 
     pub fn select_many(&self, opts: SelectManyReposOptions) -> Result<RepoList> {
-        debug!("[select] Select many, opts: {opts:?}");
+        debug!("[select] Selecting many, opts: {opts:?}");
 
         let mut query_opts = QueryOptions {
             sync: opts.sync,
@@ -621,7 +623,7 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
             total,
             level,
         };
-        debug!("[select] Select many result: {result:?}");
+        debug!("[select] Selecting many result: {result:?}");
         Ok(result)
     }
 }
@@ -715,7 +717,7 @@ impl List<RemoteState> for RemoteList {
 }
 
 pub fn select_remotes(ctx: &ConfigContext, limit: LimitOptions) -> Result<RemoteList> {
-    debug!("[select] Select remotes, limit: {limit:?}");
+    debug!("[select] Selecting remotes, limit: {limit:?}");
     let db = ctx.get_db()?;
     let (remotes, total) = db.with_transaction(|tx| {
         let total = tx.repo().count_remotes()?;
@@ -757,7 +759,7 @@ pub fn select_owners(
     remote: Option<String>,
     limit: LimitOptions,
 ) -> Result<OwnerList> {
-    debug!("[select] Select owners, remote: {remote:?}, limit: {limit:?}");
+    debug!("[select] Selecting owners, remote: {remote:?}, limit: {limit:?}");
     let db = ctx.get_db()?;
 
     let show_remote = remote.is_none();
@@ -802,7 +804,7 @@ impl SelectPullRequestsArgs {
         force_no_cache: bool,
         filter: Option<&str>,
     ) -> Result<PullRequest> {
-        debug!("[select] Select one pull request, args: {:?}", self);
+        debug!("[select] Selecting one pull request, args: {:?}", self);
         let mut prs = self.select_many(ctx, repo, force_no_cache).await?;
         if prs.is_empty() {
             bail!("no pull request found");
@@ -814,7 +816,7 @@ impl SelectPullRequestsArgs {
 
         let items = PullRequest::search_items(&prs);
         debug!("[select] Multiple pull requests found, use fzf to select one");
-        let idx = ctx.fzf_search("Select one pull request", &items, filter)?;
+        let idx = ctx.fzf_search("Selecting one pull request", &items, filter)?;
         Ok(prs.remove(idx))
     }
 
@@ -824,7 +826,7 @@ impl SelectPullRequestsArgs {
         repo: &Repository,
         force_no_cache: bool,
     ) -> Result<Vec<PullRequest>> {
-        debug!("[select] Select pull requests, args: {:?}", self);
+        debug!("[select] Selecting pull requests, args: {:?}", self);
         let api = ctx.get_api(&repo.remote, force_no_cache)?;
         let opts = self
             .build_list_options(ctx, repo, api.as_ref(), false)
@@ -929,7 +931,7 @@ pub fn select_job_from_action(
         bail!("no job found in action");
     }
 
-    let idx = ctx.fzf_search("Select one job", &items, filter)?;
+    let idx = ctx.fzf_search("Selecting one job", &items, filter)?;
     Ok(jobs.remove(idx))
 }
 

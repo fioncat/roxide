@@ -28,7 +28,7 @@ impl Command for ListActionCommand {
     }
 
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list action command: {:?}", self);
+        debug!("[cmd] Running list action command: {:?}", self);
         ctx.mute();
 
         let repo = get_current_repo(&ctx)?;

@@ -182,7 +182,7 @@ impl Config {
     }
 
     fn validate(&mut self) -> Result<()> {
-        debug!("[config] Validate config: {:?}", self);
+        debug!("[config] Validating config: {:?}", self);
 
         self.workspace = expandenv(take(&mut self.workspace));
         if self.workspace.is_empty() {

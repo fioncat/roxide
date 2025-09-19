@@ -21,7 +21,7 @@ impl Command for CreateBranchCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run create branch command: {:?}", self);
+        debug!("[cmd] Running create branch command: {:?}", self);
 
         let branches = Branch::list(ctx.git())?;
         for branch in branches {

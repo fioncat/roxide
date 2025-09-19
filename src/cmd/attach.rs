@@ -28,7 +28,7 @@ impl Command for AttachCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run attach command: {:?}", self);
+        debug!("[cmd] Running attach command: {:?}", self);
         ctx.lock()?;
 
         if ctx.current_dir.starts_with(&ctx.cfg.workspace) {
@@ -49,7 +49,7 @@ impl Command for AttachCommand {
         repo.visit(owner);
         let path = ctx.current_dir.clone();
         repo.path = Some(format!("{}", path.display()));
-        debug!("[cmd] Attach repo: {repo:?}");
+        debug!("[cmd] Attaching repo: {repo:?}");
 
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().insert(&repo))?;

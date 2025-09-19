@@ -84,7 +84,7 @@ impl ScanHandler<()> for ScanFilesHandler {
 fn read_rules(base_dir: &Path) -> Result<Ignore> {
     let ignore_path = base_dir.join(".gitignore");
     if !ignore_path.exists() {
-        bail!("\".gitignore\" file not found for this repository, no file to encrypt");
+        bail!("\".gitignore\" file not found for this repository");
     }
 
     let data = fs::read_to_string(&ignore_path).context("failed to read .gitignore file")?;

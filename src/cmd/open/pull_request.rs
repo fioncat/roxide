@@ -39,7 +39,7 @@ impl Command for OpenPullRequestCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run open pull request command: {:?}", self);
+        debug!("[cmd] Running open pull request command: {:?}", self);
 
         let repo = get_current_repo(&ctx)?;
         let pr = self

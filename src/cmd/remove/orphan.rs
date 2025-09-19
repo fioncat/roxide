@@ -26,7 +26,7 @@ impl Command for RemoveOrphanCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove orphan command: {:?}", self);
+        debug!("[cmd] Running remove orphan command: {:?}", self);
 
         let orphans = scan_orphans(&ctx).await?;
 

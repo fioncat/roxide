@@ -37,7 +37,7 @@ impl Command for RemoveRepoCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove repo command: {:?}", self);
+        debug!("[cmd] Running remove repo command: {:?}", self);
         ctx.lock()?;
 
         let selector = RepoSelector::new(&ctx, &self.select_repo);

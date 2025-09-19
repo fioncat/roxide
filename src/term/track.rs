@@ -74,7 +74,7 @@ impl<R> Tracker<R> {
     /// This function will block the main thread until the expected number of
     /// completed tasks is reached and return the task execution results.
     pub async fn wait(mut self, mut rx: Receiver<Report<R>>) -> Result<Vec<R>> {
-        debug!("[tracker] Wait for {} {} tasks", self.total, self.desc);
+        debug!("[tracker] Waiting for {} {} tasks", self.total, self.desc);
         let start = Instant::now();
         while self.done.len() < self.total {
             match rx.recv().await.unwrap() {
@@ -127,13 +127,13 @@ impl<R> Tracker<R> {
 
     /// Print running task on terminal.
     fn trace_running(&mut self, idx: usize, name: Arc<String>) {
-        debug!("[tracker] Trace running {idx}: {name}");
+        debug!("[tracker] Tracing running {idx}: {name}");
         self.running.push((idx, name));
         let line = self.render();
         cursor_up!();
         outputln!("{}", line);
         debug!(
-            "[tracker] Trace running {idx} finished, running: {}",
+            "[tracker] Tracing running {idx} finished, running: {}",
             self.running.len()
         );
     }

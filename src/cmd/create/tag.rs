@@ -30,7 +30,7 @@ impl Command for CreateTagCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run create tag command: {:?}", self);
+        debug!("[cmd] Running create tag command: {:?}", self);
 
         let tag = match UpdateTagRule::from_str(&self.tag) {
             Some(rule) => {

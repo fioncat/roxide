@@ -210,7 +210,7 @@ impl Cmd {
         };
 
         if let Some(ref input) = self.input {
-            debug!("[exec] Write input to command: {input:?}");
+            debug!("[exec] Writing input to command: {input:?}");
             let handle = child.stdin.as_mut().unwrap();
             if let Err(e) = write!(handle, "{input}") {
                 return Err(e)

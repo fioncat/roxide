@@ -78,7 +78,7 @@ pub struct OwnerConfigRef<'a> {
 
 impl RemoteConfig {
     pub fn read(dir: &Path) -> Result<Vec<Self>> {
-        debug!("[config] Read remotes config from {}", dir.display());
+        debug!("[config] Reading remotes config from {}", dir.display());
         let ents = match fs::read_dir(dir) {
             Ok(d) => {
                 debug!("[config] Remote config dir found");
@@ -138,7 +138,7 @@ impl RemoteConfig {
     }
 
     pub(super) fn validate(&mut self) -> Result<()> {
-        debug!("[config] Validate remote config: {:?}", self);
+        debug!("[config] Validating remote config: {:?}", self);
         if self.clone.is_some() {
             let clone = super::expandenv(take(&mut self.clone).unwrap());
             if clone.is_empty() {

@@ -25,7 +25,7 @@ where
         .unwrap_or_default();
 
     debug!(
-        "[bash] Begin to run bash {file_name} for {}, full path: {}",
+        "[bash] Beginning to run bash {file_name} for {}, full path: {}",
         path.as_ref().display(),
         file.as_ref().display()
     );

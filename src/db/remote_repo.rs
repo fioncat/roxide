@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS remote_repo (
 "#;
 
 fn ensure_table(tx: &Transaction) -> Result<()> {
-    debug!("[db] Ensure remote_repo table exists");
+    debug!("[db] Ensuring remote_repo table exists");
     tx.execute(TABLE_SQL, params![])?;
     Ok(())
 }
@@ -121,7 +121,7 @@ INSERT INTO remote_repo (
 "#;
 
 fn insert(tx: &Transaction, repo: &RemoteRepository) -> Result<()> {
-    debug!("[db] Insert remote_repo: {repo:?}");
+    debug!("[db] Inserting remote_repo: {repo:?}");
     tx.execute(
         INSERT_SQL,
         params![
@@ -151,7 +151,7 @@ fn get_optional(
     owner: &str,
     name: &str,
 ) -> Result<Option<RemoteRepository<'static>>> {
-    debug!("[db] Get remote_repo: {remote}:{owner}:{name}");
+    debug!("[db] Getting remote_repo: {remote}:{owner}:{name}");
     let mut stmt = tx.prepare(GET_SQL)?;
     let repo = stmt
         .query_row(params![remote, owner, name], RemoteRepository::from_row)
@@ -166,7 +166,7 @@ WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
 fn delete(tx: &Transaction, repo: &RemoteRepository) -> Result<()> {
-    debug!("[db] Delete remote_repo: {repo:?}");
+    debug!("[db] Deleting remote_repo: {repo:?}");
     tx.execute(DELETE_SQL, params![repo.remote, repo.owner, repo.name])?;
     Ok(())
 }

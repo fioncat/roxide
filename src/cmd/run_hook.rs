@@ -46,7 +46,7 @@ impl Command for RunHookCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run run command: {:?}", self);
+        debug!("[cmd] Running run command: {:?}", self);
 
         if !self.recursive
             && let Some(repo) = get_current_repo_optional(&ctx)?

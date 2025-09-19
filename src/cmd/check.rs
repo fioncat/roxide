@@ -26,7 +26,7 @@ impl Command for CheckCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run check command: {:?}", self);
+        debug!("[cmd] Running check command: {:?}", self);
 
         show_section("Environment");
         check_os().show();

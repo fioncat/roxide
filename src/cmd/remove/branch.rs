@@ -25,7 +25,7 @@ impl Command for RemoveBranchCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove branch command: {:?}", self);
+        debug!("[cmd] Running remove branch command: {:?}", self);
 
         let branches = Branch::list(ctx.git())?;
         let default_branch = Branch::default(ctx.git())?;
