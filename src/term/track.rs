@@ -33,14 +33,10 @@ pub struct Tracker<R> {
     /// done tasks.
     done: Vec<(usize, Result<R>)>,
 
-    /// task description, such as "Run"
+    verb: String,
+    verb_size: usize,
+    verb_head: String,
     desc: String,
-    /// task description without style
-    desc_pure: String,
-    /// task description string length
-    desc_size: usize,
-    /// task description head, such as "Running"
-    desc_head: String,
 
     ok_count: usize,
     fail_count: usize,
@@ -53,17 +49,9 @@ impl<R> Tracker<R> {
     const SPACE_SIZE: usize = Self::SPACE.len();
 
     /// Create a Tracker, call [`Tracker::wait`] later to start tracking.
-    ///
-    /// # Arguments
-    ///
-    /// * `desc` - A descriptive string for the task, which will be printed in the
-    ///   terminal.
-    /// * `total` - The expected number of tasks. Tracking will stop when the number
-    ///   of completed tasks reaches this value.
-    pub fn new(desc: &str, total: usize) -> Tracker<R> {
-        let desc_pure = String::from(desc);
-        let desc = style(desc).cyan().bold().to_string();
-        let desc_size = console::measure_text_width(&desc);
+    pub fn new(verb: &str, desc: &str, total: usize) -> Tracker<R> {
+        let verb = style(verb).cyan().bold().to_string();
+        let verb_size = console::measure_text_width(&verb);
 
         let total_pad = total.to_string().chars().count();
 
@@ -72,10 +60,10 @@ impl<R> Tracker<R> {
             total_pad,
             running: Vec::with_capacity(total),
             done: Vec::with_capacity(total),
-            desc,
-            desc_pure,
-            desc_size,
-            desc_head: " ".repeat(desc_size),
+            verb,
+            verb_size,
+            verb_head: " ".repeat(verb_size),
+            desc: desc.to_string(),
             ok_count: 0,
             fail_count: 0,
             fail_message: vec![],
@@ -86,7 +74,7 @@ impl<R> Tracker<R> {
     /// This function will block the main thread until the expected number of
     /// completed tasks is reached and return the task execution results.
     pub async fn wait(mut self, mut rx: Receiver<Report<R>>) -> Result<Vec<R>> {
-        debug!("[tracker] Wait for {} {} tasks", self.total, self.desc_pure);
+        debug!("[tracker] Wait for {} {} tasks", self.total, self.desc);
         let start = Instant::now();
         while self.done.len() < self.total {
             match rx.recv().await.unwrap() {
@@ -107,14 +95,14 @@ impl<R> Tracker<R> {
         outputln!();
         outputln!(
             "{} result: {result}. {} ok; {} failed; finished in {}",
-            self.desc_pure,
+            self.desc,
             self.ok_count,
             self.fail_count,
             format_elapsed(elapsed_time),
         );
         debug!(
             "[tracker] All {} tasks done, ok: {}, fail: {}",
-            self.desc_pure, self.ok_count, self.fail_count
+            self.desc, self.ok_count, self.fail_count
         );
         if !self.fail_message.is_empty() {
             outputln!();
@@ -123,7 +111,7 @@ impl<R> Tracker<R> {
                 outputln!("  {name}: {msg}");
             }
             outputln!();
-            bail!("{} task failed", self.desc_pure);
+            bail!("{} task failed", self.desc);
         }
 
         self.done
@@ -169,11 +157,11 @@ impl<R> Tracker<R> {
         match result.as_ref() {
             Ok(_) => {
                 self.ok_count += 1;
-                outputln!("{} {} {}", self.desc_head, name, style("ok").green());
+                outputln!("{} {} {}", self.verb_head, name, style("ok").green());
             }
             Err(err) => {
                 self.fail_count += 1;
-                outputln!("{} {} {}", self.desc_head, name, style("fail").red());
+                outputln!("{} {} {}", self.verb_head, name, style("fail").red());
                 self.fail_message.push((name, format!("{err}")));
             }
         }
@@ -197,14 +185,14 @@ impl<R> Tracker<R> {
     /// replaced with ellipsis.
     fn render(&self) -> String {
         let term_size = super::width();
-        if self.desc_size > term_size {
+        if self.verb_size > term_size {
             // The terminal is too small, no space to print info, just print "....".
             return ".".repeat(term_size);
         }
 
         // Render desc (with color).
-        let mut line = self.desc.clone();
-        if self.desc_size + Self::SPACE_SIZE > term_size || Self::bar_size() == 0 {
+        let mut line = self.verb.clone();
+        if self.verb_size + Self::SPACE_SIZE > term_size || Self::bar_size() == 0 {
             return line;
         }
         line.push_str(Self::SPACE);
@@ -312,7 +300,7 @@ mod tests {
     async fn test_tracker() {
         let count = 20;
 
-        let tracker: Tracker<String> = Tracker::new("Test", count);
+        let tracker: Tracker<String> = Tracker::new("Testing", "Test", count);
         let (tx, rx) = mpsc::channel::<Report<String>>(10);
 
         for i in 0..count {
@@ -339,7 +327,7 @@ mod tests {
     async fn test_tracker_fail() {
         let count = 20;
 
-        let tracker: Tracker<String> = Tracker::new("Test", count);
+        let tracker: Tracker<String> = Tracker::new("Testing", "Test", count);
         let (tx, rx) = mpsc::channel::<Report<String>>(10);
 
         for i in 0..count {

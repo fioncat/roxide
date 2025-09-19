@@ -179,7 +179,7 @@ impl Cmd {
                 if full.is_none() {
                     full = Some(self.full());
                 }
-                info!("Execute: {}", full.unwrap());
+                info!("Executing: {}", full.unwrap());
             }
             CmdHint::Message(ref message) => info!("{message}"),
             CmdHint::None => {

@@ -32,7 +32,7 @@ impl Tag {
                 "refs/tags/",
                 "--format=%(refname:short) %(objectname:short) %(subject)",
             ],
-            "List tags",
+            "Listing tags",
         )?;
 
         let mut tags = Vec::with_capacity(lines.len());
@@ -66,7 +66,7 @@ impl Tag {
 
     pub fn get_latest(cmd: GitCmd) -> Result<Self> {
         debug!("[tag] Get latest tag, cmd: {cmd:?}");
-        let name = cmd.output(["describe", "--tags", "--abbrev=0"], "Get latest tag")?;
+        let name = cmd.output(["describe", "--tags", "--abbrev=0"], "Getting latest tag")?;
         if name.is_empty() {
             bail!("no latest tag");
         }

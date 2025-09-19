@@ -14,7 +14,7 @@ pub fn ensure_no_uncommitted_changes(cmd: GitCmd) -> Result<()> {
 pub fn count_uncommitted_changes(cmd: GitCmd) -> Result<usize> {
     debug!("[commit] Count uncommitted changes, cmd: {cmd:?}");
     let count = cmd
-        .lines(["status", "-s"], "Count uncommitted changes")?
+        .lines(["status", "-s"], "Counting uncommitted changes")?
         .len();
     debug!("[commit] Uncommitted changes count: {count}");
     Ok(count)
@@ -22,7 +22,7 @@ pub fn count_uncommitted_changes(cmd: GitCmd) -> Result<usize> {
 
 pub fn get_current_commit(cmd: GitCmd) -> Result<String> {
     debug!("[commit] Get current commit, cmd: {cmd:?}");
-    let commit = cmd.output(["rev-parse", "HEAD"], "Get current commit")?;
+    let commit = cmd.output(["rev-parse", "HEAD"], "Getting current commit")?;
     debug!("[commit] Current commit: {commit}");
     Ok(commit)
 }

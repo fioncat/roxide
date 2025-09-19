@@ -63,7 +63,9 @@ impl Command for SwitchCommand {
 impl SwitchCommand {
     #[inline]
     fn switch(&self, ctx: &ConfigContext, branch: &str) -> Result<()> {
-        ctx.git()
-            .execute(["checkout", branch], format!("Switch to branch {branch:?}"))
+        ctx.git().execute(
+            ["checkout", branch],
+            format!("Switching to branch {branch:?}"),
+        )
     }
 }

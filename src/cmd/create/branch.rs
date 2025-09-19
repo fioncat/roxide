@@ -33,12 +33,12 @@ impl Command for CreateBranchCommand {
 
         ctx.git().execute(
             ["checkout", "-b", &self.branch],
-            format!("Create branch {}", self.branch),
+            format!("Creating branch {}", self.branch),
         )?;
 
         ctx.git().execute(
             ["push", "--set-upstream", "origin", &self.branch],
-            format!("Push branch {} to remote", self.branch),
+            format!("Pushing branch {} to remote", self.branch),
         )?;
 
         Ok(())

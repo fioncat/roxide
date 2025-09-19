@@ -14,7 +14,7 @@ pub trait Task<R: Send> {
     async fn run(&self) -> Result<R>;
 }
 
-pub async fn run<T, R>(desc: &str, tasks: Vec<T>) -> Result<Vec<R>>
+pub async fn run<T, R>(verb: &str, desc: &str, tasks: Vec<T>) -> Result<Vec<R>>
 where
     R: Send + 'static,
     T: Task<R> + Send + 'static,
@@ -43,7 +43,7 @@ where
     // execution progress and completion status.
     let (report_tx, report_rx) = mpsc::channel::<Report<R>>(tasks_len);
 
-    let title = style(format!("{desc} with {worker_len} workers:"))
+    let title = style(format!("{verb} with {worker_len} workers:"))
         .bold()
         .cyan()
         .underlined();
@@ -81,7 +81,7 @@ where
     }
 
     debug!("[batch] All workers started");
-    let tracker = Tracker::new(desc, tasks_len);
+    let tracker = Tracker::new(verb, desc, tasks_len);
     let results = tracker.wait(report_rx).await;
     for handler in handlers {
         handler.await.unwrap();
@@ -124,7 +124,7 @@ mod tests {
             tasks.push(task);
         }
 
-        let results = run("Test", tasks).await.unwrap();
+        let results = run("Testing", "Test", tasks).await.unwrap();
         assert_eq!(results.len(), COUNT);
         for (i, res) in results.iter().enumerate() {
             assert_eq!(*res, i);
@@ -158,7 +158,7 @@ mod tests {
             let task = FailTask { idx: i };
             tasks.push(task);
         }
-        let result = run("Test", tasks).await;
+        let result = run("Testing", "Test", tasks).await;
         assert_eq!(result.unwrap_err().to_string(), "Test task failed");
     }
 }

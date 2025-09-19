@@ -53,11 +53,11 @@ impl Command for CreateTagCommand {
         };
 
         ctx.git()
-            .execute(["tag", &tag], format!("Create tag {tag:?}"))?;
+            .execute(["tag", &tag], format!("Creating tag {tag:?}"))?;
 
         ctx.git().execute(
             ["push", "origin", &tag],
-            format!("Push tag {tag:?} to remote"),
+            format!("Pushing tag {tag:?} to remote"),
         )?;
 
         Ok(())

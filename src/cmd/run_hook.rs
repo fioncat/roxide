@@ -120,7 +120,7 @@ impl RunHookCommand {
             tasks.push(task);
         }
 
-        let results = batch::run("Run hook", tasks).await?;
+        let results = batch::run("Running hook", "Hook", tasks).await?;
         let results = results
             .into_iter()
             .filter(|res| !res.results.is_empty())

@@ -48,7 +48,7 @@ impl Command for RemoveBranchCommand {
                 ensure_no_uncommitted_changes(ctx.git())?;
                 ctx.git().execute(
                     ["checkout", &default_branch],
-                    format!("Checkout to default branch {default_branch:?}"),
+                    format!("Checkouting to default branch {default_branch:?}"),
                 )?;
                 current
             }
@@ -56,7 +56,7 @@ impl Command for RemoveBranchCommand {
 
         ctx.git().execute(
             ["branch", "-D", &branch],
-            format!("Remove local branch {branch:?}"),
+            format!("Removing local branch {branch:?}"),
         )?;
 
         let branch = branches.into_iter().find(|b| b.name == branch);
@@ -65,7 +65,7 @@ impl Command for RemoveBranchCommand {
         {
             ctx.git().execute(
                 ["push", "origin", "--delete", &branch.name],
-                format!("Remove remote branch {:?}", branch.name),
+                format!("Removing remote branch {:?}", branch.name),
             )?;
         }
 

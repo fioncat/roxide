@@ -55,7 +55,7 @@ fn get_branch_re() -> &'static Regex {
 impl Branch {
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
         debug!("[branch] List branch, cmd: {cmd:?}");
-        let lines = cmd.lines(["branch", "-vv"], "List git branch")?;
+        let lines = cmd.lines(["branch", "-vv"], "Listing git branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
             let branch = Self::parse(&line)?;
@@ -68,7 +68,7 @@ impl Branch {
 
     pub fn list_remote(cmd: GitCmd) -> Result<Vec<String>> {
         debug!("[branch] List remote branch, cmd: {cmd:?}");
-        let lines = cmd.lines(["branch", "-al"], "List git remote branch")?;
+        let lines = cmd.lines(["branch", "-al"], "Listing git remote branch")?;
         let mut branches = Vec::with_capacity(lines.len());
         for line in lines {
             debug!("[branch] Remote branch line: {line:?}");
@@ -107,7 +107,7 @@ impl Branch {
 
         let result = cmd.output(
             ["symbolic-ref", head_ref.as_str()],
-            "Get default branch by symbolic-ref",
+            "Getting default branch by symbolic-ref",
         );
         if let Ok(out) = result {
             debug!("[branch] Use symbolic-ref to get default branch ok, output: {out:?}");
@@ -122,7 +122,7 @@ impl Branch {
 
         let lines = cmd.lines(
             ["remote", "show", remote],
-            "Get default branch by remote show",
+            "Getting default branch by remote show",
         )?;
 
         for line in lines {
@@ -142,7 +142,7 @@ impl Branch {
 
     pub fn current(cmd: GitCmd) -> Result<String> {
         debug!("[branch] Get current branch, cmd: {cmd:?}");
-        let branch = cmd.output(["branch", "--show-current"], "Get current branch")?;
+        let branch = cmd.output(["branch", "--show-current"], "Getting current branch")?;
         if branch.is_empty() {
             bail!("current branch is empty");
         }

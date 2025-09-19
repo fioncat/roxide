@@ -42,7 +42,7 @@ impl Remote {
 
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
         debug!("[remote] List remotes, cmd: {cmd:?}");
-        let lines = cmd.lines(["remote"], "List remote")?;
+        let lines = cmd.lines(["remote"], "Listing remote")?;
         let remotes = lines.into_iter().map(Remote).collect::<Vec<_>>();
         debug!("[remote] Remotes: {remotes:?}");
         Ok(remotes)
@@ -52,7 +52,7 @@ impl Remote {
         debug!("[remote] Get url for remote {:?}", self.as_str());
         let url = cmd.output(
             ["remote", "get-url", self.as_str()],
-            format!("Get url for remote {}", self.as_str()),
+            format!("Getting url for remote {}", self.as_str()),
         )?;
         if url.is_empty() {
             bail!("empty url for remote {:?}", self.as_str());
@@ -73,7 +73,7 @@ impl Remote {
         let target = format!("{}/{branch}", self.as_str());
         cmd.execute(
             ["fetch", self.as_str(), branch.as_ref()],
-            format!("Fetch target {target}"),
+            format!("Fetching target {target}"),
         )?;
         debug!("[remote] Target: {target}");
         Ok(target)

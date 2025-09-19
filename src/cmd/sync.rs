@@ -89,7 +89,7 @@ impl SyncCommand {
             tasks.push(task);
         }
 
-        let results = batch::run("Sync", tasks).await?;
+        let results = batch::run("Syncing", "Sync", tasks).await?;
         let results: Vec<String> = results
             .iter()
             .filter_map(|r| {
