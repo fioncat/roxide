@@ -48,7 +48,7 @@ impl Command for RemoveBranchCommand {
                 ensure_no_uncommitted_changes(ctx.git())?;
                 ctx.git().execute(
                     ["checkout", &default_branch],
-                    format!("Checkouting to default branch {default_branch:?}"),
+                    format!("Switching to default branch {default_branch:?}"),
                 )?;
                 current
             }

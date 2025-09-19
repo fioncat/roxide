@@ -390,11 +390,11 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
             match task.action {
                 BranchAction::Push | BranchAction::Pull => {
                     if current != task.branch {
-                        debug!("[op] Checkouting to branch {} to push or pull", task.branch);
+                        debug!("[op] Switching to branch {} to push or pull", task.branch);
                         // checkout to this branch to perform push/pull
                         self.git().execute(
                             ["checkout", &task.branch],
-                            format!("Checkouting to branch {}", task.branch),
+                            format!("Switching to branch {}", task.branch),
                         )?;
                         current = task.branch.clone();
                     }
@@ -412,12 +412,12 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
                 }
                 BranchAction::Delete => {
                     if current == task.branch {
-                        debug!("[op] Checkouting to default branch {default_branch} before delete");
+                        debug!("[op] Switching to default branch {default_branch} before delete");
                         // we cannot delete branch when we are inside it, checkout
                         // to default branch first.
                         self.git().execute(
                             ["checkout", &default_branch],
-                            format!("Checkouting to default branch {default_branch}"),
+                            format!("Switching to default branch {default_branch}"),
                         )?;
                     }
 
@@ -436,10 +436,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         }
 
         if current != back {
-            debug!("[op] Checkouting to backup branch {back:?}");
+            debug!("[op] Switching to backup branch {back:?}");
             self.git().execute(
                 ["checkout", &back],
-                format!("Checkouting to backup branch {back}"),
+                format!("Switching to backup branch {back}"),
             )?;
         }
 
@@ -1200,7 +1200,7 @@ mod tests {
             .unwrap();
 
         op.git()
-            .execute(["checkout", "master"], "Checkouting back to master")
+            .execute(["checkout", "master"], "Switching back to master")
             .unwrap();
 
         op.git()
