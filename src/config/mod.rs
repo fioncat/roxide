@@ -49,6 +49,9 @@ pub struct Config {
     pub stats_ignore: Vec<String>,
 
     #[serde(default)]
+    pub disable_auto_detect: bool,
+
+    #[serde(default)]
     pub hooks: Vec<hook::HookConfig>,
 
     #[serde(skip)]
@@ -289,6 +292,7 @@ impl Default for Config {
             edit_allow_fail: false,
             edit: Self::default_edit(),
             stats_ignore: vec![],
+            disable_auto_detect: false,
             hooks: vec![],
             remotes: vec![],
             remotes_index: None,
@@ -342,6 +346,7 @@ mod tests {
             edit_allow_fail: false,
             edit: Config::default_edit(),
             stats_ignore: vec![],
+            disable_auto_detect: false,
             hooks: super::hook::tests::expect_hooks(),
             remotes: super::remote::tests::expect_remotes(),
             remotes_index: None,

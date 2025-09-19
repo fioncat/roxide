@@ -6,6 +6,7 @@ mod config;
 mod create;
 mod decrypt;
 mod detach;
+mod detect;
 mod disk_usage;
 mod encrypt;
 mod export;
@@ -76,6 +77,7 @@ pub enum Commands {
     Create(create::CreateCommand),
     Decrypt(decrypt::DecryptCommand),
     Detach(detach::DetachCommand),
+    Detect(detect::DetectCommand),
     #[command(alias = "du")]
     DiskUsage(disk_usage::DiskUsageCommand),
     Encrypt(encrypt::EncryptCommand),
@@ -111,6 +113,7 @@ impl Command for App {
             Commands::Create(cmd) => cmd.run(ctx).await,
             Commands::Decrypt(cmd) => cmd.run(ctx).await,
             Commands::Detach(cmd) => cmd.run(ctx).await,
+            Commands::Detect(cmd) => cmd.run(ctx).await,
             Commands::DiskUsage(cmd) => cmd.run(ctx).await,
             Commands::Encrypt(cmd) => cmd.run(ctx).await,
             Commands::Export(cmd) => cmd.run(ctx).await,
@@ -138,6 +141,7 @@ impl Command for App {
             .subcommand(create::CreateCommand::complete())
             .subcommand(decrypt::DecryptCommand::complete())
             .subcommand(detach::DetachCommand::complete())
+            .subcommand(detect::DetectCommand::complete())
             .subcommand(disk_usage::DiskUsageCommand::complete())
             .subcommand(encrypt::EncryptCommand::complete())
             .subcommand(export::ExportCommand::complete())
@@ -312,5 +316,20 @@ pub struct ThinArgs {
 impl ThinArgs {
     pub fn complete() -> CompleteArg {
         CompleteArg::new().short('t')
+    }
+}
+
+#[derive(Debug, Args, Clone, Copy)]
+pub struct RecursiveArgs {
+    /// By default, if you are currently in a repository, the command will operate on the
+    /// current repository; otherwise it will operate on multiple repositories. With this
+    /// option, multiple repositories will be operated on regardless of your current location.
+    #[arg(name = "recursive", short = 'r')]
+    pub enable: bool,
+}
+
+impl RecursiveArgs {
+    pub fn complete() -> CompleteArg {
+        CompleteArg::new().short('r')
     }
 }

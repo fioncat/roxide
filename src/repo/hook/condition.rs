@@ -1,6 +1,5 @@
 use anyhow::{Result, bail};
 
-use crate::exec::git::commit::count_uncommitted_changes;
 use crate::format::now;
 use crate::repo::ops::{CreateResult, RepoOperator};
 
@@ -34,10 +33,7 @@ impl Condition {
         match self {
             Self::Created => Ok(matches!(create_result, CreateResult::Created)),
             Self::Cloned => Ok(matches!(create_result, CreateResult::Cloned)),
-            Self::Updated => {
-                let count = count_uncommitted_changes(op.git().mute())?;
-                Ok(count > 0)
-            }
+            Self::Updated => op.is_updated(),
             Self::Interval(interval) => {
                 let db = op.ctx().get_db()?;
                 db.with_transaction(|tx| {
@@ -184,7 +180,7 @@ mod tests {
     #[test]
     fn test_matched_update() {
         let ctx = context::tests::build_test_context("hook_condition_matched_update");
-        let repo = Repository {
+        let mut repo = Repository {
             remote: "test".to_string(),
             owner: "rust".to_string(),
             name: "hello".to_string(),
@@ -208,8 +204,15 @@ mod tests {
         op.git().execute(["commit", "-m", "test"], "").unwrap();
 
         let cond = Condition::Updated;
+        assert!(cond.matched(&op, "", CreateResult::Exists).unwrap());
+
+        let commit = op.git().output(["rev-parse", "HEAD"], "").unwrap();
+        repo.commit = Some(commit);
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
+
         assert!(!cond.matched(&op, "", CreateResult::Exists).unwrap());
 
+        let op = RepoOperator::load(&ctx, &repo).unwrap();
         let path = op.path().join("test.txt");
         fs::write(path, "test content").unwrap();
 

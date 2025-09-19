@@ -107,7 +107,7 @@ impl RunHookCommand {
         let all_hooks = Arc::new(all_hooks);
 
         let mut names = list.display_names();
-        confirm_items(&names, "Run", "run", "Repo", "Repos")?;
+        confirm_items(&names, "run", "run", "Repo", "Repos")?;
 
         let mut tasks = Vec::with_capacity(list.items.len());
         ctx.mute();

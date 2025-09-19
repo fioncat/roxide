@@ -68,6 +68,8 @@ impl Command for HomeCommand {
         let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
         let create_result = op.ensure_create(self.thin.enable, None)?;
         op.run_hooks(create_result)?;
+        op.update_language(false).await?;
+        op.update_commit()?;
 
         debug!("[cmd] Home path: {:?}", op.path().display());
         println!("{}", op.path().display());
