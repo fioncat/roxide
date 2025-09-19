@@ -13,7 +13,7 @@ pub fn get_current_repo(ctx: &ConfigContext) -> Result<Repository> {
 
 pub fn get_current_repo_optional(ctx: &ConfigContext) -> Result<Option<Repository>> {
     debug!(
-        "[current] Get current repo, dir: {}",
+        "[current] Getting current repo, dir: {}",
         ctx.current_dir.display()
     );
     let db = ctx.get_db()?;

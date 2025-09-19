@@ -33,7 +33,7 @@ impl Command for OpenRepoCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run open repo command: {:?}", self);
+        debug!("[cmd] Running open repo command: {:?}", self);
         ctx.lock()?;
 
         let repo = get_current_repo(&ctx)?;

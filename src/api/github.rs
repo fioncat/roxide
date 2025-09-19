@@ -34,7 +34,7 @@ impl GitHub {
 
     pub fn new(token: &str) -> Result<Self> {
         let mut has_token = false;
-        debug!("[github] Build GitHub API client, token: {token:?}");
+        debug!("[github] Building GitHub API client, token: {token:?}");
         let client = if token.is_empty() {
             warn!("GitHub token is empty, using unauthenticated client which may be rate limited");
             Octocrab::builder().build()?
@@ -88,7 +88,7 @@ impl GitHub {
 #[async_trait]
 impl RemoteAPI for GitHub {
     async fn info(&self) -> Result<RemoteInfo> {
-        debug!("[github] Get GitHub API info");
+        debug!("[github] Getting GitHub API info");
         let mut auth_user = None;
         let ping = if self.has_token {
             let user = self
@@ -113,7 +113,7 @@ impl RemoteAPI for GitHub {
     }
 
     async fn list_repos(&self, _remote: &str, owner: &str) -> Result<Vec<String>> {
-        debug!("[github] List repos for: {owner}");
+        debug!("[github] Listing repos for: {owner}");
         let page = self
             .client
             .users(owner)
@@ -137,7 +137,7 @@ impl RemoteAPI for GitHub {
         owner: &str,
         name: &str,
     ) -> Result<RemoteRepository<'static>> {
-        debug!("[github] Get repo: {owner}/{name}");
+        debug!("[github] Getting repo: {owner}/{name}");
         let repo = self
             .client
             .repos(owner, name)
@@ -190,7 +190,7 @@ impl RemoteAPI for GitHub {
         name: &str,
         pr: &PullRequest,
     ) -> Result<String> {
-        debug!("[github] Create pull request: {owner}/{name}, pr: {pr:?}");
+        debug!("[github] Creating pull request: {owner}/{name}, pr: {pr:?}");
 
         let pulls_handler = self.client.pulls(owner, name);
         let head = match pr.head {
@@ -211,7 +211,7 @@ impl RemoteAPI for GitHub {
     }
 
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
-        debug!("[github] List pull requests: {opts:?}");
+        debug!("[github] Listing pull requests: {opts:?}");
 
         let pulls_handler = self.client.pulls(&opts.owner, opts.name);
         if let Some(id) = opts.id {
@@ -229,7 +229,7 @@ impl RemoteAPI for GitHub {
                 PullRequestHead::Branch(branch) => format!("{}:{branch}", opts.owner),
                 PullRequestHead::Repository(repo) => format!("{}:{}", repo.owner, repo.branch),
             };
-            debug!("[github] Filter head: {head:?}");
+            debug!("[github] Filtering head: {head:?}");
             builder = builder.head(head);
         }
         if let Some(base) = opts.base {
@@ -255,7 +255,7 @@ impl RemoteAPI for GitHub {
         name: &str,
         commit: &str,
     ) -> Result<Option<Action>> {
-        debug!("[github] Get action for {owner}/{name}, commit: {commit}");
+        debug!("[github] Getting action for {owner}/{name}, commit: {commit}");
 
         let req = GetActionRunRequest {
             head_sha: commit,
@@ -281,7 +281,7 @@ impl RemoteAPI for GitHub {
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
-        debug!("[github] Get job log: {owner}/{name}, job id: {id}");
+        debug!("[github] Getting job log: {owner}/{name}, job id: {id}");
         let path = format!("/repos/{owner}/{name}/actions/jobs/{id}/logs");
         let data = self.client.download(&path, "").await?;
         let logs = String::from_utf8(data).context("parse job log to string")?;
@@ -370,7 +370,10 @@ struct ConvertWorkflowTask {
 
 impl ConvertWorkflowTask {
     async fn run(&self) {
-        debug!("[github] Worker {} start to fetch workflow job", self.idx);
+        debug!(
+            "[github] Worker {} starting to fetch workflow job",
+            self.idx
+        );
         loop {
             let (workflow_idx, workflow_run) = {
                 let mut tasks = self.tasks.lock().unwrap();

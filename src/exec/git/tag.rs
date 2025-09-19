@@ -24,7 +24,7 @@ pub struct TagList {
 
 impl Tag {
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
-        debug!("[tag] List tags, cmd: {cmd:?}");
+        debug!("[tag] Listing tags, cmd: {cmd:?}");
         let lines = cmd.lines(
             [
                 "for-each-ref",
@@ -32,7 +32,7 @@ impl Tag {
                 "refs/tags/",
                 "--format=%(refname:short) %(objectname:short) %(subject)",
             ],
-            "List tags",
+            "Listing tags",
         )?;
 
         let mut tags = Vec::with_capacity(lines.len());
@@ -53,7 +53,7 @@ impl Tag {
     }
 
     pub fn get(cmd: GitCmd, name: &str) -> Result<Self> {
-        debug!("[tag] Get tag {name}, cmd: {cmd:?}");
+        debug!("[tag] Getting tag {name}, cmd: {cmd:?}");
         let tags = Self::list(cmd)?;
         for tag in tags {
             if tag.name == name {
@@ -65,8 +65,8 @@ impl Tag {
     }
 
     pub fn get_latest(cmd: GitCmd) -> Result<Self> {
-        debug!("[tag] Get latest tag, cmd: {cmd:?}");
-        let name = cmd.output(["describe", "--tags", "--abbrev=0"], "Get latest tag")?;
+        debug!("[tag] Getting latest tag, cmd: {cmd:?}");
+        let name = cmd.output(["describe", "--tags", "--abbrev=0"], "Getting latest tag")?;
         if name.is_empty() {
             bail!("no latest tag");
         }

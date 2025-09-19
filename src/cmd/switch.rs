@@ -25,7 +25,7 @@ impl Command for SwitchCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run switch command: {:?}", self);
+        debug!("[cmd] Running switch command: {:?}", self);
 
         ensure_no_uncommitted_changes(ctx.git())?;
 
@@ -50,7 +50,7 @@ impl Command for SwitchCommand {
             return self.switch(&ctx, &branches[0]);
         }
 
-        let idx = ctx.fzf_search("Search branch to switch", &branches, None)?;
+        let idx = ctx.fzf_search("Searching branch to switch", &branches, None)?;
         debug!("[cmd] Selected branch: {:?}", branches[idx]);
         self.switch(&ctx, &branches[idx])
     }
@@ -63,7 +63,9 @@ impl Command for SwitchCommand {
 impl SwitchCommand {
     #[inline]
     fn switch(&self, ctx: &ConfigContext, branch: &str) -> Result<()> {
-        ctx.git()
-            .execute(["checkout", branch], format!("Switch to branch {branch:?}"))
+        ctx.git().execute(
+            ["checkout", branch],
+            format!("Switching to branch {branch:?}"),
+        )
     }
 }

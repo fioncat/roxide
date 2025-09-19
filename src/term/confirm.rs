@@ -31,7 +31,7 @@ pub fn confirm(msg: String) -> Result<()> {
         return Ok(());
     }
 
-    debug!("[confirm] Wait user confirm");
+    debug!("[confirm] Waiting user confirm");
     let msg = format!(":: {msg}");
     let styled = style(msg).bold();
     output!("{styled}? [Y/n] ");

@@ -24,7 +24,7 @@ impl Command for RemoveMirrorCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove mirror command: {:?}", self);
+        debug!("[cmd] Running remove mirror command: {:?}", self);
         ctx.lock()?;
 
         let repo = get_current_repo(&ctx)?;

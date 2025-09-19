@@ -23,7 +23,7 @@ impl Command for ListTagCommand {
     }
 
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list tag command: {:?}", self);
+        debug!("[cmd] Running list tag command: {:?}", self);
         ctx.mute();
 
         let tags = Tag::list(ctx.git())?;

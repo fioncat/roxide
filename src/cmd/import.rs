@@ -34,7 +34,7 @@ impl Command for ImportCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run import command: {:?}", self);
+        debug!("[cmd] Running import command: {:?}", self);
         ctx.lock()?;
 
         let data = if let Some(file) = self.file {

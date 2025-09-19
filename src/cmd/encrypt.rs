@@ -26,7 +26,7 @@ impl Command for EncryptCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run encrypt command: {:?}", self);
+        debug!("[cmd] Running encrypt command: {:?}", self);
 
         let password = self.secret.get_password(&ctx)?;
 

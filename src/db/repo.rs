@@ -299,7 +299,7 @@ CREATE INDEX IF NOT EXISTS idx_repo_last_visited_at ON repo (last_visited_at DES
 "#;
 
 fn ensure_table(tx: &Transaction) -> Result<()> {
-    debug!("[db] Ensure repo table exists");
+    debug!("[db] Ensuring repo table exists");
     tx.execute_batch(TABLE_SQL)?;
     Ok(())
 }
@@ -320,7 +320,7 @@ INSERT INTO repo (
 "#;
 
 fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
-    debug!("[db] Insert repo: {repo:?}");
+    debug!("[db] Inserting repo: {repo:?}");
     tx.execute(
         INSERT_SQL,
         params![
@@ -346,7 +346,7 @@ WHERE id = ?1
 "#;
 
 fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Repository>> {
-    debug!("[db] Get repo by id: {id}");
+    debug!("[db] Getting repo by id: {id}");
     let mut stmt = tx.prepare(GET_BY_ID_SQL)?;
     let repo = stmt.query_row([id], Repository::from_row).optional()?;
     debug!("[db] Result: {repo:?}");
@@ -360,7 +360,7 @@ WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
 fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Option<Repository>> {
-    debug!("[db] Get repo: {remote}:{owner}:{name}");
+    debug!("[db] Getting repo: {remote}:{owner}:{name}");
     let mut stmt = tx.prepare(GET_SQL)?;
     let repo = stmt
         .query_row(params![remote, owner, name], Repository::from_row)
@@ -376,7 +376,7 @@ WHERE path = ?1
 "#;
 
 fn get_by_path(tx: &Transaction, path: &str) -> Result<Option<Repository>> {
-    debug!("[db] Get repo by path: {path}");
+    debug!("[db] Getting repo by path: {path}");
     let mut stmt = tx.prepare(GET_BY_PATH_SQL)?;
     let repo = stmt.query_row([path], Repository::from_row).optional()?;
     debug!("[db] Result: {repo:?}");
@@ -389,7 +389,7 @@ WHERE id = ?1
 "#;
 
 fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
-    debug!("[db] Update repo: {repo:?}");
+    debug!("[db] Updating repo: {repo:?}");
     tx.execute(
         UPDATE_SQL,
         params![
@@ -409,7 +409,7 @@ WHERE id=?
 "#;
 
 fn delete(tx: &Transaction, repo: &Repository) -> Result<()> {
-    debug!("[db] Delete repo: {repo:?}");
+    debug!("[db] Deleting repo: {repo:?}");
     tx.execute(DELETE_SQL, params![repo.id])?;
     Ok(())
 }
@@ -518,7 +518,7 @@ ORDER BY last_visited_at DESC
 "#;
 
 fn query(tx: &Transaction, opts: QueryOptions) -> Result<Vec<Repository>> {
-    debug!("[db] Query repos, options: {opts:?}");
+    debug!("[db] Querying repos, options: {opts:?}");
     let (sql, params) = opts.build(QUERY_SQL);
     debug!("[db] Query SQL: {sql:?}, params: {params:?}");
     let mut stmt = tx.prepare(&sql)?;
@@ -537,7 +537,7 @@ SELECT COUNT(*) FROM repo {{where}}
 "#;
 
 fn count(tx: &Transaction, opts: QueryOptions) -> Result<u32> {
-    debug!("[db] Count repos, options: {opts:?}");
+    debug!("[db] Counting repos, options: {opts:?}");
     let (sql, params) = opts.build(COUNT_SQL);
     debug!("[db] Count SQL: {sql}, params: {params:?}");
     let count: u32 = tx.query_row(&sql, params_from_iter(params), |row| row.get(0))?;
@@ -589,7 +589,7 @@ ORDER BY MAX(last_visited_at) DESC
 "#;
 
 fn query_remotes(tx: &Transaction, limit: Option<LimitOptions>) -> Result<Vec<RemoteState>> {
-    debug!("[db] Query remotes, limit: {limit:?}");
+    debug!("[db] Querying remotes, limit: {limit:?}");
     let (sql, params) = build_sql_with_limit(QUERY_REMOTES_SQL, limit);
     let mut stmt = tx.prepare(sql.as_ref())?;
     let rows = stmt.query_map(params_from_iter(params), |row| {
@@ -612,7 +612,7 @@ SELECT COUNT(DISTINCT remote) FROM repo
 "#;
 
 fn count_remotes(tx: &Transaction) -> Result<u32> {
-    debug!("[db] Count remotes");
+    debug!("[db] Counting remotes");
     let count: u32 = tx.query_row(COUNT_REMOTES_SQL, [], |row| row.get(0))?;
     debug!("[db] Result: {count}");
     Ok(count)
@@ -652,7 +652,7 @@ fn query_owners<S>(
 where
     S: AsRef<str> + Debug,
 {
-    debug!("[db] Query owners for remote: {remote:?}, limit: {limit:?}");
+    debug!("[db] Querying owners for remote: {remote:?}, limit: {limit:?}");
 
     let (sql, mut params) = match remote {
         Some(remote) => (
@@ -694,7 +694,7 @@ fn count_owners<S>(tx: &Transaction, remote: Option<S>) -> Result<u32>
 where
     S: AsRef<str> + Debug,
 {
-    debug!("[db] Count owners for remote: {remote:?}");
+    debug!("[db] Counting owners for remote: {remote:?}");
     let (sql, params) = match remote {
         Some(remote) => (
             COUNT_OWNERS_SQL.replace("{{where}}", "WHERE remote = ?"),

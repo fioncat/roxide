@@ -46,7 +46,7 @@ impl Command for CreatePullRequestCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run create pull request command: {:?}", self);
+        debug!("[cmd] Running create pull request command: {:?}", self);
         ensure_no_uncommitted_changes(ctx.git())?;
 
         let repo = get_current_repo(&ctx)?;
@@ -159,7 +159,7 @@ impl Command for CreatePullRequestCommand {
             id: 0,
             web_url: String::new(),
         };
-        debug!("[cmd] Create pull request: {pr:?}");
+        debug!("[cmd] Creating pull request: {pr:?}");
         let web_url = api
             .create_pull_request(&opts.owner, &opts.name, &pr)
             .await?;

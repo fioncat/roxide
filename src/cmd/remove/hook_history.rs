@@ -32,7 +32,7 @@ impl Command for RemoveHookHistoryCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run remove hook_history command: {:?}", self);
+        debug!("[cmd] Running remove hook_history command: {:?}", self);
 
         let db = ctx.get_db()?;
         if self.all || self.orphan {
@@ -60,17 +60,17 @@ impl RemoveHookHistoryCommand {
         }
         for item in items {
             let should_remove = if self.all {
-                info!("Remove hook history {}", item.id);
+                info!("Removing hook history {}", item.id);
                 true
             } else if !current_hooks.contains(item.name.as_str()) {
                 info!(
-                    "Remove hook history {}, hook {:?} not exists in config",
+                    "Removing hook history {}, hook {:?} not exists in config",
                     item.id, item.name
                 );
                 true
             } else if tx.repo().get_by_id(item.repo_id)?.is_none() {
                 info!(
-                    "Remove hook history {}, repo id {} not exists",
+                    "Removing hook history {}, repo id {} not exists",
                     item.id, item.repo_id
                 );
                 true

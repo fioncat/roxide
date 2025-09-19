@@ -29,7 +29,7 @@ impl Command for ListRemoteCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list remote command: {:?}", self);
+        debug!("[cmd] Running list remote command: {:?}", self);
 
         let limit = self.list.limit();
         let text = if self.disk_usage.enable {

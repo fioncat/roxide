@@ -43,7 +43,7 @@ impl Command for SyncCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run sync command: {:?}", self);
+        debug!("[cmd] Running sync command: {:?}", self);
 
         if !self.recursive
             && let Some(repo) = get_current_repo_optional(&ctx)?
@@ -89,7 +89,7 @@ impl SyncCommand {
             tasks.push(task);
         }
 
-        let results = batch::run("Sync", tasks).await?;
+        let results = batch::run("Syncing", "Sync", tasks).await?;
         let results: Vec<String> = results
             .iter()
             .filter_map(|r| {

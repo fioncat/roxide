@@ -40,7 +40,7 @@ impl Command for HomeCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run home command: {:?}", self);
+        debug!("[cmd] Running home command: {:?}", self);
         ctx.lock()?;
 
         let mut repo = match self.get_target(&ctx).await? {

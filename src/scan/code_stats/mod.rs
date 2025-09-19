@@ -25,7 +25,7 @@ pub async fn get_code_stats(path: PathBuf, ignore: Ignore) -> Result<CodeStats> 
         stats: Mutex::new(stats),
         ignore,
     };
-    outputln!("Begin to scan codes");
+    outputln!("Beginning to scan codes");
     let start = Instant::now();
     let result = scan_files(vec![path], handler, false).await;
     cursor_up!();

@@ -27,7 +27,7 @@ impl Command for OpenActionCommand {
     }
 
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run open action command: {:?}", self);
+        debug!("[cmd] Running open action command: {:?}", self);
         ctx.mute();
 
         let repo = get_current_repo(&ctx)?;

@@ -44,7 +44,7 @@ impl Command for ConfigCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run config command: {:?}", self);
+        debug!("[cmd] Running config command: {:?}", self);
 
         let Some(config_type) = self.config_type else {
             if self.edit {

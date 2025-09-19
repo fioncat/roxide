@@ -63,7 +63,7 @@ pub async fn scan_orphans(ctx: &ConfigContext) -> Result<Orphans> {
         })
         .collect::<HashSet<_>>();
     debug!(
-        "[orphan] Begin to scan orphans, remotes: {remotes:?}, owners: {owners:?}, repos: {repos:?}, mirrors: {mirrors:?}"
+        "[orphan] Beginning to scan orphans, remotes: {remotes:?}, owners: {owners:?}, repos: {repos:?}, mirrors: {mirrors:?}"
     );
 
     let workspace = PathBuf::from(&ctx.cfg.workspace);
@@ -133,13 +133,13 @@ impl ScanHandler<()> for WorkspaceOrphanHandler {
         if let Some(ref mirrors_dir) = self.mirrors_dir
             && dir == mirrors_dir
         {
-            debug!("[orphan] Skip mirrors dir: {}", dir.display());
+            debug!("[orphan] Skipping mirrors dir: {}", dir.display());
             // Workspace handler won't handle mirrors dir
             return Ok(true);
         }
 
         let Some(relative) = dir.strip_prefix(&self.workspace).ok() else {
-            debug!("[orphan] Skip non-workspace dir: {}", dir.display());
+            debug!("[orphan] Skipping non-workspace dir: {}", dir.display());
             // Non-workspace dir, skip
             return Ok(true);
         };
@@ -157,7 +157,7 @@ impl ScanHandler<()> for WorkspaceOrphanHandler {
 
         match components.len() {
             0 => {
-                debug!("[orphan] Skip workspace dir: {}", dir.display());
+                debug!("[orphan] Skipping workspace dir: {}", dir.display());
                 Ok(true)
             }
             1 => {

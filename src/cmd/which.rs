@@ -21,7 +21,7 @@ impl Command for WhichCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run which command: {:?}", self);
+        debug!("[cmd] Running which command: {:?}", self);
 
         if let Some((repo, mirror)) = get_current_mirror(&ctx)? {
             let mirror_repo = mirror.into_repo();

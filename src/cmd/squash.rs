@@ -35,7 +35,7 @@ impl Command for SquashCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run display command: {:?}", self);
+        debug!("[cmd] Running display command: {:?}", self);
         ctx.lock()?;
 
         let repo = get_current_repo(&ctx)?;

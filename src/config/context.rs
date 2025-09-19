@@ -102,11 +102,11 @@ impl ConfigContext {
     }
 
     pub fn get_db(&self) -> Result<Arc<Database>> {
-        debug!("[context] Get database instance");
+        debug!("[context] Getting database instance");
         let result = self.db.get_or_init(|| {
             let path = PathBuf::from(&self.cfg.data_dir).join("sqlite.db");
             debug!(
-                "[context] Init new database instance, path: {}",
+                "[context] Initing new database instance, path: {}",
                 path.display()
             );
             let db = Database::open(&path)
@@ -120,7 +120,9 @@ impl ConfigContext {
     }
 
     pub fn get_api(&self, remote_name: &str, force_no_cache: bool) -> Result<Arc<dyn RemoteAPI>> {
-        debug!("[context] Get api for remote {remote_name:?}, force_no_cache: {force_no_cache}");
+        debug!(
+            "[context] Getting api for remote {remote_name:?}, force_no_cache: {force_no_cache}"
+        );
         let mut apis = match self.apis.lock() {
             Ok(apis) => apis,
             Err(e) => bail!("failed to lock apis: {e:#}"),
@@ -131,7 +133,7 @@ impl ConfigContext {
             return Ok(api.clone());
         }
 
-        debug!("[context] Init new api, and save it to cache");
+        debug!("[context] Initing new api, and save it to cache");
         let remote_cfg = self.cfg.get_remote(remote_name)?;
         let api = api::new(remote_cfg, self.get_db()?, force_no_cache)?;
         apis.insert(remote_name.to_string(), api.clone());
@@ -142,7 +144,7 @@ impl ConfigContext {
         if let Err(e) = self.file_lock.get_or_init(|| {
             let path = PathBuf::from(&self.cfg.data_dir).join("lock");
             debug!(
-                "[context] Acquire global file lock, path: {}",
+                "[context] Acquiring global file lock, path: {}",
                 path.display()
             );
             FileLock::acquire(path)

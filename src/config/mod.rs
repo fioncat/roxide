@@ -99,7 +99,7 @@ impl Config {
             .map(|p| PathBuf::from(p.as_ref()))
             .unwrap_or(home_dir.join(".config").join("roxide"));
         debug!(
-            "[config] Read config from {}, home_dir: {}",
+            "[config] Reading config from {}, home_dir: {}",
             path.display(),
             home_dir.display()
         );
@@ -182,7 +182,7 @@ impl Config {
     }
 
     fn validate(&mut self) -> Result<()> {
-        debug!("[config] Validate config: {:?}", self);
+        debug!("[config] Validating config: {:?}", self);
 
         self.workspace = expandenv(take(&mut self.workspace));
         if self.workspace.is_empty() {

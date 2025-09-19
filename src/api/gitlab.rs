@@ -79,7 +79,7 @@ impl GitLab {
     const DEFAULT_LIMIT: usize = 100;
 
     pub fn new(host: &Option<String>, token: &str) -> Self {
-        debug!("[gitlab] Build GitLab API client, host: {host:?}, token: {token:?}");
+        debug!("[gitlab] Building GitLab API client, host: {host:?}, token: {token:?}");
         let host = host.clone().unwrap_or(String::from(Self::DEFAULT_HOST));
         let client_builder = GitlabBuilder::new(&host, token);
         let has_token = !token.is_empty();
@@ -94,7 +94,7 @@ impl GitLab {
 #[async_trait]
 impl RemoteAPI for GitLab {
     async fn info(&self) -> Result<RemoteInfo> {
-        debug!("[gitlab] Get GitLab API info");
+        debug!("[gitlab] Getting GitLab API info");
         let client = self.client_builder.build_async().await?;
 
         let mut auth_user = None;
@@ -120,7 +120,7 @@ impl RemoteAPI for GitLab {
     }
 
     async fn list_repos(&self, _remote: &str, owner: &str) -> Result<Vec<String>> {
-        debug!("[gitlab] List repos for: {owner}");
+        debug!("[gitlab] Listing repos for: {owner}");
         let client = self.client_builder.build_async().await?;
 
         let endpoint = groups::projects::GroupProjects::builder()
@@ -140,7 +140,7 @@ impl RemoteAPI for GitLab {
         owner: &str,
         name: &str,
     ) -> Result<RemoteRepository<'static>> {
-        debug!("[gitlab] Get repo: {owner}/{name}");
+        debug!("[gitlab] Getting repo: {owner}/{name}");
         let id = format!("{owner}/{name}");
         let client = self.client_builder.build_async().await?;
 
@@ -167,7 +167,7 @@ impl RemoteAPI for GitLab {
         name: &str,
         pr: &PullRequest,
     ) -> Result<String> {
-        debug!("[gitlab] Create pull request: {owner}/{name}, pr: {pr:?}");
+        debug!("[gitlab] Creating pull request: {owner}/{name}, pr: {pr:?}");
 
         let client = self.client_builder.build_async().await?;
         let id = format!("{owner}/{name}");
@@ -197,7 +197,7 @@ impl RemoteAPI for GitLab {
     }
 
     async fn list_pull_requests(&self, opts: ListPullRequestsOptions) -> Result<Vec<PullRequest>> {
-        debug!("[gitlab] List pull requests: {opts:?}");
+        debug!("[gitlab] Listing pull requests: {opts:?}");
 
         let client = self.client_builder.build_async().await?;
         let id = format!("{}/{}", opts.owner, opts.name);
@@ -251,7 +251,7 @@ impl RemoteAPI for GitLab {
         name: &str,
         commit: &str,
     ) -> Result<Option<Action>> {
-        debug!("[gitlab] Get action: {owner}/{name}, commit: {commit}");
+        debug!("[gitlab] Getting action: {owner}/{name}, commit: {commit}");
 
         let client = self.client_builder.build_async().await?;
         let id = format!("{owner}/{name}");
@@ -310,7 +310,7 @@ impl RemoteAPI for GitLab {
                 status,
                 web_url: pipeline_job.web_url,
             };
-            debug!("[gitlab] Convert job: {job:?}");
+            debug!("[gitlab] Converting job: {job:?}");
             match stage_indexes.get(&pipeline_job.stage) {
                 Some(idx) => {
                     job_groups.get_mut(*idx).unwrap().jobs.push(job);
@@ -344,7 +344,7 @@ impl RemoteAPI for GitLab {
     }
 
     async fn get_job_log(&self, owner: &str, name: &str, id: u64) -> Result<String> {
-        debug!("[gitlab] Get job log: {owner}/{name}, job id: {id}");
+        debug!("[gitlab] Getting job log: {owner}/{name}, job id: {id}");
         let project = format!("{owner}/{name}");
         let client = self.client_builder.build_async().await?;
         let endpoint = jobs::JobTrace::builder().project(project).job(id).build()?;

@@ -30,7 +30,7 @@ impl Command for CreateTagCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run create tag command: {:?}", self);
+        debug!("[cmd] Running create tag command: {:?}", self);
 
         let tag = match UpdateTagRule::from_str(&self.tag) {
             Some(rule) => {
@@ -53,11 +53,11 @@ impl Command for CreateTagCommand {
         };
 
         ctx.git()
-            .execute(["tag", &tag], format!("Create tag {tag:?}"))?;
+            .execute(["tag", &tag], format!("Creating tag {tag:?}"))?;
 
         ctx.git().execute(
             ["push", "origin", &tag],
-            format!("Push tag {tag:?} to remote"),
+            format!("Pushing tag {tag:?} to remote"),
         )?;
 
         Ok(())

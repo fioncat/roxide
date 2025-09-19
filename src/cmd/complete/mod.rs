@@ -209,7 +209,7 @@ pub fn register_complete() -> Result<bool> {
     let ctx = ConfigContext::setup()?;
 
     let mut args = env::args().collect::<Vec<_>>();
-    debug!("[complete] Begin to handle completion, args: {args:?}");
+    debug!("[complete] Beginning to handle completion, args: {args:?}");
     if args.len() == 1 {
         debug!("[complete] No extra args, print init script");
         let binary = env::current_exe().context("failed to get current exe path")?;
@@ -289,7 +289,7 @@ fn complete_command(
     if let Some(subcommands) = cmd.subcommands {
         let items = subcommands.iter().map(|c| c.name.to_string()).collect();
         debug!(
-            "[complete] Complete subcommands for {:?}: {items:?}",
+            "[complete] Completing subcommands for {:?}: {items:?}",
             cmd.name
         );
         return Ok(CompleteResult::items(items));
@@ -326,7 +326,7 @@ fn complete_command(
 }
 
 fn complete_flag_name(cmp_args: Vec<CompleteArg>, args: Vec<String>) -> CompleteResult {
-    debug!("[complete] Complete flag name, args: {args:?}");
+    debug!("[complete] Completing flag name, args: {args:?}");
     let mut existing_flags = HashSet::new();
     for cmp_arg in cmp_args.iter() {
         if cmp_arg.array {
@@ -348,7 +348,7 @@ fn complete_flag_name(cmp_args: Vec<CompleteArg>, args: Vec<String>) -> Complete
             excludes.insert(arg);
         }
     }
-    debug!("[complete] Exclude flags: {excludes:?}");
+    debug!("[complete] Excluded flags: {excludes:?}");
 
     let items: Vec<String> = cmp_args
         .into_iter()
@@ -370,7 +370,7 @@ fn complete_flag_name(cmp_args: Vec<CompleteArg>, args: Vec<String>) -> Complete
             None
         })
         .collect();
-    debug!("[complete] Complete flag names: {items:?}");
+    debug!("[complete] Completed flag names: {items:?}");
     CompleteResult::items(items)
 }
 
@@ -380,7 +380,9 @@ fn complete_flag_value(
     current: String,
     mut args: Vec<String>,
 ) -> Result<CompleteResult> {
-    debug!("[complete] Complete flag value for {cmp_arg:?}, current: {current:?}, args: {args:?}");
+    debug!(
+        "[complete] Completing flag value for {cmp_arg:?}, current: {current:?}, args: {args:?}"
+    );
     args.pop(); // remove flag
 
     // To check and collect if we have the same flag value before
@@ -419,7 +421,7 @@ fn complete_flag_value(
         current,
         args: values,
     })?;
-    debug!("[complete] Complete flag result: {result:?}");
+    debug!("[complete] Completed flag values: {result:?}");
     Ok(result)
 }
 
@@ -429,7 +431,7 @@ fn complete_arg(
     current: String,
     args: Vec<String>,
 ) -> Result<CompleteResult> {
-    debug!("[complete] Complete arg, current: {current:?}, args: {args:?}");
+    debug!("[complete] Completing arg, current: {current:?}, args: {args:?}");
 
     // Collect all flags with values
     let mut flags_with_values: HashSet<String> = HashSet::new();
@@ -492,7 +494,7 @@ fn complete_arg(
         current,
         args: filtered,
     })?;
-    debug!("[complete] Complete arg result: {result:?}");
+    debug!("[complete] Completed arg result: {result:?}");
     Ok(result)
 }
 

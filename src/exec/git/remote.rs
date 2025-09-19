@@ -41,18 +41,18 @@ impl Remote {
     }
 
     pub fn list(cmd: GitCmd) -> Result<Vec<Self>> {
-        debug!("[remote] List remotes, cmd: {cmd:?}");
-        let lines = cmd.lines(["remote"], "List remote")?;
+        debug!("[remote] Listing remotes, cmd: {cmd:?}");
+        let lines = cmd.lines(["remote"], "Listing remote")?;
         let remotes = lines.into_iter().map(Remote).collect::<Vec<_>>();
         debug!("[remote] Remotes: {remotes:?}");
         Ok(remotes)
     }
 
     pub fn get_url(&self, cmd: GitCmd) -> Result<String> {
-        debug!("[remote] Get url for remote {:?}", self.as_str());
+        debug!("[remote] Getting url for remote {:?}", self.as_str());
         let url = cmd.output(
             ["remote", "get-url", self.as_str()],
-            format!("Get url for remote {}", self.as_str()),
+            format!("Getting url for remote {}", self.as_str()),
         )?;
         if url.is_empty() {
             bail!("empty url for remote {:?}", self.as_str());
@@ -62,7 +62,7 @@ impl Remote {
     }
 
     pub fn get_target(&self, cmd: GitCmd, branch: &str) -> Result<String> {
-        debug!("[remote] Get target for {:?}, branch: {branch}", self);
+        debug!("[remote] Getting target for {:?}, branch: {branch}", self);
         let branch = if branch.is_empty() {
             let default_branch = Branch::remote_default(cmd, self.as_str())?;
             Cow::Owned(default_branch)
@@ -73,7 +73,7 @@ impl Remote {
         let target = format!("{}/{branch}", self.as_str());
         cmd.execute(
             ["fetch", self.as_str(), branch.as_ref()],
-            format!("Fetch target {target}"),
+            format!("Fetching target {target}"),
         )?;
         debug!("[remote] Target: {target}");
         Ok(target)
@@ -91,7 +91,7 @@ impl Remote {
                 "--oneline",
                 &compare,
             ],
-            format!("Get commits between {target}"),
+            format!("Getting commits between {target}"),
         )?;
         let mut commits = Vec::with_capacity(lines.len());
         for line in lines {

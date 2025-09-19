@@ -23,7 +23,7 @@ impl Command for ListBranchCommand {
     }
 
     async fn run(self, mut ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list branch command: {:?}", self);
+        debug!("[cmd] Running list branch command: {:?}", self);
         ctx.mute();
 
         let branches = Branch::list(ctx.git())?;

@@ -43,7 +43,7 @@ impl Command for DiskUsageCommand {
     }
 
     async fn run(self, _: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run disk-usage command: {:?}", self);
+        debug!("[cmd] Running disk-usage command: {:?}", self);
 
         let path = match self.path {
             Some(path) => PathBuf::from(path),

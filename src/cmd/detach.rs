@@ -19,7 +19,7 @@ impl Command for DetachCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run detach command: {:?}", self);
+        debug!("[cmd] Running detach command: {:?}", self);
         ctx.lock()?;
 
         if ctx.current_dir.starts_with(&ctx.cfg.workspace) {
@@ -27,7 +27,7 @@ impl Command for DetachCommand {
         }
 
         let repo = get_current_repo(&ctx)?;
-        debug!("[cmd] Detach repo: {repo:?}");
+        debug!("[cmd] Detaching repo: {repo:?}");
 
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().delete(&repo))?;

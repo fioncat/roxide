@@ -24,7 +24,7 @@ impl Command for ListHookHistoryCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list hook_history command: {:?}", self);
+        debug!("[cmd] Running list hook_history command: {:?}", self);
 
         let repo = get_current_repo(&ctx)?;
         let db = ctx.get_db()?;

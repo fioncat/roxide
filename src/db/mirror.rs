@@ -158,7 +158,7 @@ CREATE INDEX IF NOT EXISTS idx_mirror_last_visited_at ON mirror (last_visited_at
 "#;
 
 fn ensure_table(tx: &Transaction) -> Result<()> {
-    debug!("[db] Ensure mirror table exists");
+    debug!("[db] Ensuring mirror table exists");
     tx.execute_batch(TABLE_SQL)?;
     Ok(())
 }
@@ -177,7 +177,7 @@ INSERT INTO mirror (
 "#;
 
 fn insert(tx: &Transaction, mirror: &Mirror) -> Result<u64> {
-    debug!("[db] Insert mirror: {mirror:?}");
+    debug!("[db] Inserting mirror: {mirror:?}");
     tx.execute(
         INSERT_SQL,
         params![
@@ -201,7 +201,7 @@ WHERE remote = ?1 AND owner = ?2 AND name = ?3
 "#;
 
 fn get(tx: &Transaction, remote: &str, owner: &str, name: &str) -> Result<Option<Mirror>> {
-    debug!("[db] Get mirror by full name: {remote}/{owner}/{name}");
+    debug!("[db] Getting mirror by full name: {remote}/{owner}/{name}");
     let mirror = tx
         .query_row(GET_SQL, params![remote, owner, name], Mirror::from_row)
         .optional()?;
@@ -215,7 +215,7 @@ WHERE id = ?1
 "#;
 
 fn update(tx: &Transaction, mirror: &Mirror) -> Result<()> {
-    debug!("[db] Update mirror: {mirror:?}");
+    debug!("[db] Updating mirror: {mirror:?}");
     tx.execute(
         UPDATE_SQL,
         params![mirror.id, mirror.last_visited_at, mirror.visited_count,],
@@ -228,7 +228,7 @@ DELETE FROM mirror WHERE id = ?1
 "#;
 
 fn delete(tx: &Transaction, id: u64) -> Result<()> {
-    debug!("[db] Delete mirror: {id}");
+    debug!("[db] Deleting mirror: {id}");
     tx.execute(DELETE_SQL, params![id])?;
     Ok(())
 }
@@ -238,7 +238,7 @@ DELETE FROM mirror WHERE repo_id = ?1
 "#;
 
 fn delete_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<()> {
-    debug!("[db] Delete mirror by repo_id: {repo_id}");
+    debug!("[db] Deleting mirror by repo_id: {repo_id}");
     tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id])?;
     Ok(())
 }
@@ -250,7 +250,7 @@ ORDER BY last_visited_at DESC
 "#;
 
 fn query_all(tx: &Transaction) -> Result<Vec<Mirror>> {
-    debug!("[db] Query all mirrors");
+    debug!("[db] Querying all mirrors");
     let mut stmt = tx.prepare(QUERY_ALL_SQL)?;
     let rows = stmt.query_map([], Mirror::from_row)?;
     let mut results = Vec::new();
@@ -269,7 +269,7 @@ ORDER BY last_visited_at DESC
 "#;
 
 fn query_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<Vec<Mirror>> {
-    debug!("[db] Query mirrors by repo_id: {repo_id}");
+    debug!("[db] Querying mirrors by repo_id: {repo_id}");
     let mut stmt = tx.prepare(QUERY_BY_REPO_ID_SQL)?;
     let rows = stmt.query_map(params![repo_id], Mirror::from_row)?;
     let mut results = Vec::new();

@@ -40,7 +40,7 @@ impl WaitActionArgs {
         let mut action = self.wait_create(repo, api, &commit).await?;
         let mut reported: usize = 0;
         let mut has_title = false;
-        debug!("[wait_action] Start waiting for action jobs to complete");
+        debug!("[wait_action] Starting to wait for action jobs to complete");
         loop {
             let mut runnings: Vec<(String, Vec<String>)> = Vec::new();
             for group in action.job_groups.iter() {
@@ -67,7 +67,7 @@ impl WaitActionArgs {
             if runnings.is_empty() {
                 debug!("[wait_action] No running jobs, action complete");
                 if has_title {
-                    debug!("[wait_action] Action complete, removing title line");
+                    debug!("[wait_action] Action completed, removing title line");
                     cursor_up!();
                 }
                 break;
@@ -92,7 +92,7 @@ impl WaitActionArgs {
             action = api.get_action(&repo.owner, &repo.name, &commit).await?;
         }
 
-        debug!("[wait_action] Action jobs complete, action: {action:?}");
+        debug!("[wait_action] Action jobs completed, action: {action:?}");
         Ok(action)
     }
 

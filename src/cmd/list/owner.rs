@@ -33,7 +33,7 @@ impl Command for ListOwnerCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list owner command: {:?}", self);
+        debug!("[cmd] Running list owner command: {:?}", self);
 
         let limit = self.list.limit();
         let text = if self.disk_usage.enable {

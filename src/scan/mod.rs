@@ -59,7 +59,7 @@ struct Dispatcher<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTas
 
 impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTask<T>>> Dispatcher<T, I> {
     fn wait(&mut self) -> Result<()> {
-        debug!("[scan] Dispatcher start");
+        debug!("[scan] Dispatcher starting");
         loop {
             self.dispatch()?;
             if self.dispatched == 0 {
@@ -72,7 +72,7 @@ impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTask<T>>> Dispat
     fn dispatch(&mut self) -> Result<()> {
         if let Some(tasks) = self.bootstrap_tasks.take() {
             for task in tasks {
-                debug!("[scan] Dispatcher: send bootstrap task {task:?} to workers");
+                debug!("[scan] Dispatcher: sending bootstrap task {task:?} to workers");
                 self.tasks.send(task).unwrap();
                 self.dispatched += 1;
             }
@@ -82,7 +82,7 @@ impl<T: Send + Sync + Clone + Debug, I: IntoIterator<Item = ScanTask<T>>> Dispat
         self.dispatched -= 1;
 
         for task in sub_tasks {
-            debug!("[scan] Dispatcher: send sub task {task:?} to workers");
+            debug!("[scan] Dispatcher: sending sub task {task:?} to workers");
             self.tasks.send(task).unwrap();
             self.dispatched += 1;
         }
@@ -113,7 +113,7 @@ struct Worker<T: Send + Sync + Clone + Debug> {
 
 impl<T: Send + Sync + Clone + Debug> Worker<T> {
     fn run(&mut self) {
-        debug!("[scan] Worker {} start", self.index);
+        debug!("[scan] Worker {} starting", self.index);
         loop {
             select! {
                 recv(self.tasks) -> task => {
@@ -122,7 +122,7 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
                     self.results.send(result).unwrap();
                 },
                 recv(self.stop) -> _ => {
-                    debug!("[scan] Worker {} stop", self.index);
+                    debug!("[scan] Worker {} stopping", self.index);
                     return;
                 },
             }
@@ -131,7 +131,7 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
 
     fn handle(&self, task: ScanTask<T>) -> Result<Vec<ScanTask<T>>> {
         debug!(
-            "[scan] Worker {} begin to handle task: {task:?}",
+            "[scan] Worker {} beginning to handle task: {task:?}",
             self.index
         );
         if !task.path.exists() {
@@ -140,7 +140,7 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
 
         if task.metadata.is_file() {
             debug!(
-                "[scan] Worker {}: task is a file, handle it directly",
+                "[scan] Worker {}: task is a file, handling it directly",
                 self.index
             );
             if self.compact {
@@ -154,7 +154,10 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
 
         if !task.metadata.is_dir() {
             // TODO: Handle symlink
-            debug!("[scan] Worker {}: task is a symlink, skip it", self.index);
+            debug!(
+                "[scan] Worker {}: task is a symlink, skipping it",
+                self.index
+            );
             return Ok(vec![]);
         }
 
@@ -184,7 +187,7 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
             if !sub_metadata.is_dir() {
                 // TODO: Handle symlink
                 debug!(
-                    "[scan] Worker {}: task sub entry {:?} is a symlink, skip",
+                    "[scan] Worker {}: task sub entry {:?} is a symlink, skipping",
                     self.index,
                     sub_path.display()
                 );
@@ -219,13 +222,13 @@ impl<T: Send + Sync + Clone + Debug> Worker<T> {
 
         if self.compact {
             debug!(
-                "[scan] Worker {} is in compact mode, handle files {sub_files:?} directly",
+                "[scan] Worker {} is in compact mode, handling files {sub_files:?} directly",
                 self.index
             );
             self.handler.handle_files(sub_files, task.data.clone())?;
         } else {
             debug!(
-                "[scan] Worker {} not in compact mode, send files {sub_files:?} to dispatcher to let other workers handle",
+                "[scan] Worker {} not in compact mode, sending files {sub_files:?} to dispatcher to let other workers handle",
                 self.index
             );
             sub_tasks.extend(sub_files.into_iter().map(|(path, metadata)| ScanTask {
@@ -260,7 +263,7 @@ where
     H: ScanHandler<T> + Debug + 'static,
     T: Send + Sync + Clone + Debug + 'static,
 {
-    debug!("[scan] Begin to scan tasks: {tasks:?}");
+    debug!("[scan] Beginning to scan tasks: {tasks:?}");
     let handler = Arc::new(handler);
 
     let worker_count = num_cpus::get();

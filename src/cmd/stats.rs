@@ -35,7 +35,7 @@ impl Command for StatsCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run stats command: {:?}", self);
+        debug!("[cmd] Running stats command: {:?}", self);
 
         let path = match self.path {
             Some(path) => PathBuf::from(path),

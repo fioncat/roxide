@@ -43,7 +43,7 @@ impl Command for ListRepoCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list repo command: {:?}", self);
+        debug!("[cmd] Running list repo command: {:?}", self);
 
         let selector = RepoSelector::new(&ctx, &self.select_repo);
         let limit = self.list.limit();

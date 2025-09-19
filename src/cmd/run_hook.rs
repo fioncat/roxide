@@ -46,7 +46,7 @@ impl Command for RunHookCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run run command: {:?}", self);
+        debug!("[cmd] Running run command: {:?}", self);
 
         if !self.recursive
             && let Some(repo) = get_current_repo_optional(&ctx)?
@@ -120,7 +120,7 @@ impl RunHookCommand {
             tasks.push(task);
         }
 
-        let results = batch::run("Run hook", tasks).await?;
+        let results = batch::run("Running hook", "Hook", tasks).await?;
         let results = results
             .into_iter()
             .filter(|res| !res.results.is_empty())

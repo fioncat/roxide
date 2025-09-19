@@ -20,7 +20,7 @@ pub async fn disk_usage(path: PathBuf, depth: usize, ignore: Ignore) -> Result<D
         ignore,
         usage: Mutex::new(DiskUsage::default()),
     };
-    outputln!("Begin to scan files");
+    outputln!("Beginning to scan files");
     let start = Instant::now();
     let result = scan_files(vec![path], handler, true).await;
     cursor_up!();

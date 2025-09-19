@@ -31,7 +31,7 @@ impl Command for ListJobCommand {
     }
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
-        debug!("[cmd] Run list job command: {:?}", self);
+        debug!("[cmd] Running list job command: {:?}", self);
 
         let repo = get_current_repo(&ctx)?;
         let api = ctx.get_api(&repo.remote, false)?;

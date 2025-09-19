@@ -168,7 +168,7 @@ impl Cmd {
         if output::get_debug().is_some() {
             full = Some(self.full());
             debug!(
-                "[exec] Begin to execute command: {}",
+                "[exec] Beginning to execute command: {}",
                 full.as_ref().unwrap()
             );
         }
@@ -179,7 +179,7 @@ impl Cmd {
                 if full.is_none() {
                     full = Some(self.full());
                 }
-                info!("Execute: {}", full.unwrap());
+                info!("Executing: {}", full.unwrap());
             }
             CmdHint::Message(ref message) => info!("{message}"),
             CmdHint::None => {
@@ -210,7 +210,7 @@ impl Cmd {
         };
 
         if let Some(ref input) = self.input {
-            debug!("[exec] Write input to command: {input:?}");
+            debug!("[exec] Writing input to command: {input:?}");
             let handle = child.stdin.as_mut().unwrap();
             if let Err(e) = write!(handle, "{input}") {
                 return Err(e)
