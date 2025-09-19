@@ -91,7 +91,7 @@ impl Remote {
                 "--oneline",
                 &compare,
             ],
-            format!("Get commits between {target}"),
+            format!("Getting commits between {target}"),
         )?;
         let mut commits = Vec::with_capacity(lines.len());
         for line in lines {
