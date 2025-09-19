@@ -60,13 +60,13 @@ where
     }
     if path.is_file() {
         if !ctx.is_mute() {
-            info!("Remove file {}", path.display());
+            info!("Removing file {}", path.display());
         }
         fs::remove_file(path).context("remove file")?;
         return Ok(());
     }
     if !ctx.is_mute() {
-        info!("Remove dir {}", path.display());
+        info!("Removing dir {}", path.display());
     }
     fs::remove_dir_all(path).context("remove directory")?;
 
@@ -84,7 +84,7 @@ where
                     return Ok(());
                 }
                 if !ctx.is_mute() {
-                    info!("Remove dir {}", dir.display());
+                    info!("Removing dir {}", dir.display());
                 }
                 fs::remove_dir(dir).context("remove directory")?;
                 match dir.parent() {
