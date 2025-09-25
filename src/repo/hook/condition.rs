@@ -89,7 +89,6 @@ mod tests {
     use std::fs;
 
     use crate::config::context;
-    use crate::db::hook_history::HookHistory;
     use crate::db::repo::Repository;
 
     use super::*;
@@ -239,16 +238,8 @@ mod tests {
                 .unwrap()
         );
         let db = ctx.get_db().unwrap();
-        db.with_transaction(|tx| {
-            tx.hook_history().update(&HookHistory {
-                id: 1,
-                repo_id: op.repo().id,
-                name: "spell-check".to_string(),
-                success: true,
-                time: now(),
-            })
-        })
-        .unwrap();
+        db.with_transaction(|tx| tx.hook_history().update(1, true, now()))
+            .unwrap();
 
         assert!(
             !cond
