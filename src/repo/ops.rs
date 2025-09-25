@@ -589,7 +589,10 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
         let db = self.ctx.get_db()?;
         db.with_transaction(
             |tx| match tx.hook_history().get(history.repo_id, &history.name)? {
-                Some(_) => tx.hook_history().update(&history),
+                Some(current) => {
+                    tx.hook_history()
+                        .update(current.id, history.success, history.time)
+                }
                 None => {
                     tx.hook_history().insert(&history)?;
                     Ok(())

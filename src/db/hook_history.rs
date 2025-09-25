@@ -73,8 +73,8 @@ impl<'a> HookHistoryHandle<'a> {
         get(self.tx, repo_id, name)
     }
 
-    pub fn update(&self, history: &HookHistory) -> Result<()> {
-        update(self.tx, history)
+    pub fn update(&self, id: u64, success: bool, time: u64) -> Result<()> {
+        update(self.tx, id, success, time)
     }
 
     pub fn delete(&self, id: u64) -> Result<()> {
@@ -154,12 +154,9 @@ SET success = ?2, time = ?3
 WHERE id = ?1
 "#;
 
-fn update(tx: &Transaction, history: &HookHistory) -> Result<()> {
-    debug!("[db] Updating hook_history: {history:?}");
-    tx.execute(
-        UPDATE_SQL,
-        params![history.id, history.success, history.time],
-    )?;
+fn update(tx: &Transaction, id: u64, success: bool, time: u64) -> Result<()> {
+    debug!("[db] Updating hook_history for {id}, success: {success}, time: {time}");
+    tx.execute(UPDATE_SQL, params![id, success, time])?;
     Ok(())
 }
 
@@ -293,7 +290,7 @@ pub mod tests {
         let mut history = get(&tx, 1, "spell-check").unwrap().unwrap();
         history.success = false;
         history.time = 200;
-        update(&tx, &history).unwrap();
+        update(&tx, 1, false, 200).unwrap();
         let updated_history = get(&tx, 1, "spell-check").unwrap().unwrap();
         assert_eq!(updated_history, history);
     }
