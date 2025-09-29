@@ -435,7 +435,7 @@ impl ConvertWorkflowTask {
                         commit_id: workflow_run.head_sha,
                         commit_message: workflow_run.head_commit.message,
                         user: workflow_run.head_commit.author.name,
-                        email: workflow_run.head_commit.author.email,
+                        email: workflow_run.head_commit.author.email.unwrap_or_default(),
                         job_groups: vec![],
                     };
                     action_share.replace(action);
