@@ -32,6 +32,7 @@ impl AesCipher {
 
         let key: [u8; 32] =
             pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), &salt, Self::PBKDF2_ROUNDS);
+        #[allow(deprecated)]
         let key = Key::<Aes256Gcm>::from_slice(&key);
         let cipher = Aes256Gcm::new(key);
 
@@ -60,9 +61,11 @@ impl AesCipher {
 
         let key: [u8; 32] =
             pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), salt, Self::PBKDF2_ROUNDS);
+        #[allow(deprecated)]
         let key = Key::<Aes256Gcm>::from_slice(&key);
         let cipher = Aes256Gcm::new(key);
 
+        #[allow(deprecated)]
         let nonce = Nonce::<Aes256Gcm>::from_slice(nonce);
 
         Ok(Self {

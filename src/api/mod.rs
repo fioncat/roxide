@@ -1,6 +1,7 @@
 mod cache;
 mod github;
 mod gitlab;
+mod rename;
 
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -246,6 +247,13 @@ pub fn new(
             expire,
             force: force_cache,
             now,
+        });
+    }
+
+    if remote.rename_ctx.has() {
+        api = Arc::new(rename::Rename {
+            upstream: api,
+            rename_ctx: remote.rename_ctx.clone(),
         });
     }
 

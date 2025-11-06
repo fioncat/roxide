@@ -374,6 +374,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_sha256_writer() {
         let size = 700000;
         let random_content = generate_random_string(size);

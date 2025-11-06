@@ -7,7 +7,7 @@ use rusqlite::types::Value;
 use rusqlite::{OptionalExtension, Row, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
-use crate::config::remote::OwnerConfigRef;
+use crate::config::remote::{OwnerConfigRef, RemoteConfig};
 use crate::debug;
 use crate::format::{format_time, now};
 use crate::term::list::ListItem;
@@ -66,8 +66,10 @@ impl Repository {
             .join(&self.name)
     }
 
-    pub fn get_clone_url(&self, domain: &str, ssh: bool) -> String {
-        Self::get_clone_url_raw(domain, &self.owner, &self.name, ssh)
+    pub fn get_clone_url(&self, remote: &RemoteConfig, ssh: bool) -> Option<String> {
+        let domain = remote.clone.as_ref()?;
+        let (owner, name) = remote.get_original(&self.owner, &self.name);
+        Some(Self::get_clone_url_raw(domain, owner, name, ssh))
     }
 
     pub fn get_clone_url_raw(domain: &str, owner: &str, name: &str, ssh: bool) -> String {

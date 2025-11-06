@@ -349,7 +349,15 @@ impl<'a, 'b> RepoSelector<'a, 'b> {
         let (owner, name) = split_owner(path);
 
         debug!("[select] Parsed owner: {owner:?}, name: {name:?}");
-        let repo = self.get_or_create(&remote.name, &owner, &name)?;
+
+        // We need to convert the owner and name in the URL to renamed name.
+        // Note that only the URL requires this processing, as URLs are typically directly
+        // copied by users from the browser and their owner and name are usually in their
+        // original form.
+        let (renamed_owner, renamed_name) = remote.get_renamed(&owner, &name);
+        debug!("[select] Renamed owner: {renamed_owner:?}, renamed name: {renamed_name:?}");
+
+        let repo = self.get_or_create(&remote.name, renamed_owner, renamed_name)?;
         debug!("[select] Selected repo: {repo:?}");
         Ok(repo)
     }
@@ -1113,6 +1121,31 @@ mod tests {
                 url: "git@git.mydomain.com:fioncat/someproject.git",
                 expect: "gitlab:fioncat/someproject",
                 new_created: false,
+                should_ok: true,
+            },
+            // Rename case
+            Case {
+                url: "https://git.mydomain.com/torpedo/cube-deploy.git",
+                expect: "gitlab:cube/cube-deploy",
+                new_created: true,
+                should_ok: true,
+            },
+            Case {
+                url: "https://git.mydomain.com/kubernetes/kubernetes-sigs/-/tree/main/deploy",
+                expect: "gitlab:k8s/k8s-sigs",
+                new_created: true,
+                should_ok: true,
+            },
+            Case {
+                url: "https://git.mydomain.com/kubernetes/kubectl/-/tree/main/deploy",
+                expect: "gitlab:k8s/kubectl",
+                new_created: true,
+                should_ok: true,
+            },
+            Case {
+                url: "https://git.mydomain.com/kubernetes/kubernetes/-/tree/main/deploy",
+                expect: "gitlab:k8s/k8s",
+                new_created: true,
                 should_ok: true,
             },
         ];

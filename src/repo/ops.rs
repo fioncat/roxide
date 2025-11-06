@@ -753,8 +753,7 @@ impl<'a, 'b> RepoOperator<'a, 'b> {
     }
 
     pub fn get_clone_url(&self) -> Option<String> {
-        let domain = self.remote.clone.as_ref()?;
-        Some(self.repo.get_clone_url(domain, self.owner.ssh))
+        self.repo.get_clone_url(self.remote, self.owner.ssh)
     }
 
     pub fn path(&self) -> &Path {

@@ -23,6 +23,12 @@ pub struct RemoteConfig {
     pub default: Option<OwnerConfig>,
 
     #[serde(default)]
+    pub rename: HashMap<String, RenameConfig>,
+
+    #[serde(skip)]
+    pub rename_ctx: RenameContext,
+
+    #[serde(default)]
     pub owners: HashMap<String, OwnerConfig>,
 }
 
@@ -47,6 +53,23 @@ pub enum Provider {
     GitHub,
     #[serde(rename = "gitlab")]
     GitLab,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct RenameConfig {
+    pub name: Option<String>,
+
+    #[serde(default)]
+    pub repos: HashMap<String, String>,
+
+    #[serde(skip)]
+    pub repos_reverse: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RenameContext {
+    owners: HashMap<String, RenameConfig>,
+    owners_reverse: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -137,6 +160,14 @@ impl RemoteConfig {
         owner_ref
     }
 
+    pub fn get_original<'a>(&'a self, owner: &'a str, name: &'a str) -> (&'a str, &'a str) {
+        self.rename_ctx.get_original(owner, name)
+    }
+
+    pub fn get_renamed<'a>(&'a self, owner: &'a str, name: &'a str) -> (&'a str, &'a str) {
+        self.rename_ctx.get_renamed(owner, name)
+    }
+
     pub(super) fn validate(&mut self) -> Result<()> {
         debug!("[config] Validating remote config: {:?}", self);
         if self.clone.is_some() {
@@ -171,6 +202,10 @@ impl RemoteConfig {
                 .validate()
                 .with_context(|| format!("validate owner {name:?}"))?;
         }
+
+        let rename_ctx =
+            RenameContext::new(take(&mut self.rename)).context("validate rename config")?;
+        self.rename_ctx = rename_ctx;
 
         debug!("[config] Remote validated: {:?}", self);
         Ok(())
@@ -210,6 +245,78 @@ impl RemoteAPI {
         }
 
         Ok(())
+    }
+}
+
+impl RenameConfig {
+    pub fn get_original_repo<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+        self.repos_reverse.get(name).map(|s| s.as_str())
+    }
+
+    pub fn get_renamed_repo<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+        self.repos.get(name).map(|s| s.as_str())
+    }
+}
+
+impl RenameContext {
+    fn new(mut rename: HashMap<String, RenameConfig>) -> Result<Self> {
+        let mut owners_reverse = HashMap::new();
+        for (original_owner, cfg) in rename.iter_mut() {
+            let renamed_owner = match cfg.name.as_ref() {
+                Some(name) => name,
+                None => original_owner,
+            };
+            if owners_reverse.contains_key(renamed_owner) {
+                bail!("duplicate renamed owner name: {renamed_owner:?}");
+            }
+            owners_reverse.insert(renamed_owner.clone(), original_owner.clone());
+
+            for (original_repo, renamed_repo) in cfg.repos.iter() {
+                if cfg.repos_reverse.contains_key(renamed_repo) {
+                    bail!(
+                        "duplicate renamed repo name: {renamed_repo:?} for owner {original_owner:?}"
+                    );
+                }
+                cfg.repos_reverse
+                    .insert(renamed_repo.clone(), original_repo.clone());
+            }
+        }
+        Ok(Self {
+            owners: rename,
+            owners_reverse,
+        })
+    }
+
+    pub fn has(&self) -> bool {
+        !self.owners.is_empty()
+    }
+
+    pub fn get_original<'a>(&'a self, owner: &'a str, name: &'a str) -> (&'a str, &'a str) {
+        let (original_owner, cfg) = self.get_original_owner(owner);
+        let original_name = cfg
+            .map(|cfg| cfg.get_original_repo(name).unwrap_or(name))
+            .unwrap_or(name);
+        (original_owner, original_name)
+    }
+
+    pub fn get_original_owner<'a>(&'a self, owner: &'a str) -> (&'a str, Option<&'a RenameConfig>) {
+        match self.owners_reverse.get(owner) {
+            Some(original_owner) => match self.owners.get(original_owner) {
+                Some(cfg) => (original_owner.as_str(), Some(cfg)),
+                None => (original_owner.as_str(), None),
+            },
+            None => (owner, None),
+        }
+    }
+
+    pub fn get_renamed<'a>(&'a self, owner: &'a str, name: &'a str) -> (&'a str, &'a str) {
+        match self.owners.get(owner) {
+            Some(cfg) => match cfg.repos.get(name) {
+                Some(renamed_name) => (cfg.name.as_deref().unwrap_or(owner), renamed_name.as_str()),
+                None => (cfg.name.as_deref().unwrap_or(owner), name),
+            },
+            None => (owner, name),
+        }
     }
 }
 
@@ -285,6 +392,8 @@ pub mod tests {
                     email: Some("lazycat7706@gmail.com".to_string()),
                     ..Default::default()
                 }),
+                rename: HashMap::new(),
+                rename_ctx: RenameContext::default(),
                 owners: {
                     let mut owners = HashMap::new();
                     owners.insert(
@@ -325,8 +434,33 @@ pub mod tests {
                     sync: true,
                     pin: true,
                     ssh: true,
-                    ..Default::default()
                 }),
+                rename: HashMap::new(),
+                rename_ctx: RenameContext::new({
+                    let mut map = HashMap::new();
+                    map.insert(
+                        "torpedo".to_string(),
+                        RenameConfig {
+                            name: Some("cube".to_string()),
+                            ..Default::default()
+                        },
+                    );
+                    map.insert(
+                        "kubernetes".to_string(),
+                        RenameConfig {
+                            name: Some("k8s".to_string()),
+                            repos: {
+                                let mut repos = HashMap::new();
+                                repos.insert("kubernetes".to_string(), "k8s".to_string());
+                                repos.insert("kubernetes-sigs".to_string(), "k8s-sigs".to_string());
+                                repos
+                            },
+                            ..Default::default()
+                        },
+                    );
+                    map
+                })
+                .unwrap(),
                 owners: HashMap::new(),
             },
             RemoteConfig {
@@ -335,6 +469,8 @@ pub mod tests {
                 clone: None,
                 api: None,
                 default: None,
+                rename: HashMap::new(),
+                rename_ctx: RenameContext::default(),
                 owners: HashMap::new(),
             },
         ]
