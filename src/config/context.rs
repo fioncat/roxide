@@ -467,10 +467,7 @@ pub mod tests {
         let hook_runs = config::hook::tests::expect_hook_runs();
         let hooks = config::hook::tests::expect_hooks();
 
-        let mut remotes = config::remote::tests::expect_remotes();
-        for remote in remotes.iter_mut() {
-            remote.validate().unwrap();
-        }
+        let remotes = config::remote::tests::expect_remotes();
 
         let mut cfg = Config {
             workspace: format!("{}", workspace.display()),

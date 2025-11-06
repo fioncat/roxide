@@ -14,3 +14,11 @@ email = "wenqian@mydomain.com"
 sync = true
 pin = true
 ssh = true
+
+[rename."torpedo"]
+name = "cube"
+
+[rename."kubernetes"]
+name = "k8s"
+repos."kubernetes" = "k8s"
+repos."kubernetes-sigs" = "k8s-sigs"
