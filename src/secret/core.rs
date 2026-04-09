@@ -296,8 +296,7 @@ mod tests {
     use std::io::Cursor;
     use std::path::Path;
 
-    use rand::TryRngCore;
-    use rand::rngs::OsRng;
+    use rand::Rng;
 
     use super::*;
 
@@ -305,10 +304,10 @@ mod tests {
         const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
         let mut result = String::with_capacity(length);
-        let mut rng = OsRng;
+        let mut rng = rand::rng();
 
         for _ in 0..length {
-            let idx = (rng.try_next_u32().unwrap() as usize) % CHARSET.len();
+            let idx = (rng.next_u32() as usize) % CHARSET.len();
             result.push(CHARSET[idx] as char);
         }
 

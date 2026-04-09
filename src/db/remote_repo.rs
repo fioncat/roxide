@@ -40,6 +40,7 @@ impl<'a> RemoteRepository<'a> {
             }),
             _ => None,
         };
+        let expire_at: i64 = row.get(8)?;
         Ok(Self {
             remote: row.get(0)?,
             owner: row.get(1)?,
@@ -47,7 +48,7 @@ impl<'a> RemoteRepository<'a> {
             default_branch: row.get(3)?,
             web_url: row.get(4)?,
             upstream,
-            expire_at: row.get(8)?,
+            expire_at: expire_at as u64,
         })
     }
 }
@@ -133,7 +134,7 @@ fn insert(tx: &Transaction, repo: &RemoteRepository) -> Result<()> {
             repo.upstream.as_ref().map(|u| &u.owner),
             repo.upstream.as_ref().map(|u| &u.name),
             repo.upstream.as_ref().map(|u| &u.default_branch),
-            repo.expire_at
+            repo.expire_at as i64
         ],
     )?;
     Ok(())

@@ -142,8 +142,10 @@ impl Repository {
     }
 
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        let id: i64 = row.get(0)?;
+        let last_visited_at: i64 = row.get(9)?;
         Ok(Self {
-            id: row.get(0)?,
+            id: id as u64,
             remote: row.get(1)?,
             owner: row.get(2)?,
             name: row.get(3)?,
@@ -152,7 +154,7 @@ impl Repository {
             commit: row.get(6)?,
             pin: row.get(7)?,
             sync: row.get(8)?,
-            last_visited_at: row.get(9)?,
+            last_visited_at: last_visited_at as u64,
             visited_count: row.get(10)?,
             new_created: false,
         })
@@ -363,7 +365,7 @@ fn insert(tx: &Transaction, repo: &Repository) -> Result<u64> {
             repo.commit,
             repo.pin,
             repo.sync,
-            repo.last_visited_at,
+            repo.last_visited_at as i64,
             repo.visited_count,
         ],
     )?;
@@ -392,7 +394,9 @@ WHERE id = ?1
 fn get_by_id(tx: &Transaction, id: u64) -> Result<Option<Repository>> {
     debug!("[db] Getting repo by id: {id}");
     let mut stmt = tx.prepare(GET_BY_ID_SQL)?;
-    let repo = stmt.query_row([id], Repository::from_row).optional()?;
+    let repo = stmt
+        .query_row([id as i64], Repository::from_row)
+        .optional()?;
     debug!("[db] Result: {repo:?}");
     Ok(repo)
 }
@@ -459,8 +463,8 @@ fn update(tx: &Transaction, repo: &Repository) -> Result<()> {
     tx.execute(
         UPDATE_SQL,
         params![
-            repo.id,
-            repo.last_visited_at,
+            repo.id as i64,
+            repo.last_visited_at as i64,
             repo.visited_count,
             repo.pin,
             repo.sync,
@@ -475,7 +479,7 @@ UPDATE repo SET `commit` = ?2 WHERE id = ?1
 
 fn update_commit(tx: &Transaction, id: u64, commit: Option<&str>) -> Result<()> {
     debug!("[db] Updating repo commit, id: {id}, commit: {commit:?}");
-    tx.execute(UPDATE_COMMIT_SQL, params![id, commit])?;
+    tx.execute(UPDATE_COMMIT_SQL, params![id as i64, commit])?;
     Ok(())
 }
 
@@ -485,7 +489,7 @@ UPDATE repo SET language = ?2 WHERE id = ?1
 
 fn update_language(tx: &Transaction, id: u64, language: Option<&str>) -> Result<()> {
     debug!("[db] Updating repo language, id: {id}, language: {language:?}");
-    tx.execute(UPDATE_LANGUAGE_SQL, params![id, language])?;
+    tx.execute(UPDATE_LANGUAGE_SQL, params![id as i64, language])?;
     Ok(())
 }
 
@@ -496,7 +500,7 @@ WHERE id=?
 
 fn delete(tx: &Transaction, repo: &Repository) -> Result<()> {
     debug!("[db] Deleting repo: {repo:?}");
-    tx.execute(DELETE_SQL, params![repo.id])?;
+    tx.execute(DELETE_SQL, params![repo.id as i64])?;
     Ok(())
 }
 

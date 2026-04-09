@@ -4,7 +4,7 @@ use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use anyhow::{Context, Result, bail};
 use pbkdf2::pbkdf2_hmac_array;
-use rand::RngCore;
+use rand::Rng;
 use sha2::Sha256;
 
 pub struct AesCipher {
