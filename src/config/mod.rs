@@ -54,6 +54,9 @@ pub struct Config {
     #[serde(default)]
     pub hooks: Vec<hook::HookConfig>,
 
+    #[serde(default)]
+    pub sync_vscode_projects: bool,
+
     #[serde(skip)]
     pub remotes: Vec<remote::RemoteConfig>,
 
@@ -294,6 +297,7 @@ impl Default for Config {
             stats_ignore: vec![],
             disable_auto_detect: false,
             hooks: vec![],
+            sync_vscode_projects: false,
             remotes: vec![],
             remotes_index: None,
             hook_runs: hook::HookRuns::default(),
@@ -348,6 +352,7 @@ mod tests {
             stats_ignore: vec![],
             disable_auto_detect: false,
             hooks: super::hook::tests::expect_hooks(),
+            sync_vscode_projects: false,
             remotes: super::remote::tests::expect_remotes(),
             remotes_index: None,
             hook_runs: super::hook::tests::expect_hook_runs(),

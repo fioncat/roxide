@@ -1,7 +1,7 @@
 use std::mem::take;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Args;
 
@@ -13,7 +13,7 @@ use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::{RepoOperator, SyncResult};
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 use crate::term::confirm::confirm_items;
-use crate::{debug, outputln};
+use crate::{debug, info, outputln, vscode_projects};
 
 use super::{Command, RecursiveArgs};
 
@@ -41,6 +41,11 @@ impl Command for SyncCommand {
 
     async fn run(self, ctx: ConfigContext) -> Result<()> {
         debug!("[cmd] Running sync command: {:?}", self);
+
+        if ctx.cfg.sync_vscode_projects {
+            info!("Generating vscode projects.json file");
+            vscode_projects::sync_json(&ctx).context("sync vscode projects")?;
+        }
 
         if !self.recursive.enable
             && let Some(repo) = get_current_repo_optional(&ctx)?
