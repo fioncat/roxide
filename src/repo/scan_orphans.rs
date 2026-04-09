@@ -121,9 +121,14 @@ struct WorkspaceOrphanHandler {
 impl ScanHandler<()> for WorkspaceOrphanHandler {
     fn handle_files(&self, files: Vec<(PathBuf, Metadata)>, _: ()) -> Result<()> {
         debug!("[orphan] Found orphan file: {files:?}");
+        let projects_file_path = self.workspace.join("projects.json");
         // All files will be treated as orphans
         let mut orphans = self.orphans.lock().unwrap();
         for (path, _) in files {
+            if path == projects_file_path {
+                // Skip vscode projects file
+                continue;
+            }
             orphans.push(path);
         }
         Ok(())

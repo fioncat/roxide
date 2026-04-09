@@ -11,6 +11,7 @@ mod repo;
 mod scan;
 mod secret;
 mod term;
+mod vscode_projects;
 
 use std::process;
 
