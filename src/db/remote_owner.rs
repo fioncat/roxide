@@ -22,11 +22,12 @@ impl<'a> RemoteOwner<'a> {
             .split(',')
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
+        let expire_at: i64 = row.get(3)?;
         Ok(Self {
             remote: row.get(0)?,
             owner: row.get(1)?,
             repos,
-            expire_at: row.get(3)?,
+            expire_at: expire_at as u64,
         })
     }
 }
@@ -86,7 +87,7 @@ fn insert(tx: &Transaction, owner: &RemoteOwner) -> Result<()> {
             owner.remote,
             owner.owner,
             owner.repos.join(","),
-            owner.expire_at
+            owner.expire_at as i64
         ],
     )?;
     Ok(())

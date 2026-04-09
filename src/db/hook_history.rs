@@ -24,12 +24,15 @@ pub struct HookHistory {
 
 impl HookHistory {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        let id: i64 = row.get(0)?;
+        let repo_id: i64 = row.get(1)?;
+        let time: i64 = row.get(4)?;
         Ok(Self {
-            id: row.get(0)?,
-            repo_id: row.get(1)?,
+            id: id as u64,
+            repo_id: repo_id as u64,
             name: row.get(2)?,
             success: row.get(3)?,
-            time: row.get(4)?,
+            time: time as u64,
         })
     }
 }
@@ -126,7 +129,12 @@ fn insert(tx: &Transaction, history: &HookHistory) -> Result<u64> {
     debug!("[db] Inserting hook_history: {history:?}");
     tx.execute(
         INSERT_SQL,
-        params![history.repo_id, history.name, history.success, history.time,],
+        params![
+            history.repo_id as i64,
+            history.name,
+            history.success,
+            history.time as i64,
+        ],
     )?;
     let id = tx.last_insert_rowid() as u64;
     debug!("[db] Inserted hook_history id: {id}");
@@ -142,7 +150,11 @@ WHERE repo_id = ?1 AND name = ?2
 fn get(tx: &Transaction, repo_id: u64, name: &str) -> Result<Option<HookHistory>> {
     debug!("[db] Getting hook_history: repo_id={repo_id}, name={name}");
     let history = tx
-        .query_row(GET_SQL, params![repo_id, name], HookHistory::from_row)
+        .query_row(
+            GET_SQL,
+            params![repo_id as i64, name],
+            HookHistory::from_row,
+        )
         .optional()?;
     debug!("[db] Result: {history:?}");
     Ok(history)
@@ -156,7 +168,7 @@ WHERE id = ?1
 
 fn update(tx: &Transaction, id: u64, success: bool, time: u64) -> Result<()> {
     debug!("[db] Updating hook_history for {id}, success: {success}, time: {time}");
-    tx.execute(UPDATE_SQL, params![id, success, time])?;
+    tx.execute(UPDATE_SQL, params![id as i64, success, time as i64])?;
     Ok(())
 }
 
@@ -167,7 +179,7 @@ WHERE id = ?1
 
 fn delete(tx: &Transaction, id: u64) -> Result<()> {
     debug!("[db] Deleting hook_history: {id}");
-    tx.execute(DELETE_SQL, params![id])?;
+    tx.execute(DELETE_SQL, params![id as i64])?;
     Ok(())
 }
 
@@ -178,7 +190,7 @@ WHERE repo_id = ?1
 
 fn delete_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<()> {
     debug!("[db] Deleting hook_history by repo_id: {repo_id}");
-    tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id])?;
+    tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id as i64])?;
     Ok(())
 }
 
@@ -210,7 +222,7 @@ ORDER BY time DESC
 fn query_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<Vec<HookHistory>> {
     debug!("[db] Querying hook_history by repo_id: {repo_id}");
     let mut stmt = tx.prepare(QUERY_BY_REPO_ID_SQL)?;
-    let rows = stmt.query_map(params![repo_id], HookHistory::from_row)?;
+    let rows = stmt.query_map(params![repo_id as i64], HookHistory::from_row)?;
     let mut results = Vec::new();
     for row in rows {
         results.push(row?);

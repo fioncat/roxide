@@ -71,13 +71,16 @@ impl Mirror {
     }
 
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        let id: i64 = row.get(0)?;
+        let repo_id: i64 = row.get(1)?;
+        let last_visited_at: i64 = row.get(5)?;
         Ok(Self {
-            id: row.get(0)?,
-            repo_id: row.get(1)?,
+            id: id as u64,
+            repo_id: repo_id as u64,
             remote: row.get(2)?,
             owner: row.get(3)?,
             name: row.get(4)?,
-            last_visited_at: row.get(5)?,
+            last_visited_at: last_visited_at as u64,
             visited_count: row.get(6)?,
             new_created: false,
         })
@@ -181,11 +184,11 @@ fn insert(tx: &Transaction, mirror: &Mirror) -> Result<u64> {
     tx.execute(
         INSERT_SQL,
         params![
-            mirror.repo_id,
+            mirror.repo_id as i64,
             mirror.remote,
             mirror.owner,
             mirror.name,
-            mirror.last_visited_at,
+            mirror.last_visited_at as i64,
             mirror.visited_count,
         ],
     )?;
@@ -218,7 +221,7 @@ fn update(tx: &Transaction, mirror: &Mirror) -> Result<()> {
     debug!("[db] Updating mirror: {mirror:?}");
     tx.execute(
         UPDATE_SQL,
-        params![mirror.id, mirror.last_visited_at, mirror.visited_count,],
+        params![mirror.id as i64, mirror.last_visited_at as i64, mirror.visited_count,],
     )?;
     Ok(())
 }
@@ -229,7 +232,7 @@ DELETE FROM mirror WHERE id = ?1
 
 fn delete(tx: &Transaction, id: u64) -> Result<()> {
     debug!("[db] Deleting mirror: {id}");
-    tx.execute(DELETE_SQL, params![id])?;
+    tx.execute(DELETE_SQL, params![id as i64])?;
     Ok(())
 }
 
@@ -239,7 +242,7 @@ DELETE FROM mirror WHERE repo_id = ?1
 
 fn delete_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<()> {
     debug!("[db] Deleting mirror by repo_id: {repo_id}");
-    tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id])?;
+    tx.execute(DELETE_BY_REPO_ID_SQL, params![repo_id as i64])?;
     Ok(())
 }
 
@@ -271,7 +274,7 @@ ORDER BY last_visited_at DESC
 fn query_by_repo_id(tx: &Transaction, repo_id: u64) -> Result<Vec<Mirror>> {
     debug!("[db] Querying mirrors by repo_id: {repo_id}");
     let mut stmt = tx.prepare(QUERY_BY_REPO_ID_SQL)?;
-    let rows = stmt.query_map(params![repo_id], Mirror::from_row)?;
+    let rows = stmt.query_map(params![repo_id as i64], Mirror::from_row)?;
     let mut results = Vec::new();
     for row in rows {
         results.push(row?);
