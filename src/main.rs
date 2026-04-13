@@ -15,8 +15,13 @@ mod vscode_projects;
 
 use std::process;
 
+use rustls::crypto::ring::default_provider;
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    default_provider()
+        .install_default()
+        .expect("Failed to install default CryptoProvider");
     let result = cmd::run().await;
     if result.code == 0 {
         return;
