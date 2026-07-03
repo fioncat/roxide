@@ -35,7 +35,7 @@ pub async fn get_code_stats(path: PathBuf, ignore: Ignore) -> Result<CodeStats> 
     stats.elapsed = start.elapsed();
 
     let mut items: Vec<CodeStatsItem> = stats.data.clone().into_values().collect();
-    items.sort_unstable_by(|a, b| b.total.cmp(&a.total));
+    items.sort_unstable_by_key(|item| std::cmp::Reverse(item.total));
     stats.items = items;
 
     Ok(stats)

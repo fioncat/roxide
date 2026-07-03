@@ -221,7 +221,11 @@ fn update(tx: &Transaction, mirror: &Mirror) -> Result<()> {
     debug!("[db] Updating mirror: {mirror:?}");
     tx.execute(
         UPDATE_SQL,
-        params![mirror.id as i64, mirror.last_visited_at as i64, mirror.visited_count,],
+        params![
+            mirror.id as i64,
+            mirror.last_visited_at as i64,
+            mirror.visited_count,
+        ],
     )?;
     Ok(())
 }
@@ -414,7 +418,7 @@ pub mod tests {
         let results = query_all(&tx).unwrap();
         let expect = {
             let mut v = test_mirrors();
-            v.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+            v.sort_by_key(|mirror| std::cmp::Reverse(mirror.last_visited_at));
             v
         };
         assert_eq!(results, expect);
@@ -427,7 +431,7 @@ pub mod tests {
         let results = query_by_repo_id(&tx, 1).unwrap();
         let expect = {
             let mut v = test_mirrors();
-            v.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+            v.sort_by_key(|mirror| std::cmp::Reverse(mirror.last_visited_at));
             v
         };
         assert_eq!(results, expect);

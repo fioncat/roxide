@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
-use aes_gcm::aead::{Aead, Nonce, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
+use aes_gcm::aead::{Aead, Nonce};
+use aes_gcm::{Aes256Gcm, KeyInit};
 use anyhow::{Context, Result, bail};
 use pbkdf2::pbkdf2_hmac_array;
 use rand::Rng;
@@ -27,20 +27,20 @@ impl AesCipher {
         let mut salt = [0u8; Self::SALT_LENGTH];
         rng.fill_bytes(&mut salt);
 
-        let mut rng = OsRng;
-        let nonce = Aes256Gcm::generate_nonce(&mut rng);
+        let mut nonce_data = [0u8; Self::NONCE_LENGTH];
+        rng.fill_bytes(&mut nonce_data);
+        let nonce: Nonce<Aes256Gcm> = nonce_data.into();
 
         let key: [u8; 32] =
             pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), &salt, Self::PBKDF2_ROUNDS);
-        #[allow(deprecated)]
-        let key = Key::<Aes256Gcm>::from_slice(&key);
-        let cipher = Aes256Gcm::new(key);
+        let cipher =
+            Aes256Gcm::new_from_slice(&key).expect("PBKDF2 should generate a valid AES-256 key");
 
         Self {
             cipher,
             nonce,
             salt_data: salt.to_vec(),
-            nonce_data: nonce.to_vec(),
+            nonce_data: nonce_data.to_vec(),
         }
     }
 
@@ -61,16 +61,15 @@ impl AesCipher {
 
         let key: [u8; 32] =
             pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), salt, Self::PBKDF2_ROUNDS);
-        #[allow(deprecated)]
-        let key = Key::<Aes256Gcm>::from_slice(&key);
-        let cipher = Aes256Gcm::new(key);
+        let cipher =
+            Aes256Gcm::new_from_slice(&key).expect("PBKDF2 should generate a valid AES-256 key");
 
-        #[allow(deprecated)]
-        let nonce = Nonce::<Aes256Gcm>::from_slice(nonce);
+        let nonce = Nonce::<Aes256Gcm>::try_from(nonce)
+            .expect("encrypted data header should contain a valid AES-GCM nonce");
 
         Ok(Self {
             cipher,
-            nonce: *nonce,
+            nonce,
             salt_data: salt.to_vec(),
             nonce_data: nonce.to_vec(),
         })

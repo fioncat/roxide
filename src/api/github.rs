@@ -47,14 +47,22 @@ impl GitHub {
     }
 
     fn convert_pull_request(owner: &str, pull: pulls::PullRequest) -> Result<PullRequest> {
-        let id = pull.number;
+        let Some(id) = pull.number else {
+            bail!("github pull request number is empty");
+        };
         let Some(web_url) = pull.html_url else {
             bail!("github pull request {id} html url is empty");
         };
         let web_url = web_url.to_string();
-        let base = pull.base.ref_field;
-        let head_branch = pull.head.ref_field;
-        let head = match pull.head.repo {
+        let Some(base) = pull.base else {
+            bail!("github pull request {id} base is empty");
+        };
+        let Some(head) = pull.head else {
+            bail!("github pull request {id} head is empty");
+        };
+        let base = base.ref_field;
+        let head_branch = head.ref_field;
+        let head = match head.repo {
             Some(repo) => {
                 let Some(head_owner) = repo.owner else {
                     bail!("github pull request {id} head repo owner is empty");
@@ -348,7 +356,7 @@ async fn fetch_jobs(
         bail!("no job found for this workflow");
     };
 
-    job_groups.sort_unstable_by(|(idx0, _), (idx1, _)| idx0.cmp(idx1));
+    job_groups.sort_unstable_by_key(|(idx, _)| *idx);
     let job_groups = job_groups
         .into_iter()
         .map(|(_, job)| job)

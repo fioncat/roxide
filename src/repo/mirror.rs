@@ -280,7 +280,7 @@ mod tests {
             .unwrap();
         let mirrors = MirrorSelector::new(&ctx, &repo).select_many().unwrap();
         let mut expect = db::tests::test_mirrors();
-        expect.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expect.sort_by_key(|mirror| std::cmp::Reverse(mirror.last_visited_at));
         assert_eq!(mirrors, expect);
 
         let repo = ctx

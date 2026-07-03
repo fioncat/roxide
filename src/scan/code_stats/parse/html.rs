@@ -67,4 +67,4 @@ mod tests {
             assert_eq!(comment_count, case.expect, "{case:?}");
         }
     }
-} 
+}

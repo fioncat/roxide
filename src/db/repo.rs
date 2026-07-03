@@ -1106,7 +1106,7 @@ pub mod tests {
         let tx = conn.transaction().unwrap();
         let repos = query(&tx, QueryOptions::default()).unwrap();
         let mut expects = test_repos();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
 
         let repos_limit = query(
@@ -1151,7 +1151,7 @@ pub mod tests {
             .into_iter()
             .filter(|r| r.remote == "github")
             .collect();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
         let repos_limit = query(
             &tx,
@@ -1216,7 +1216,7 @@ pub mod tests {
             .into_iter()
             .filter(|r| r.remote == "github" && r.owner == "fioncat")
             .collect();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
         let repos_limit = query(
             &tx,
@@ -1286,7 +1286,7 @@ pub mod tests {
         )
         .unwrap();
         let mut expects: Vec<Repository> = test_repos().into_iter().filter(|r| r.pin).collect();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
     }
 
@@ -1320,7 +1320,7 @@ pub mod tests {
         )
         .unwrap();
         let mut expects: Vec<Repository> = test_repos().into_iter().filter(|r| r.sync).collect();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
     }
 
@@ -1401,7 +1401,7 @@ pub mod tests {
             .into_iter()
             .filter(|r| r.language.as_deref() == Some("Rust"))
             .collect::<Vec<Repository>>();
-        expects.sort_by(|a, b| b.last_visited_at.cmp(&a.last_visited_at));
+        expects.sort_by_key(|repo| std::cmp::Reverse(repo.last_visited_at));
         assert_eq!(repos, expects);
     }
 

@@ -34,7 +34,7 @@ pub async fn repo_disk_usage(
     let handler = scan_files_with_data(tasks, handler, true).await?;
     let usages = handler.usages.into_inner().unwrap();
     let mut repos: Vec<_> = usages.into_values().collect();
-    repos.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+    repos.sort_unstable_by_key(|repo| std::cmp::Reverse(repo.usage));
     Ok(repos)
 }
 
@@ -137,7 +137,7 @@ impl RemoteDiskUsage {
             })
             .collect();
 
-        result.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+        result.sort_unstable_by_key(|usage| std::cmp::Reverse(usage.usage));
         result
     }
 }
@@ -199,7 +199,7 @@ impl OwnerDiskUsage {
             })
             .collect();
 
-        result.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+        result.sort_unstable_by_key(|usage| std::cmp::Reverse(usage.usage));
         result
     }
 }
@@ -316,7 +316,7 @@ mod tests {
             });
             repos.push(case.repo);
         }
-        expect.sort_unstable_by(|a, b| b.usage.cmp(&a.usage));
+        expect.sort_unstable_by_key(|usage| std::cmp::Reverse(usage.usage));
 
         let usages = repo_disk_usage(&ctx, repos).await.unwrap();
         assert_eq!(usages, expect);

@@ -114,8 +114,7 @@ impl<R> Tracker<R> {
             bail!("{} task failed", self.desc);
         }
 
-        self.done
-            .sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+        self.done.sort_unstable_by_key(|(idx, _)| *idx);
 
         let results: Vec<_> = self
             .done

@@ -336,7 +336,7 @@ pub mod tests {
         let tx = conn.transaction().unwrap();
         let results = query_all(&tx).unwrap();
         let mut expects = test_hook_histories();
-        expects.sort_by(|a, b| b.time.cmp(&a.time));
+        expects.sort_by_key(|history| std::cmp::Reverse(history.time));
         assert_eq!(results, expects);
     }
 
@@ -349,7 +349,7 @@ pub mod tests {
             .into_iter()
             .filter(|h| h.repo_id == 1)
             .collect::<Vec<_>>();
-        expects.sort_by(|a, b| b.time.cmp(&a.time));
+        expects.sort_by_key(|history| std::cmp::Reverse(history.time));
         assert_eq!(results, expects);
     }
 }

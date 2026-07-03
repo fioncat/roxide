@@ -12,7 +12,7 @@ pub fn get_password(ctx: &ConfigContext, update: bool) -> Result<String> {
         return fs::read_to_string(path).context("failed to read password file");
     }
     let password = input_password()?;
-    let sha256 = format!("{:x}", Sha256::digest(password.as_bytes()));
+    let sha256 = hex::encode(Sha256::digest(password.as_bytes()));
     fs::write(&path, &sha256).context("failed to write password file")?;
     Ok(sha256)
 }
@@ -46,7 +46,7 @@ mod tests {
         let ctx = context::tests::build_test_context("secret_get_password");
 
         let password = get_password(&ctx, false).unwrap();
-        let sha256 = format!("{:x}", Sha256::digest("test_password"));
+        let sha256 = hex::encode(Sha256::digest("test_password"));
 
         assert_eq!(password, sha256);
 

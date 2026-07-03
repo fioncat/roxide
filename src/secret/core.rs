@@ -121,7 +121,7 @@ where
             };
             results.push((idx, line));
         }
-        results.sort_unstable_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+        results.sort_unstable_by_key(|(idx, _)| *idx);
 
         let w = match dest {
             Some(ref mut w) => w,

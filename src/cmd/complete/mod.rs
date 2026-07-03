@@ -388,10 +388,7 @@ fn complete_flag_value(
     // To check and collect if we have the same flag value before
     let mut args = args.into_iter();
     let mut values = vec![];
-    loop {
-        let Some(arg) = args.next() else {
-            break;
-        };
+    while let Some(arg) = args.next() {
         if !arg.starts_with('-') {
             continue;
         }
@@ -458,10 +455,7 @@ fn complete_arg(
     // Filter out all flags from args
     let mut args = args.into_iter();
     let mut filtered = vec![];
-    loop {
-        let Some(arg) = args.next() else {
-            break;
-        };
+    while let Some(arg) = args.next() {
         if arg.starts_with('-') {
             if flags_with_values.contains(&arg) {
                 // This is a flag that requires a value, skip the next arg as well
