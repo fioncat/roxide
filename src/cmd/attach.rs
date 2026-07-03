@@ -7,7 +7,7 @@ use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo_optional;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
-use crate::{debug, info};
+use crate::{debug, info, vscode_projects};
 
 use super::{CacheArgs, Command};
 
@@ -53,6 +53,7 @@ impl Command for AttachCommand {
 
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().insert(&repo))?;
+        vscode_projects::sync_json_if_enabled(&ctx)?;
 
         let op = RepoOperator::new(&ctx, remote, owner, &repo, path);
         op.ensure_remote()?;

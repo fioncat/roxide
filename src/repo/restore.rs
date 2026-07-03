@@ -8,8 +8,8 @@ use crate::config::context::ConfigContext;
 use crate::db::DatabaseHandle;
 use crate::db::mirror::Mirror;
 use crate::db::repo::Repository;
-use crate::info;
 use crate::repo::mirror::MirrorSelector;
+use crate::{info, vscode_projects};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RestoreData {
@@ -42,7 +42,8 @@ impl RestoreData {
 
     pub fn restore(self, ctx: &ConfigContext) -> Result<()> {
         let db = ctx.get_db()?;
-        db.with_transaction(|tx| self.restore_innr(ctx, tx))
+        db.with_transaction(|tx| self.restore_innr(ctx, tx))?;
+        vscode_projects::sync_json_if_enabled(ctx)
     }
 
     fn restore_innr(self, ctx: &ConfigContext, tx: &DatabaseHandle) -> Result<()> {
