@@ -11,7 +11,7 @@ use crate::db::repo::Repository;
 use crate::repo::mirror::get_current_mirror;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectRepoArgs};
-use crate::{confirm, debug};
+use crate::{confirm, debug, vscode_projects};
 
 use super::Command;
 
@@ -60,8 +60,10 @@ impl Command for HomeCommand {
             confirm!("Do you want to create {}", repo.full_name());
             let id = db.with_transaction(|tx| tx.repo().insert(&repo))?;
             repo.id = id;
+            vscode_projects::sync_json_if_enabled(&ctx)?;
         } else {
             db.with_transaction(|tx| tx.repo().update(&repo))?;
+            vscode_projects::sync_json_if_enabled(&ctx)?;
         };
 
         let path = repo.get_path(&ctx.cfg.workspace);

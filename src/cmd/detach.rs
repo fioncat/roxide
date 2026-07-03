@@ -4,7 +4,7 @@ use clap::Args;
 
 use crate::config::context::ConfigContext;
 use crate::repo::current::get_current_repo;
-use crate::{debug, info};
+use crate::{debug, info, vscode_projects};
 
 use super::Command;
 
@@ -31,6 +31,7 @@ impl Command for DetachCommand {
 
         let db = ctx.get_db()?;
         db.with_transaction(|tx| tx.repo().delete(&repo))?;
+        vscode_projects::sync_json_if_enabled(&ctx)?;
 
         info!(
             "Repository {} was detached from current path",

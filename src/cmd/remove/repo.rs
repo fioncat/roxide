@@ -11,7 +11,7 @@ use crate::repo::mirror::clean_mirrors;
 use crate::repo::ops::RepoOperator;
 use crate::repo::select::{RepoSelector, SelectManyReposOptions, SelectRepoArgs};
 use crate::term::confirm::confirm_items;
-use crate::{confirm, debug, info};
+use crate::{confirm, debug, info, vscode_projects};
 
 /// Remove one or multiple repositories locally (won't affect remote).
 #[derive(Debug, Args)]
@@ -47,7 +47,9 @@ impl Command for RemoveRepoCommand {
                 bail!("could not find this repo");
             }
             confirm!("Are you sure to remove repository {}", repo.full_name());
-            return self.remove(&ctx, repo);
+            self.remove(&ctx, repo)?;
+            vscode_projects::sync_json_if_enabled(&ctx)?;
+            return Ok(());
         }
 
         let mut opts = SelectManyReposOptions::default();
@@ -66,6 +68,7 @@ impl Command for RemoveRepoCommand {
         for repo in list.items {
             self.remove(&ctx, repo)?;
         }
+        vscode_projects::sync_json_if_enabled(&ctx)?;
 
         Ok(())
     }
